@@ -19,13 +19,18 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferen
 ```
 
 ```{r}
-samples <- read_excel(here("water_quality", "samples.xlsx"), sheet = "raw_data") %>% clean_names() %>%
+samples <- read_excel(here("water_quality", "samples.xlsx"), sheet = "raw_data") %>%  
+  clean_names() %>%
   select(-nitrate_raw) %>%
-  unite(id_site, id, site, sep = " ", remove = F) %>%
-  mutate(temp_min = 23.3,
-         temp_max = 29.6)
-control <- filter(samples, type == "control")
+  unite(id_site, id, site, sep = " (", remove = F) %>%
+  mutate(salinity = salinity/1000, # ppm -> ppt
+         tds = tds/1000, # ppm -> ppt
+         id_site = paste0(id_site, ")"),
+         id_site = factor(id_site, levels = c("N1 (York Island)", "N2 (Ten Pound Bay)", "T1 (Nonsuch Anchorage)", "T2 (Green Isl. Anchorage)", "T3 (Big Deep)", "T4 (Friar's Head Bay)", "T5 (Dansby's Beach)", "T6 (Club House)", "E1 (Hell's Gate)", "E2 (Open Water)")))
 ```
+
+
+Panel of all results - baseline
 
 ```{r}
 c_range <- "slategray1"
@@ -114,6 +119,144 @@ temp <- ggplot(filter(samples, type == "sample"), aes(x = site, y = temperature)
 ggarrange(ph, do, tds, turbidity, nitrate, phosphate, salinity, temp, 
           ncol = 2, nrow = 4)
 ggsave(here("water_quality", "figs", "samples_4.15.21.png"))
+```
+ 
+Individual plots
+
+```{r, fig.width = 8, fig.height = 4}
+c_range <- "slategray1"
+
+# pH: 7.7 and 8.5 units  (EPMA, 2019)
+rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 7.7, ymax = 8.5)
+ph <- ggplot() +
+  geom_rect(data = rect_dat, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
+  geom_point(data = samples, aes(x = id_site, y = ph, shape = type)) +
+  scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = "pH") +
+  ylim(5, 9) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "baseline", "pH.png"), width = 6, height = 4)
+
+# TDS (no reference)
+tds <- ggplot() +
+  geom_point(data = samples, aes(x = id_site, y = tds, shape = type)) +
+  scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = "TDS (ppt)") +
+  ylim(30, 40) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "baseline", "tds.png"), width = 6, height = 4)
+
+# Salinity: 32,000 to 42,000 ppm (NOAA)
+rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 32, ymax = 42)
+salinity <- ggplot() +
+  geom_rect(data = rect_dat, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, name = "Target range", labels = c("NOAA 2021")) +
+  geom_point(data = samples, aes(x = id_site, y = salinity, shape = type)) +
+  scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = "Salinity (ppt)") +
+  ylim(25, 50) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "baseline", "salinity.png"), width = 6, height = 4)
+
+# Turbidity (no reference)
+turbidity <- ggplot() +
+  geom_point(data = samples, aes(x = id_site, y = turbidity, shape = type)) +
+  scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = "Turbidity (NTU)") +
+  ylim(0, 3) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "baseline", "turbidity.png"), width = 6, height = 4)
+
+# DO: Must be greater than 6.0 ppm  (EPMA, 2019)
+rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 6, ymax = Inf)
+do <- ggplot() +
+  geom_rect(data = rect_dat, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
+  geom_point(data = samples, aes(x = id_site, y = do, shape = type)) +
+  scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = "Dissolved oxygen (ppm)") +
+  ylim(0, 12) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "baseline", "do.png"), width = 6, height = 4)
+
+# Nitrates (no reference)
+nitrate <- ggplot() +
+  geom_point(data = samples, aes(x = id_site, y = nitrate, shape = type)) +
+  scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = "Nitrate (ppm)") +
+  ylim(0, 0.2) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "baseline", "nitrate.png"), width = 6, height = 4)
+
+# Phosphates (no reference)
+phosphate <- ggplot() +
+  geom_point(data = samples, aes(x = id_site, y = phosphate, shape = type)) +
+  scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = "Phosphate (ppm)") +
+  ylim(0, 0.6) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "baseline", "phosphate.png"), width = 6, height = 4)
+
+# Temperature: 23°–29.6°Celsius (NOAA)
+rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6)
+temp <- ggplot() +
+  geom_rect(data = rect_dat, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, name = "Target range", labels = c("NOAA 2021")) +
+  geom_point(data = samples, aes(x = id_site, y = temperature, shape = type)) +
+  scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = expression("Temperature ("*~degree*C*")")) +
+  ylim(18, 32) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "baseline", "temperature.png"), width = 6, height = 4)
+
+# Conductivity (no reference)
+conductivity <- ggplot() +
+  geom_point(data = samples, aes(x = id_site, y = conductivity, shape = type)) +
+  scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = expression("Conductivity ("*mu*S*" "*cm^-1*")")) +
+  ylim(50000, 60000) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "baseline", "conductivity.png"), width = 6, height = 4)
+```
+
+Means and SE
+
+```{r}
+summary <- samples %>%
+  select(-c(id, type, site, date_and_time, enterococci)) %>% # enterococci is character
+  pivot_longer(!id_site, names_to = "metric", values_to = "value") %>%
+  group_by(metric) %>%
+  summarise(n = n(),
+            mean = mean(value),
+            sd = sd(value),
+            se = sd/sqrt(n))
+
+summary_type <- samples %>%
+  select(-c(id, site, date_and_time, enterococci)) %>% # enterococci is character
+  pivot_longer(-c(id_site, type), names_to = "metric", values_to = "value") %>%
+  group_by(metric, type) %>%
+  summarise(n = n(),
+            mean = mean(value),
+            sd = sd(value),
+            se = sd/sqrt(n))
 ```
 
 
