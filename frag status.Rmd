@@ -1,0 +1,69 @@
+---
+title: "Nursery monitoring"
+author: "Molly Wilson"
+date: "8/1/2021"
+output: html_document
+---
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(knitr)
+library(stringr)
+library(forcats)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r}
+stock <- read_excel(here("nursery_monitoring", "frags.xlsx"), sheet = "Stock") %>%  
+  clean_names() %>%
+  filter(!is.na(id)) %>%
+  mutate(species = substr(id, 1, 4),
+         number = str_pad((substr(id, 5, 6)), 2, side="left", pad="0")) %>%
+  unite(id_sort, species, number, sep = "")
+```
+
+```{r}
+ggplot(stock, aes(x = perc_survival)) + 
+  geom_histogram(binwidth = .05, fill = "slategray", color = "black") +
+  facet_grid(. ~ species) +
+  theme_bw()
+```
+
+```{r}
+palette1 <- rainbow(9)
+names(palette1) = unique(stock$source)
+
+okabe <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "")
+names(palette1) = unique(stock$source)
+
+ggplot(stock %>%
+         mutate(id_sort = fct_reorder(id_sort, source)), 
+       aes(x = id_sort, y = perc_survival, group = source)) +
+  geom_col(aes(fill = source, color = source), alpha = .5) +
+  labs(x = "Genotype", y = "Frag survival") +
+  theme_bw() +
+    theme(axis.text.x = element_text(angle = 90))
+
+ggplot(stock %>% filter(species == "APAL"), 
+       aes(x = number, y = perc_survival, group = desc(source))) +
+  geom_col(aes(fill = source, color = source), alpha = .5) +
+  labs(x = "APAL genotype", y = "Frag survival") +
+  theme_bw()
+
+ggplot(stock %>% filter(species == "ACER"), 
+       aes(x = number, y = perc_survival, group = desc(source))) +
+  geom_col(aes(fill = source, color = source), alpha = .5) +
+  labs(x = "ACER genotype", y = "Frag survival") +
+  theme_bw()
+
+ggplot(stock %>% filter(species == "APRO"), 
+       aes(x = number, y = perc_survival, group = desc(source))) +
+  geom_col(aes(fill = source, color = source), alpha = .5) +
+  labs(x = "APRO genotype", y = "Frag survival") +
+  theme_bw()
+```
+
+
