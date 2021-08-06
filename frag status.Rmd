@@ -22,23 +22,19 @@ stock <- read_excel(here("nursery_monitoring", "frags.xlsx"), sheet = "Stock") %
   filter(!is.na(id)) %>%
   mutate(species = substr(id, 1, 4),
          number = str_pad((substr(id, 5, 6)), 2, side="left", pad="0")) %>%
-  unite(id_sort, species, number, sep = "")
+  unite(id_sort, species, number, sep = "", remove = FALSE)
 ```
 
-```{r}
+```{r, fig.width = 4, fig.height = 2}
 ggplot(stock, aes(x = perc_survival)) + 
-  geom_histogram(binwidth = .05, fill = "slategray", color = "black") +
+  geom_histogram(binwidth = .05, fill = "slategray", color = "black", alpha = 0.5) +
   facet_grid(. ~ species) +
+  labs(x = "Frag survival", y = "Num. genotypes") +
   theme_bw()
+ggsave(here("nursery_monitoring", "figs", "survival_by_species.png"))
 ```
 
-```{r}
-palette1 <- rainbow(9)
-names(palette1) = unique(stock$source)
-
-okabe <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "")
-names(palette1) = unique(stock$source)
-
+```{r, fig.width = 4, fig.height = 2}
 ggplot(stock %>%
          mutate(id_sort = fct_reorder(id_sort, source)), 
        aes(x = id_sort, y = perc_survival, group = source)) +
@@ -46,7 +42,10 @@ ggplot(stock %>%
   labs(x = "Genotype", y = "Frag survival") +
   theme_bw() +
     theme(axis.text.x = element_text(angle = 90))
+ggsave(here("nursery_monitoring", "figs", "survival_by_source.png"))
+```
 
+```{r}
 ggplot(stock %>% filter(species == "APAL"), 
        aes(x = number, y = perc_survival, group = desc(source))) +
   geom_col(aes(fill = source, color = source), alpha = .5) +
