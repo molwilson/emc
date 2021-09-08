@@ -1,0 +1,43 @@
+---
+title: "GB monitoring"
+author: "Molly Wilson"
+date: "9/6/2021"
+output: html_document
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(knitr)
+library(stringr)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r}
+apal <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "palmata") %>%  
+  clean_names() %>%
+  mutate(species = "A. palmata") %>%
+  unite(id, genotype, position, iteration, sep = "_", remove = FALSE)
+
+acer <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "cervicornis") %>%  
+  clean_names() %>%
+  mutate(species = "A. cervicornis") %>%
+  unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
+  pivot_longer(cols = starts_with("m"), names_to = "branch", values_to = "length") %>%
+  filter(!is.na(length))
+  
+acer_sum <- acer %>%
+  group_by(id, date) %>%
+  summarize(tle = sum(length),
+            n_branches = n())
+  
+
+apro <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "prolifera") %>%  
+  clean_names() %>%
+  mutate(species = "A. prolifera") %>%
+  unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
+  pivot_longer(cols = starts_with("m"), names_to = "branch", values_to = "length")
+```
