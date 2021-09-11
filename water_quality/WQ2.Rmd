@@ -1,0 +1,75 @@
+---
+title: "WQ2"
+author: "Molly Wilson"
+date: "9/10/2021"
+output: html_document
+---
+
+```{r, message = F, warning = F, echo = F}
+# setup
+
+library(tidyverse)
+library(here) # for accessing files with directory
+library(readxl) # for reading indv. sheets within excel files
+library(janitor) # for cleaning variable names so they have consistent capitalization etc.
+library(knitr) # for including tables
+library(ggpubr) # for printing multiple plots together
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferences for each code chunk so that errors/messages/warnings don't get displayed in the knit rmarkdown
+```
+
+```{r}
+samples <- read_excel(here("water_quality", "samples.xlsx"), sheet = "raw_data") %>%  
+  clean_names() %>%
+  filter(id != c("E1", "E2")) %>%
+  select(-nitrate_raw, -phosphate_raw) %>%
+  mutate(date = as.character(date),
+         salinity = salinity/1000, # ppm -> ppt
+         tds = tds/1000, # ppm -> ppt
+         enterococci = replace(enterococci, enterococci == "ND", 0))
+
+# sites <- read_excel(here("water_quality", "samples.xlsx"), sheet = "sites") %>%  
+#   clean_names()
+```
+
+WQ1-WQ2 trends
+```{r}
+c_range <- "slategray1"
+
+# pH: 7.7 and 8.5 units  (EPMA, 2019)
+rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 7.7, ymax = 8.5)
+ph <- ggplot() +
+  geom_rect(data = rect_dat, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = ph, shape = date)) +
+  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+  labs(x = "", y = "pH") +
+  ylim(5, 9) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "WQ2", "pH.png"), width = 6, height = 4)
+```
+
+Sargassum
+```{r}
+c_range <- "slategray1"
+
+# pH: 7.7 and 8.5 units  (EPMA, 2019)
+rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 7.7, ymax = 8.5)
+ph <- ggplot() +
+  geom_rect(data = rect_dat, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
+  geom_point(data = filter(samples, str_detect(id, "^S|^C")), aes(x = id, y = ph)) +
+  # scale_shape_manual(name = "Site type", labels = c("Exploratory", "Nursery", "Treatment"), values = c(1, 8, 16)) +
+  labs(x = "", y = "pH") +
+  ylim(5, 9) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "WQ2", "sarg_pH.png"), width = 6, height = 4)
+```
+
+
