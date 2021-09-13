@@ -26,10 +26,9 @@ samples <- read_excel(here("water_quality", "samples.xlsx"), sheet = "raw_data")
   mutate(date = as.character(date),
          salinity = salinity/1000, # ppm -> ppt
          tds = tds/1000, # ppm -> ppt
-         enterococci = replace(enterococci, enterococci == "ND", 0))
-
-# sites <- read_excel(here("water_quality", "samples.xlsx"), sheet = "sites") %>%  
-#   clean_names()
+         enterococci = replace(enterococci, enterococci == "ND", 0)) %>%
+  left_join(read_excel(here("water_quality", "samples.xlsx"), sheet = "sites") %>%
+  clean_names(), by = "id")
 ```
 
 WQ1-WQ2 trends
