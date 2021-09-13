@@ -68,6 +68,7 @@ ggplot(cover_cat, aes(x = reorder(category, -percent_tot), y = percent_tot)) +
   geom_col() +
   theme_bw() +
   labs(x = "Category", y = "Mean percent cover")
+ggsave(here("jumby_surveys", "figs", "spp_cat.png"), width = 6, height = 3)
 
 
   
