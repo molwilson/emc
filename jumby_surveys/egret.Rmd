@@ -7,36 +7,34 @@ output: html_document
 
 
 ```{r, message = F, warning = F, echo = F}
-# setup
-
 library(tidyverse)
-library(here) # for accessing files with directory
-library(readxl) # for reading indv. sheets within excel files
-library(janitor) # for cleaning variable names so they have consistent capitalization etc.
-library(knitr) # for including tables
-library(ggpubr) # for printing multiple plots together
+library(here) 
+library(readxl)
+library(janitor)
+library(knitr)
 
-knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferences for each code chunk so that errors/messages/warnings don't get displayed in the knit rmarkdown
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
 ```{r}
 quadrants <- read_excel(here("jumby_surveys", "Egret_surveys.xlsx"), sheet = "quadrants") %>%  
   clean_names()
-
-test <- quadrants %>%
-  group_by(surveyor, transect, quadrant) %>%
-  summarise(total = sum(percent))
 ```
 
-Percent cover
+Expanding by species/quadrant
 ```{r}
 quad_exp <- quadrants %>%
   expand(transect, quadrant, species) %>%
   left_join(quadrants %>% select(transect, quadrant, species, percent)) %>%
-  mutate(percent = replace_na(percent, 0)) %>%
+  mutate(percent = replace_na(percent, 0),
+         orientation = case_when(str_detect(transect, "N") ~ "North",
+                                 str_detect(transect, "S") ~ "South")) %>%
   left_join(quadrants %>% select(species, code, category), by ="species") %>%
   distinct()
+```
 
+Percent cover by species
+```{r}
 cover_spp <- quad_exp %>%
   group_by(transect, category, species) %>%
   summarise(percent_tran = mean(percent),
@@ -44,16 +42,84 @@ cover_spp <- quad_exp %>%
   group_by(category, species) %>%
   summarise(percent_tot = mean(percent_tran),
             se = sd(percent_tran)/sqrt(12)) %>%
-  arrange(category, -percent_tot) %>%
+  ungroup() %>%
   mutate(species = factor(species, levels = species))
+write.csv(cover_spp, here("jumby_surveys", "figs", "cover_spp.csv"))
 
-ggplot(cover_spp, aes(x = species, y = percent_tot, group = category)) +
-  geom_col(aes(fill = category)) +
-  labs(x = "", y = "Mean percent cover", fill = "Category") +
+cover_spp_ns <- quad_exp %>%
+  group_by(orientation, transect, category, species) %>%
+  summarise(percent_tran = mean(percent),
+            se = sd(percent)/sqrt(10)) %>%
+  group_by(orientation, category, species) %>%
+  summarise(percent_tot = mean(percent_tran),
+            se = sd(percent_tran)/sqrt(12)) %>%
+  ungroup()
+write.csv(cover_spp, here("jumby_surveys", "figs", "cover_spp_ns.csv"))
+```
+
+Graphing: percent cover by species within categories
+```{r}
+ggplot(cover_spp %>% filter(category == "Sea grass") %>% arrange(species, percent_tot), aes(x = species, y = percent_tot, group = category)) +
+  geom_col(fill = "darkseagreen", color = "black") +
+  coord_flip() +
+  geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
+  labs(x = "", y = "Mean percent cover") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("jumby_surveys", "figs", "spp_col.png"), width = 6, height = 6)
+  theme(axis.text.y = element_text(face = "italic"))
+ggsave(here("jumby_surveys", "figs", "cover_seagrass.png"), width = 6, height = 2)
 
+ggplot(cover_spp_ns %>% filter(category == "Sea grass"), aes(x = species, y = percent_tot, group = category)) +
+  geom_col(fill = "darkseagreen", color = "black") +
+  coord_flip() +
+  geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
+  labs(x = "", y = "Mean percent cover") +
+  facet_grid(. ~ orientation) +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+ggsave(here("jumby_surveys", "figs", "cover_seagrass_ns.png"), width = 6, height = 2)
+
+ggplot(cover_spp %>% filter(category == "Algae") %>% arrange(species, percent_tot), aes(x = species, y = percent_tot, group = category)) +
+  geom_col(fill = "darkolivegreen4", color = "black") +
+  coord_flip() +
+  scale_x_discrete(labels = labs) +
+  geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
+  labs(x = "", y = "Mean percent cover") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+ggsave(here("jumby_surveys", "figs", "cover_algae.png"), width = 6, height = 4)
+
+ggplot(cover_spp_ns %>% filter(category == "Algae") %>% arrange(species), aes(x = species, y = percent_tot)) +
+  geom_col(fill = "darkolivegreen4", color = "black") +
+  coord_flip() +
+  scale_x_discrete(labels = labs) +
+  geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
+  labs(x = "", y = "Mean percent cover") +
+  facet_grid(. ~ orientation) +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+ggsave(here("jumby_surveys", "figs", "cover_algae_ns.png"), width = 6, height = 4)
+
+ggplot(cover_spp %>% filter(category == "Stony coral") %>% arrange(species, percent_tot), aes(x = species, y = percent_tot, group = category)) +
+  geom_col(fill = "salmon2", color = "black") +
+  coord_flip() +
+  geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
+  labs(x = "", y = "Mean percent cover") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+ggsave(here("jumby_surveys", "figs", "cover_coral.png"), width = 6, height = 2)
+
+ggplot(cover_spp_ns %>% filter(category == "Stony coral"), aes(x = species, y = percent_tot)) +
+  geom_col(fill = "salmon2", color = "black") +
+  coord_flip() +
+  geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
+  labs(x = "", y = "Mean percent cover") +
+  facet_grid(. ~ orientation) +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+ggsave(here("jumby_surveys", "figs", "cover_coral_ns.png"), width = 6, height = 2)
+```
+
+```{r}
 cover_cat <- quad_exp %>%
   group_by(transect, quadrant, category) %>%
   summarize(percent_cat = sum(percent)) %>%
@@ -63,14 +129,39 @@ cover_cat <- quad_exp %>%
   group_by(category) %>%
   summarize(percent_tot = mean(percent_tran),
             se = sd(percent_tran)/sqrt(12))
-  
+write.csv(cover_cat, here("jumby_surveys", "figs", "cover_cat.csv"))
+
+cover_cat_ns <- quad_exp %>%
+  group_by(orientation, transect, quadrant, category) %>%
+  summarize(percent_cat = sum(percent)) %>%
+  group_by(orientation, transect, category) %>%
+  summarize(percent_tran = mean(percent_cat),
+            se = sd(percent_cat)/sqrt(10)) %>%
+  group_by(orientation, category) %>%
+  summarize(percent_tot = mean(percent_tran),
+            se = sd(percent_tran)/sqrt(12))
+write.csv(cover_cat, here("jumby_surveys", "figs", "cover_cat_nw.csv"))
+```
+
+Graphing: percent cover by category
+```{r}
 ggplot(cover_cat, aes(x = reorder(category, -percent_tot), y = percent_tot)) +
-  geom_col() +
+  geom_col(fill = "slategray3", color = "black") +
+  geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
   theme_bw() +
   labs(x = "Category", y = "Mean percent cover")
-ggsave(here("jumby_surveys", "figs", "spp_cat.png"), width = 6, height = 3)
+ggsave(here("jumby_surveys", "figs", "cover_cat.png"), width = 6, height = 3)
 
-
-  
+ggplot(cover_cat_ns, aes(x = category, y = percent_tot)) +
+  geom_col(fill = "slategray3", color = "black", position = "dodge") +
+  geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
+  theme_bw() +
+  facet_grid(. ~ orientation) +
+  labs(x = "", y = "Mean percent cover") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("jumby_surveys", "figs", "cover_cat_ns.png"), width = 6, height = 3)
 ```
+
+
+
 
