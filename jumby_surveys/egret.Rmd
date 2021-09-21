@@ -19,10 +19,7 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```{r}
 quadrants <- read_excel(here("jumby_surveys", "Egret_surveys.xlsx"), sheet = "quadrants") %>%  
   clean_names()
-```
 
-Expanding by species/quadrant
-```{r}
 quad_exp <- quadrants %>%
   expand(transect, quadrant, species) %>%
   left_join(quadrants %>% select(transect, quadrant, species, percent)) %>%
@@ -31,6 +28,19 @@ quad_exp <- quadrants %>%
                                  str_detect(transect, "S") ~ "South")) %>%
   left_join(quadrants %>% select(species, code, category), by ="species") %>%
   distinct()
+
+organisms <- read_excel(here("jumby_surveys", "Egret_surveys.xlsx"), sheet = "organisms") %>%  
+  clean_names()
+
+organisms_exp <- organisms %>%
+  expand(transect, organism) %>%
+  left_join(organisms %>% select(transect, organism, count)) %>%
+  mutate(count = replace_na(count, 0)) %>%
+  filter(!is.na(organism)) %>%
+  mutate(density = count/30*100/30)
+
+org_sum <- organisms_exp %>%
+  group_by(transect) 
 ```
 
 Percent cover by species
@@ -43,7 +53,7 @@ cover_spp <- quad_exp %>%
   summarise(percent_tot = mean(percent_tran),
             se = sd(percent_tran)/sqrt(12)) %>%
   ungroup() %>%
-  mutate(species = factor(species, levels = species))
+  mutate(species = fct_reorder(species, desc(species)))
 write.csv(cover_spp, here("jumby_surveys", "figs", "cover_spp.csv"))
 
 cover_spp_ns <- quad_exp %>%
@@ -53,13 +63,14 @@ cover_spp_ns <- quad_exp %>%
   group_by(orientation, category, species) %>%
   summarise(percent_tot = mean(percent_tran),
             se = sd(percent_tran)/sqrt(12)) %>%
-  ungroup()
+  ungroup() %>%
+  mutate(species = fct_reorder(species, desc(species)))
 write.csv(cover_spp, here("jumby_surveys", "figs", "cover_spp_ns.csv"))
 ```
 
 Graphing: percent cover by species within categories
 ```{r}
-ggplot(cover_spp %>% filter(category == "Sea grass") %>% arrange(species, percent_tot), aes(x = species, y = percent_tot, group = category)) +
+ggplot(cover_spp %>% filter(category == "Sea grass"), aes(x = species, y = percent_tot, group = category)) +
   geom_col(fill = "darkseagreen", color = "black") +
   coord_flip() +
   geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
