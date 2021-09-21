@@ -174,17 +174,6 @@ summary <- samples %>%
             mean = mean(value),
             sd = sd(value),
             se = sd/sqrt(n))
-
-summary_type <- samples %>%
-  filter(!str_detect(id, "^S")) %>%
-  select(-c(id, type, site)) %>%
-  mutate(enterococci = as.numeric(enterococci)) %>%
-  pivot_longer(-c(id_site, date, type), names_to = "metric", values_to = "value") %>%
-  group_by(metric, date, type) %>%
-  summarise(n = n(),
-            mean = mean(value),
-            sd = sd(value),
-            se = sd/sqrt(n))
 ```
 
 Sargassum
