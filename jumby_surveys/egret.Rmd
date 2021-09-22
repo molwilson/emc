@@ -38,9 +38,6 @@ organisms_exp <- organisms %>%
   mutate(count = replace_na(count, 0)) %>%
   filter(!is.na(organism)) %>%
   mutate(density = count/30*100/30)
-
-org_sum <- organisms_exp %>%
-  group_by(transect) 
 ```
 
 Percent cover by species
@@ -173,6 +170,22 @@ ggplot(cover_cat_ns, aes(x = category, y = percent_tot)) +
 ggsave(here("jumby_surveys", "figs", "cover_cat_ns.png"), width = 6, height = 3)
 ```
 
+Organism abundance
+```{r}
+org_sum <- organisms_exp %>%
+  group_by(organism) %>%
+  summarise(density_tot = mean(density),
+            se = sd(density)/sqrt(12)) %>%
+  ungroup() %>%
+  mutate(organism = fct_reorder(organism, desc(organism)))
 
+ggplot(org_sum, aes(x = density_tot, y = organism)) +
+  geom_col(fill = "slategray3", color = "black", position = "dodge") +
+  geom_errorbar(aes(xmin = density_tot - se, xmax = density_tot + se), width = .2) +
+  theme_bw() +
+  labs(x = expression("Mean density (ind. 100"*m^-2*")"), y = "") +
+  theme(axis.text.y = element_text(face = "italic"))
+ggsave(here("jumby_surveys", "figs", "org_density.png"), width = 6, height = 3)
+```
 
 
