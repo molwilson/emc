@@ -14,30 +14,147 @@ library(knitr)
 library(stringr)
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+Sys.setenv(TZ="America/Guadeloupe")
 ```
 
 ```{r}
+sources <- read_excel(here("nursery_monitoring", "frag sources.xlsx"), sheet = "sources") %>%  
+  clean_names() %>%
+  select(source = site, genotype = id_number)
+
 apal <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "palmata") %>%  
   clean_names() %>%
   mutate(species = "A. palmata") %>%
-  unite(id, genotype, position, iteration, sep = "_", remove = FALSE)
+  unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
+  mutate(area = m1*m2,
+         sum = m1 + m2) %>%
+  left_join(sources, by = "genotype")
 
 acer <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "cervicornis") %>%  
   clean_names() %>%
   mutate(species = "A. cervicornis") %>%
   unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
   pivot_longer(cols = starts_with("m"), names_to = "branch", values_to = "length") %>%
-  filter(!is.na(length))
-  
-acer_sum <- acer %>%
-  group_by(id, date) %>%
+  filter(!is.na(length)) %>%
+  filter(!(length < 1 & date == as.Date("2021-10-07"))) %>% # was likely overmeasuring small branches
+  group_by(id, genotype, date) %>%
   summarize(tle = sum(length),
-            n_branches = n())
+            n_branches = n()) %>%
+  ungroup() %>%
+  left_join(sources, by = "genotype")
   
-
 apro <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "prolifera") %>%  
   clean_names() %>%
   mutate(species = "A. prolifera") %>%
   unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
-  pivot_longer(cols = starts_with("m"), names_to = "branch", values_to = "length")
+  pivot_longer(cols = starts_with("m"), names_to = "branch", values_to = "length") %>%
+  filter(!is.na(length)) %>%
+  group_by(id, genotype, date) %>%
+  summarize(tle = sum(length),
+            n_branches = n()) %>%
+  ungroup() %>%
+  left_join(sources, by = "genotype")
 ```
+
+Quantifying growth: A. cervicornis
+```{r}
+acer_growth_long <- acer %>%
+  group_by(id) %>%
+  summarize(count = n()) %>%
+  filter(count == 3) %>%
+  left_join(acer)
+
+acer_growth_wide <- acer %>%
+  pivot_wider(id_cols = c(id, genotype, source), names_from = date, values_from = tle) %>%
+  mutate(growth = .[[6]] - .[[4]],
+         growth_percent = growth/.[[4]]) %>%
+  filter(!is.na(growth))
+
+acer_growth_sum <- acer_growth_wide %>%
+  group_by(genotype, source) %>%
+  summarize(mean_growth = mean(growth),
+            se = sd(growth)/sqrt(n()),
+            mean_growth_p = mean(growth_percent),
+            se_p = sd(growth_percent)/sqrt(n()))
+
+ggplot(acer_growth_long, aes(x = date, y = tle, group = id)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(vars(genotype)) +
+  theme_bw()
+
+ggplot(acer_growth_sum, aes(x = genotype, y = mean_growth)) +
+  geom_col(aes(fill = source)) +
+  geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
+  labs(y = "Mean growth (cm) in 9 wks", x = "Genotype") +
+  theme_bw()
+```
+
+Quantifying growth: A. prolifera
+```{r}
+apro_growth_long <- apro %>%
+  group_by(id) %>%
+  summarize(count = n()) %>%
+  filter(count == max(count)) %>%
+  left_join(apro)
+
+apro_growth_wide <- apro %>%
+  pivot_wider(id_cols = c(id, genotype, source), names_from = date, values_from = tle) %>%
+  mutate(growth = .[[5]] - .[[4]],
+         growth_percent = growth/.[[5]]) %>%
+  filter(!is.na(growth))
+
+apro_growth_sum <- apro_growth_wide %>%
+  group_by(genotype, source) %>%
+  summarize(mean_growth = mean(growth),
+            se = sd(growth)/sqrt(n()),
+            mean_growth_p = mean(growth_percent),
+            se_p = sd(growth_percent)/sqrt(n()))
+
+ggplot(apro_growth_long, aes(x = date, y = tle, group = id)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(vars(genotype)) +
+  theme_bw()
+
+ggplot(apro_growth_sum, aes(x = genotype, y = mean_growth)) +
+  geom_col(aes(fill = source)) +
+  geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
+  labs(y = "Mean growth (cm) in 9 wks", x = "Genotype") +
+  theme_bw()
+```
+
+Quantifying growth: A. palmata
+```{r}
+apal_growth_long <- apal %>%
+  group_by(id) %>%
+  summarize(count = n()) %>%
+  filter(count == max(count)) %>%
+  left_join(apal)
+
+apal_growth_wide <- apal %>%
+  pivot_wider(id_cols = c(id, genotype, source), names_from = date, values_from = sum) %>%
+  mutate(growth = .[[6]] - .[[4]],
+         growth_percent = growth/.[[4]]) %>%
+  filter(!is.na(growth))
+
+apal_growth_sum <- apal_growth_wide %>%
+  group_by(genotype, source) %>%
+  summarize(mean_growth = mean(growth),
+            se = sd(growth)/sqrt(n()),
+            mean_growth_p = mean(growth_percent),
+            se_p = sd(growth_percent)/sqrt(n()))
+
+ggplot(apal_growth_long, aes(x = date, y = sum, group = id)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(vars(genotype)) +
+  theme_bw()
+
+ggplot(apal_growth_sum, aes(x = genotype, y = mean_growth)) +
+  geom_col(aes(fill = source)) +
+  geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
+  labs(y = "Mean growth (cm) in 9 wks", x = "Genotype") +
+  theme_bw()
+```
+
