@@ -155,6 +155,8 @@ ggplot(apal_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source)) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
   labs(y = "Mean growth (cm) in 9 wks", x = "Genotype") +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
 ```
 
