@@ -1,7 +1,7 @@
 ---
 title: "GB monitoring"
 author: "Molly Wilson"
-date: "9/6/2021"
+date: "11/24/2021"
 output: html_document
 ---
 
@@ -12,6 +12,7 @@ library(readxl)
 library(janitor)
 library(knitr)
 library(stringr)
+library(RColorBrewer)
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 Sys.setenv(TZ="America/Guadeloupe")
@@ -20,7 +21,13 @@ Sys.setenv(TZ="America/Guadeloupe")
 ```{r}
 sources <- read_excel(here("nursery_monitoring", "frag sources.xlsx"), sheet = "sources") %>%  
   clean_names() %>%
-  select(source = site, genotype = id_number)
+  mutate(site = replace(site, site == "Cervi Heaven", "North Green")) %>%
+  select(source = site, genotype = id_number) %>%
+  mutate(source = factor(source, levels = c("Little Bird Channel", "Great Bird", "Hells Gate", "North Green", "Man of War", "York Island", "Friar's Head", "Exchange Bay")))
+
+YlGnBu <- brewer.pal(8,"Set3")
+names(YlGnBu) <- levels(sources$source)
+colScale <- scale_colour_manual(name = "source",values = YlGnBu)
 
 apal <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "palmata") %>%  
   clean_names() %>%
@@ -38,8 +45,7 @@ acer <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "ce
   filter(!is.na(length)) %>%
   filter(!(length < 1 & date == as.Date("2021-10-07"))) %>% # was likely overmeasuring small branches
   group_by(id, genotype, date) %>%
-  summarize(tle = sum(length),
-            n_branches = n()) %>%
+  summarize(tle = sum(length)) %>%
   ungroup() %>%
   left_join(sources, by = "genotype")
   
@@ -50,23 +56,24 @@ apro <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "pr
   pivot_longer(cols = starts_with("m"), names_to = "branch", values_to = "length") %>%
   filter(!is.na(length)) %>%
   group_by(id, genotype, date) %>%
-  summarize(tle = sum(length),
-            n_branches = n()) %>%
+  summarize(tle = sum(length)) %>%
   ungroup() %>%
   left_join(sources, by = "genotype")
 ```
 
 Quantifying growth: A. cervicornis
 ```{r}
+n_mo <- n_distinct(acer$date)
+
 acer_growth_long <- acer %>%
   group_by(id) %>%
   summarize(count = n()) %>%
-  filter(count == 3) %>%
+  filter(count == n_mo) %>%
   left_join(acer)
 
 acer_growth_wide <- acer %>%
   pivot_wider(id_cols = c(id, genotype, source), names_from = date, values_from = tle) %>%
-  mutate(growth = .[[6]] - .[[4]],
+  mutate(growth = .[[n_mo + 3]] - .[[4]],
          growth_percent = growth/.[[4]]) %>%
   filter(!is.na(growth))
 
@@ -75,33 +82,38 @@ acer_growth_sum <- acer_growth_wide %>%
   summarize(mean_growth = mean(growth),
             se = sd(growth)/sqrt(n()),
             mean_growth_p = mean(growth_percent),
-            se_p = sd(growth_percent)/sqrt(n()))
+            se_p = sd(growth_percent)/sqrt(n())) %>%
+   mutate(source = factor(source, levels = c("Little Bird Channel", "Great Bird", "Hells Gate", "North Green", "Man of War", "York Island", "Friar's Head", "Exchange Bay")))
 
 ggplot(acer_growth_long, aes(x = date, y = tle, group = id)) +
   geom_point() +
   geom_line() +
   facet_wrap(vars(genotype)) +
+  labs(y = "Total linear extension (cm)", x = "") +
   theme_bw()
 
 ggplot(acer_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source)) +
+  scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
-  labs(y = "Mean growth (cm) in 9 wks", x = "Genotype") +
-  theme_bw()
+  labs(y = "Mean growth (cm) since Aug. 2021", x = "Genotype", fill = "Source") +
+  theme_bw() 
 ```
 
 Quantifying growth: A. prolifera
 ```{r}
+n_mo <- n_distinct(apro$date)
+
 apro_growth_long <- apro %>%
   group_by(id) %>%
   summarize(count = n()) %>%
-  filter(count == max(count)) %>%
+  filter(count == n_mo) %>%
   left_join(apro)
 
 apro_growth_wide <- apro %>%
   pivot_wider(id_cols = c(id, genotype, source), names_from = date, values_from = tle) %>%
-  mutate(growth = .[[5]] - .[[4]],
-         growth_percent = growth/.[[5]]) %>%
+  mutate(growth = .[[n_mo + 3]] - .[[4]],
+         growth_percent = growth/.[[4]]) %>%
   filter(!is.na(growth))
 
 apro_growth_sum <- apro_growth_wide %>%
@@ -109,7 +121,8 @@ apro_growth_sum <- apro_growth_wide %>%
   summarize(mean_growth = mean(growth),
             se = sd(growth)/sqrt(n()),
             mean_growth_p = mean(growth_percent),
-            se_p = sd(growth_percent)/sqrt(n()))
+            se_p = sd(growth_percent)/sqrt(n())) %>%
+   mutate(source = factor(source, levels = c("Little Bird Channel", "Great Bird", "Hells Gate", "North Green", "Man of War", "York Island", "Friar's Head", "Exchange Bay")))
 
 ggplot(apro_growth_long, aes(x = date, y = tle, group = id)) +
   geom_point() +
@@ -119,13 +132,16 @@ ggplot(apro_growth_long, aes(x = date, y = tle, group = id)) +
 
 ggplot(apro_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source)) +
+  scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
-  labs(y = "Mean growth (cm) in 9 wks", x = "Genotype") +
+  labs(y = "Mean growth (cm) since Aug. 2021", x = "Genotype", fill = "Source") +
   theme_bw()
 ```
 
 Quantifying growth: A. palmata
 ```{r}
+n_mo <- n_distinct(apal$date)
+
 apal_growth_long <- apal %>%
   group_by(id) %>%
   summarize(count = n()) %>%
@@ -134,7 +150,7 @@ apal_growth_long <- apal %>%
 
 apal_growth_wide <- apal %>%
   pivot_wider(id_cols = c(id, genotype, source), names_from = date, values_from = sum) %>%
-  mutate(growth = .[[6]] - .[[4]],
+  mutate(growth = .[[n_mo + 3]] - .[[4]],
          growth_percent = growth/.[[4]]) %>%
   filter(!is.na(growth))
 
@@ -143,18 +159,21 @@ apal_growth_sum <- apal_growth_wide %>%
   summarize(mean_growth = mean(growth),
             se = sd(growth)/sqrt(n()),
             mean_growth_p = mean(growth_percent),
-            se_p = sd(growth_percent)/sqrt(n()))
+            se_p = sd(growth_percent)/sqrt(n())) %>%
+   mutate(source = factor(source, levels = c("Little Bird Channel", "Great Bird", "Hells Gate", "North Green", "Man of War", "York Island", "Friar's Head", "Exchange Bay")))
 
 ggplot(apal_growth_long, aes(x = date, y = sum, group = id)) +
   geom_point() +
   geom_line() +
   facet_wrap(vars(genotype)) +
+  labs(y = "Total linear extension (cm)", x = "") +
   theme_bw()
 
 ggplot(apal_growth_sum, aes(x = genotype, y = mean_growth)) +
-  geom_col(aes(fill = source)) +
+  geom_col(aes(fill = source), color = "black") +
+  scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
-  labs(y = "Mean growth (cm) in 9 wks", x = "Genotype") +
+  labs(y = "Mean growth since Aug. 2021", x = "Genotype", fill = "Source") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
