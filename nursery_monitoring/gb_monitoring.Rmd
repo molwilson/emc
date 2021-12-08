@@ -71,7 +71,7 @@ n_mo <- n_distinct(acer$date)
 acer_growth_long <- acer %>%
   group_by(id) %>%
   summarize(count = n()) %>%
-  filter(count == n_mo) %>%
+  filter(count >= n_mo-1) %>%
   left_join(acer)
 
 acer_growth_wide <- acer %>%
@@ -98,7 +98,7 @@ ggplot(acer_growth_long, aes(x = date, y = tle, group = id)) +
 ggsave(here("nursery_monitoring", "figs", "growth_acer_line.png"), width = 6, height = 4)
 
 ggplot(acer_growth_sum, aes(x = genotype, y = mean_growth)) +
-  geom_col(aes(fill = source)) +
+  geom_col(aes(fill = source), color = "black") +
   scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
   labs(y = "Mean growth (cm) since Aug. 2021", x = "Genotype", fill = "Source") +
@@ -114,7 +114,7 @@ n_mo <- n_distinct(apro$date)
 apro_growth_long <- apro %>%
   group_by(id) %>%
   summarize(count = n()) %>%
-  filter(count == n_mo) %>%
+  filter(count >= n_mo-1) %>%
   left_join(apro)
 
 apro_growth_wide <- apro %>%
@@ -135,12 +135,13 @@ ggplot(apro_growth_long, aes(x = date, y = tle, group = id)) +
   geom_point() +
   geom_line() +
   facet_wrap(vars(genotype)) +
+  labs(y = "Total linear extension (cm)", x = "") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("nursery_monitoring", "figs", "growth_apro_line.png"), width = 6, height = 4)
 
 ggplot(apro_growth_sum, aes(x = genotype, y = mean_growth)) +
-  geom_col(aes(fill = source)) +
+  geom_col(aes(fill = source), color = "black") +
   scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
   labs(y = "Mean growth (cm) since Aug. 2021", x = "Genotype", fill = "Source") +
@@ -156,7 +157,7 @@ n_mo <- n_distinct(apal$date)
 apal_growth_long <- apal %>%
   group_by(id) %>%
   summarize(count = n()) %>%
-  filter(count == max(count)) %>%
+  filter(count >= max(count-1)) %>%
   left_join(apal)
 
 apal_growth_wide <- apal %>%
@@ -180,7 +181,7 @@ ggplot(apal_growth_long, aes(x = date, y = sum, group = id)) +
   labs(y = "Total linear extension (cm)", x = "") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("nursery_monitoring", "figs", "growth_apal_line.png"), width = 6, height = 4)
+ggsave(here("nursery_monitoring", "figs", "growth_apal_line.png"), width = 6, height = 6)
 
 ggplot(apal_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source), color = "black") +
@@ -198,7 +199,7 @@ apal_qual <- apal %>%
   mutate(crimp_overgrowth = if_else(crimp_overgrowth == "Y", 1, 0)) %>%
   group_by(genotype, source) %>%
   summarize(n = n(),
-            p_overgrowth = mean(crimp_overgrowth),
+            p_overgrowth = mean(crimp_overgrowth)*100,
             n_hands_mean = mean(n_hands),
             n_hands_se = sd(n_hands)/sqrt(n))
 
