@@ -32,6 +32,7 @@ colScale <- scale_colour_manual(name = "source",values = YlGnBu)
 apal <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "palmata") %>%  
   clean_names() %>%
   mutate(species = "A. palmata") %>%
+  filter(!is.na(m1)) %>%
   unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
   mutate(area = m1*m2,
          sum = m1 + m2) %>%
@@ -47,6 +48,7 @@ acer <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "ce
   group_by(id, genotype, date) %>%
   summarize(tle = sum(length)) %>%
   ungroup() %>%
+  mutate(tle = if_else(date == as.Date("2021-12-01"), tle + 1, tle)) %>% # forgot to measure crimp
   left_join(sources, by = "genotype")
   
 apro <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "prolifera") %>%  
@@ -58,6 +60,7 @@ apro <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "pr
   group_by(id, genotype, date) %>%
   summarize(tle = sum(length)) %>%
   ungroup() %>%
+  mutate(tle = if_else(date == as.Date("2021-12-01"), tle + 1, tle)) %>% # forgot to measure crimp
   left_join(sources, by = "genotype")
 ```
 
@@ -90,14 +93,18 @@ ggplot(acer_growth_long, aes(x = date, y = tle, group = id)) +
   geom_line() +
   facet_wrap(vars(genotype)) +
   labs(y = "Total linear extension (cm)", x = "") +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_acer_line.png"), width = 6, height = 4)
 
 ggplot(acer_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source)) +
   scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
   labs(y = "Mean growth (cm) since Aug. 2021", x = "Genotype", fill = "Source") +
-  theme_bw() 
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_acer_bar.png"), width = 6, height = 4)
 ```
 
 Quantifying growth: A. prolifera
@@ -128,14 +135,18 @@ ggplot(apro_growth_long, aes(x = date, y = tle, group = id)) +
   geom_point() +
   geom_line() +
   facet_wrap(vars(genotype)) +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_apro_line.png"), width = 6, height = 4)
 
 ggplot(apro_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source)) +
   scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
   labs(y = "Mean growth (cm) since Aug. 2021", x = "Genotype", fill = "Source") +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_apro_bar.png"), width = 6, height = 4)
 ```
 
 Quantifying growth: A. palmata
@@ -167,7 +178,9 @@ ggplot(apal_growth_long, aes(x = date, y = sum, group = id)) +
   geom_line() +
   facet_wrap(vars(genotype)) +
   labs(y = "Total linear extension (cm)", x = "") +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_apal_line.png"), width = 6, height = 4)
 
 ggplot(apal_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source), color = "black") +
@@ -176,6 +189,36 @@ ggplot(apal_growth_sum, aes(x = genotype, y = mean_growth)) +
   labs(y = "Mean growth since Aug. 2021", x = "Genotype", fill = "Source") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  
+ggsave(here("nursery_monitoring", "figs", "growth_apal_bar.png"), width = 6, height = 4)
 ```
+Quantifying apal hands/crimp overgrowth
+```{r}
+apal_qual <- apal %>%
+  filter(date == as.Date("2021-12-01") & !is.na(m1)) %>%
+  mutate(crimp_overgrowth = if_else(crimp_overgrowth == "Y", 1, 0)) %>%
+  group_by(genotype, source) %>%
+  summarize(n = n(),
+            p_overgrowth = mean(crimp_overgrowth),
+            n_hands_mean = mean(n_hands),
+            n_hands_se = sd(n_hands)/sqrt(n))
+
+ggplot(apal_qual, aes(x = genotype, y = p_overgrowth)) +
+  geom_col(aes(fill = source), color = "black") +
+  scale_fill_manual(values = YlGnBu) +
+  #geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
+  labs(y = "Percent of fragments with crimp overgrowth", x = "Genotype", fill = "Source") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_apal_crimp.png"), width = 6, height = 4)
+
+ggplot(apal_qual, aes(x = genotype, y = n_hands_mean)) +
+  geom_col(aes(fill = source), color = "black") +
+  scale_fill_manual(values = YlGnBu) +
+  geom_errorbar(aes(ymin = n_hands_mean - n_hands_se, ymax = n_hands_mean + n_hands_se), width = .2) +
+  labs(y = "Mean number of new growth appendages", x = "Genotype", fill = "Source") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_apal_hands.png"), width = 6, height = 4)
+```
+
 
