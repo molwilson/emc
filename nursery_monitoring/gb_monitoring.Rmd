@@ -13,6 +13,8 @@ library(janitor)
 library(knitr)
 library(stringr)
 library(RColorBrewer)
+library(lubridate)
+library(scales)
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 Sys.setenv(TZ="America/Guadeloupe")
@@ -35,7 +37,8 @@ apal <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "pa
   filter(!is.na(m1)) %>%
   unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
   mutate(area = m1*m2,
-         sum = m1 + m2) %>%
+         sum = m1 + m2,
+         month = lubridate::month(date, label = TRUE, abbr = TRUE)) %>%
   left_join(sources, by = "genotype")
 
 acer <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "cervicornis") %>%  
@@ -48,7 +51,8 @@ acer <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "ce
   group_by(id, genotype, date) %>%
   summarize(tle = sum(length)) %>%
   ungroup() %>%
-  mutate(tle = if_else(date == as.Date("2021-12-01"), tle + 1, tle)) %>% # forgot to measure crimp
+  mutate(tle = if_else(date == as.Date("2021-12-01"), tle + 1, tle), # forgot to measure crimp
+                       month = lubridate::month(date, label = TRUE, abbr = TRUE)) %>% 
   left_join(sources, by = "genotype")
   
 apro <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "prolifera") %>%  
@@ -60,7 +64,8 @@ apro <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "pr
   group_by(id, genotype, date) %>%
   summarize(tle = sum(length)) %>%
   ungroup() %>%
-  mutate(tle = if_else(date == as.Date("2021-12-01"), tle + 1, tle)) %>% # forgot to measure crimp
+  mutate(tle = if_else(date == as.Date("2021-12-01"), tle + 1, tle), # forgot to measure crimp
+          month = lubridate::month(date, label = TRUE, abbr = TRUE)) %>%
   left_join(sources, by = "genotype")
 ```
 
@@ -101,7 +106,7 @@ ggplot(acer_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source), color = "black") +
   scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
-  labs(y = "Mean growth (cm) since Aug. 2021", x = "Genotype", fill = "Source") +
+  labs(y = "Mean fragment growth (Aug. 2021 - Jan. 2022)", x = "Genotype", fill = "Source") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("nursery_monitoring", "figs", "growth_acer_bar.png"), width = 6, height = 4)
@@ -144,7 +149,7 @@ ggplot(apro_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source), color = "black") +
   scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
-  labs(y = "Mean growth (cm) since Aug. 2021", x = "Genotype", fill = "Source") +
+  labs(y = "Mean fragment growth (Aug. 2021 - Jan. 2022)", x = "Genotype", fill = "Source") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("nursery_monitoring", "figs", "growth_apro_bar.png"), width = 6, height = 4)
@@ -187,7 +192,7 @@ ggplot(apal_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source), color = "black") +
   scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
-  labs(y = "Mean growth since Aug. 2021", x = "Genotype", fill = "Source") +
+  labs(y = "Mean fragment growth (Aug. 2021 - Jan. 2022)", x = "Genotype", fill = "Source") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("nursery_monitoring", "figs", "growth_apal_bar.png"), width = 6, height = 4)
@@ -220,6 +225,108 @@ ggplot(apal_qual, aes(x = genotype, y = n_hands_mean)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("nursery_monitoring", "figs", "growth_apal_hands.png"), width = 6, height = 4)
+```
+
+Summary graphs for 2021 report 
+- one for each species (different growth scales)
+- (show fragment size at each timestep as percent of initial fragment size)
+- only use fragments with all (6) timesteps
+- create averages per genotype
+
+```{r}
+# ACER
+
+acer_sum2 <- acer_growth_long %>%
+  filter(count == n_mo) %>%
+  group_by(genotype, date) %>%
+  summarise(tle_mean = mean(tle)) %>%
+  ungroup() %>%
+  mutate(species = "ACER")
+
+ggplot(acer_sum2, aes(x = date, y = tle_mean, group = genotype)) +
+  geom_point() +
+  geom_line() +
+  labs(y = "Total linear extension (cm)", x = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_acer_line_sum.png"), width = 6, height = 4)
+
+# APRO
+
+apro_sum2 <- apro_growth_long %>%
+  filter(count == n_mo) %>%
+  group_by(genotype, date) %>%
+  summarise(tle_mean = mean(tle)) %>%
+  ungroup() %>%
+  mutate(species = "APRO")
+
+ggplot(apro_sum2, aes(x = date, y = tle_mean, group = genotype)) +
+  geom_point() +
+  geom_line() +
+  labs(y = "Total linear extension (cm)", x = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_apro_line_sum.png"), width = 6, height = 4)
+
+# ACER ~ APRO
+
+acerapro <- rbind(apro_sum2, acer_sum2)
+ggplot(acerapro, aes(x = date, y = tle_mean, group = genotype)) +
+  geom_point(color = "turquoise4") +
+  geom_line(color = "turquoise4") +
+  labs(y = "Total linear extension (cm)", x = "") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 14))
+ggsave(here("nursery_monitoring", "figs", "growth_aproacer_line_jan.png"), width = 5, height = 3)
+
+ggplot(acerapro, aes(x = date, y = tle_mean, group = genotype)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(.~species) +
+  labs(y = "Total linear extension (cm)", x = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+## APAL
+
+apal_sum2 <- apal_growth_long %>%
+  filter(count == n_mo) %>%
+  group_by(genotype, month, date) %>%
+  summarise(area_mean = mean(area))
+
+ggplot(apal_sum2, aes(x = date, y = area_mean, group = genotype)) +
+  geom_point() +
+  geom_line() +
+  labs(y = expression("Area ("~cm^2~")"), x = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("nursery_monitoring", "figs", "growth_apal_line_sum.png"), width = 5, height = 4)
+
+
+apal_sum3 <- apal_sum2 %>%
+  group_by(month, date) %>%
+  summarize(area = mean(area_mean),
+            se = sd(area_mean)/sqrt(n())) %>%
+  filter(month %in% c("Aug", "Jan"))
+
+ggplot(apal_sum3, aes(x = reorder(month, date), y = area)) +
+  geom_col(fill = "#97dce7") +
+  geom_errorbar(aes(ymin = area - se, ymax = area + se), width = .2) +
+  labs(y = expression("Mean fragment area ("~cm^2~")"), x = "") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(size = 14))
+ggsave(here("nursery_monitoring", "figs", "growth_apal_sum_jan.png"), width = 3, height = 3)
+
+ggplot(apal %>% filter(month == "Jan"), aes(x = n_hands)) +
+  geom_bar(aes(y = (..count..)/sum(..count..)), fill = "turquoise4") +
+  scale_y_continuous(labels = percent, position = "right") +
+  scale_x_continuous(breaks = c(0,1,2,3,4,5,6)) +
+  labs(y = "Percent of fragments", x = "Number of new appendages") +
+  theme_bw() + 
+  theme(axis.text = element_text(size = 10))
+ggsave(here("nursery_monitoring", "figs", "growth_apal_hands_jan.png"), width = 3, height = 3)
 ```
 
 
