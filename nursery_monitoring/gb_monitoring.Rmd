@@ -200,7 +200,7 @@ ggsave(here("nursery_monitoring", "figs", "growth_apal_bar.png"), width = 6, hei
 Quantifying apal hands/crimp overgrowth
 ```{r}
 apal_qual <- apal %>%
-  filter(date == as.Date("2021-12-01") & !is.na(m1)) %>%
+  filter(date == as.Date("2022-03-01") & !is.na(m1)) %>%
   mutate(crimp_overgrowth = if_else(crimp_overgrowth == "Y", 1, 0)) %>%
   group_by(genotype, source) %>%
   summarize(n = n(),
@@ -309,7 +309,7 @@ apal_sum3 <- apal_sum2 %>%
   group_by(month, date) %>%
   summarize(area = mean(area_mean),
             se = sd(area_mean)/sqrt(n())) %>%
-  filter(month %in% c("Aug", "Jan"))
+  filter(month %in% c("Aug", "Mar"))
 
 ggplot(apal_sum3, aes(x = reorder(month, date), y = area)) +
   geom_col(fill = "#97dce7") +
@@ -317,7 +317,7 @@ ggplot(apal_sum3, aes(x = reorder(month, date), y = area)) +
   labs(y = expression("Mean fragment area ("~cm^2~")"), x = "") +
   theme_bw() + 
   theme(axis.text.x = element_text(size = 14))
-ggsave(here("nursery_monitoring", "figs", "growth_apal_sum_jan.png"), width = 3, height = 3)
+ggsave(here("nursery_monitoring", "figs", "growth_apal_sum_mar.png"), width = 3, height = 3)
 
 ggplot(apal %>% filter(month == "Jan"), aes(x = n_hands)) +
   geom_bar(aes(y = (..count..)/sum(..count..)), fill = "turquoise4") +
@@ -326,7 +326,7 @@ ggplot(apal %>% filter(month == "Jan"), aes(x = n_hands)) +
   labs(y = "Percent of fragments", x = "Number of new appendages") +
   theme_bw() + 
   theme(axis.text = element_text(size = 10))
-ggsave(here("nursery_monitoring", "figs", "growth_apal_hands_jan.png"), width = 3, height = 3)
+ggsave(here("nursery_monitoring", "figs", "growth_apal_hands_mar.png"), width = 3, height = 3)
 ```
 
 
