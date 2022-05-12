@@ -43,7 +43,7 @@ ggplot() +
               alpha = 0.3) +
   scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = ph, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 2)) +
+  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = "pH") +
   ylim(5, 9) +
   theme_bw() +
@@ -53,12 +53,12 @@ ggsave(here("water_quality", "figs", "WQ3", "pH.png"), width = 6, height = 4)
 # TDS
 ggplot() +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = tds, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = "TDS") +
   ylim(30, 40) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "WQ2", "tds.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "WQ3", "tds.png"), width = 6, height = 4)
 
 # Salinity: 32,000 to 42,000 ppm (NOAA)
 rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 32, ymax = 42)
@@ -68,22 +68,22 @@ ggplot() +
               alpha = 0.3) +
   scale_fill_manual(values = c_range, name = "Target range", labels = c("NOAA 2021")) +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = salinity, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = "Salinity") +
   ylim(25, 50) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "WQ2", "salinity.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "WQ3", "salinity.png"), width = 6, height = 4)
 
 # Turbidity (no reference)
 ggplot() +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = turbidity, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = "Turbidity (NTU)") +
   ylim(0, 5) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "WQ2", "turbidity.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "WQ3", "turbidity.png"), width = 6, height = 4)
 
 
 # DO: Must be greater than 6.0 ppm  (EPMA, 2019)
@@ -94,32 +94,32 @@ ggplot() +
               alpha = 0.3) +
   scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = do, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = "Dissolved oxygen (ppm)") +
   ylim(0, 12) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "WQ2", "do.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "WQ3", "do.png"), width = 6, height = 4)
 
 # Nitrates (no reference)
 ggplot() +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = nitrate, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = "Nitrate (ppm)") +
   ylim(0, 0.2) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "WQ2", "nitrate.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "WQ3", "nitrate.png"), width = 6, height = 4)
 
 # Phosphates (no reference)
 ggplot() +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = phosphate, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+  scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = "Phosphate (ppm)") +
   ylim(0, 0.6) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "WQ2", "phosphate.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "WQ3", "phosphate.png"), width = 6, height = 4)
 
 # Temperature: 23°–29.6°Celsius (NOAA)
 rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6)
@@ -129,22 +129,22 @@ ggplot() +
               alpha = 0.3) +
   scale_fill_manual(values = c_range, name = "Target range", labels = c("NOAA 2021")) +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = temperature, shape = date)) +
-   scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+   scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = expression("Temperature ("*~degree*C*")")) +
   ylim(18, 32) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "WQ2", "temperature.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "WQ3", "temperature.png"), width = 6, height = 4)
 
 # Conductivity (no reference)
 ggplot() +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = conductivity, shape = date)) +
-   scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+   scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = expression("Conductivity ("*mu*S*" "*cm^-1*")")) +
   ylim(50000, 60000) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "WQ2", "conductivity.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "WQ3", "conductivity.png"), width = 6, height = 4)
 
 # Enterococci (below 33, EPMA)
 rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 33)
@@ -154,12 +154,12 @@ ggplot() +
               alpha = 0.3) +
   scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
   geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = enterococci, shape = date)) +
-   scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021"), values = c(1, 16)) +
+   scale_shape_manual(name = "Sample date", labels = c("April 2021", "August 2021", "April 2022"), values = c(1, 16, 8)) +
   labs(x = "", y = expression("Enterococci (cfu 100"*ml^-1*")")) +
   ylim(0, 35) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "WQ2", "enterococci.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "WQ3", "enterococci.png"), width = 6, height = 4)
 ```
 
 Means and SE
