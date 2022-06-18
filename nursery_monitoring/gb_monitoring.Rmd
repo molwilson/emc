@@ -243,6 +243,11 @@ acer_sum2 <- acer_growth_long %>%
   ungroup() %>%
   mutate(species = "ACER")
 
+acer_mean_cm <- mean(acer_growth_sum$mean_growth)
+acer_cm_se <- sd(acer_growth_sum$mean_growth)/sqrt(9)
+acer_mean_p <- mean(acer_growth_sum$mean_growth_p)
+acer_p_se <- sd(acer_growth_sum$mean_growth_p)/sqrt(9)
+
 ggplot(acer_sum2, aes(x = date, y = tle_mean, group = genotype)) +
   geom_point() +
   geom_line() +
@@ -259,6 +264,11 @@ apro_sum2 <- apro_growth_long %>%
   summarise(tle_mean = mean(tle)) %>%
   ungroup() %>%
   mutate(species = "APRO")
+
+apro_mean_cm <- mean(apro_growth_sum$mean_growth)
+apro_cm_se <- sd(apro_growth_sum$mean_growth)/sqrt(7)
+apro_mean_p <- mean(apro_growth_sum$mean_growth_p)
+apro_p_se <- sd(apro_growth_sum$mean_growth_p)/sqrt(7)
 
 ggplot(apro_sum2, aes(x = date, y = tle_mean, group = genotype)) +
   geom_point() +
@@ -329,4 +339,54 @@ ggplot(apal %>% filter(month == "Jan"), aes(x = n_hands)) +
 ggsave(here("nursery_monitoring", "figs", "growth_apal_hands_mar.png"), width = 3, height = 3)
 ```
 
+Calculating survivorship
+
+```{r}
+acer_surv <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "cervicornis") %>%  
+  clean_names() %>%
+  mutate(species = "A. cervicornis",
+         month = lubridate::month(date, label = TRUE, abbr = TRUE)) %>%
+  filter(month == "Mar") %>%
+  group_by(species, genotype) %>%
+  summarize(sum_iterations = sum(iteration),
+            live_count = sum(!is.na(m1))) %>%
+  mutate(survival = live_count/sum_iterations)
+
+acer_surv_mean <- mean(acer_surv$survival)
+acer_surv_se <- sd(acer_surv$survival/sqrt(9))
+
+apro_surv <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "prolifera") %>%  
+  clean_names() %>%
+  mutate(species = "A. prolifera",
+         month = lubridate::month(date, label = TRUE, abbr = TRUE)) %>%
+  filter(month == "Mar") %>%
+  group_by(species, genotype) %>%
+  summarize(sum_iterations = sum(iteration),
+            live_count = sum(!is.na(m1))) %>%
+  mutate(survival = live_count/sum_iterations)
+
+apro_surv_mean <- mean(apro_surv$survival)
+apro_surv_se <- sd(apro_surv$survival/sqrt(9))
+
+apal_surv <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "palmata") %>%  
+  clean_names() %>%
+  mutate(species = "A. palmata",
+         month = lubridate::month(date, label = TRUE, abbr = TRUE)) %>%
+  filter(month == "Mar") %>%
+  group_by(species, genotype) %>%
+  summarize(sum_iterations = sum(iteration),
+            live_count = sum(!is.na(m1))) %>%
+  mutate(survival = live_count/sum_iterations)
+
+apal_surv_mean <- mean(apal_surv$survival)
+apal_surv_se <- sd(apal_surv$survival/sqrt(9))
+
+surv_sum <- rbind(apal_surv, apro_surv, acer_surv)
+ggplot(surv_sum, aes(x = species, y = survival, group = species)) +
+  geom_boxplot(fill = "turquoise4", alpha = 0.6) +
+  stat_summary(fun.y=mean, geom="point", shape=8, size=2, color="black", fill="red") +
+  labs(x = "", y = "Survivorship") +
+  theme_bw()
+ggsave(here("nursery_monitoring", "figs", "survivorship.png"), width = 4, height = 3)
+```
 
