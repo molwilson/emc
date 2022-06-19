@@ -1,0 +1,39 @@
+---
+title: "MMA Seagrass"
+author: "Molly Wilson"
+date: "6/18/2022"
+output: html_document
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+Import and clean data
+```{r}
+seagrass <- read_excel(here("mma", "mma_seagrass.xlsx"), sheet = "quadrants") %>%  
+  clean_names()
+
+# expanding dataset by species
+seagrass_spp <- seagrass %>%
+  expand(nesting(site, transect, quadrant), species) %>%
+  left_join(seagrass %>%
+              select(site, transect, quadrant, species, percent)) %>%
+  mutate(percent = if_else(is.na(percent), 0, percent)) # can't get replace_na to work so using this instead
+```
+
+Percent cover by species
+```{r}
+cover_spp <- seagrass %>%
+  group_by(site, transect, species) %>%
+  summarize(cover_mean = mean(percent),
+            cover_se = sd(percent)/sqrt())
+```
+
+
+
