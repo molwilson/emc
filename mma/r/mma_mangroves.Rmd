@@ -1,0 +1,60 @@
+---
+title: "MMA Mangroves"
+author: "Molly Wilson"
+date: "6/20/2022"
+output: html_document
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+Import and clean data
+```{r}
+mgr_invert <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "inverts") %>%  
+  clean_names() %>%
+  filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
+  uncount(number)
+
+mgr_fish <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "fish") %>%  
+  clean_names() %>%
+  filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
+  mutate(number = if_else(is.na(number), 1, number)) %>% # all entries with no number specified were single observations
+  uncount(number) %>% # expand to replicate rows if multiple fish were recorded
+  mutate(biomass = as.numeric(biomass),
+         phase_code = tolower(phase),
+         phase = case_when(phase == "j" ~ "Juvenile",
+                           phase == "i" ~ "Initial",
+                           phase == "t" ~ "Terminal"))
+
+mgr_fish_family_site <- mgr_fish %>%
+  expand(nesting(site, transect), family) %>%
+  left_join(mgr_fish %>%
+      select(site, transect, family, length, biomass)) %>%
+  mutate(biomass = if_else(is.na(biomass), 0, biomass),
+         length = if_else(is.na(length), 0, length)) %>%
+  group_by(site, transect, family) %>%
+  summarize(biomass_tot = sum(biomass),
+            length = mean(length)) %>%
+  group_by(site, family) %>%
+  summarize(biomass_mean = mean(biomass_tot),
+            biomass_se = sd(biomass_tot)/sqrt(n()),
+            length_mean = mean(length),
+            length_se = sd(length)/sqrt(n()))
+
+mgr_fish_family <- mgr_fish_family_site %>%
+  group_by(family) %>%
+  summarize(biomass = mean(biomass_mean),
+            biomass_se = sd(biomass_mean)/sqrt(n()),
+            length = mean(length_mean),
+            length_se = sd(length_mean)/sqrt(n())) %>%
+  rename(biomass_mean = biomass,
+         length_mean = length) %>%
+  mutate(site = "Mean across sites") %>%
+  rbind(mgr_fish_family_site)
+```

@@ -16,24 +16,61 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 
 Import and clean data
 ```{r}
-seagrass <- read_excel(here("mma", "mma_seagrass.xlsx"), sheet = "quadrants") %>%  
+seagrass <- read_excel(here("mma", "data", "mma_seagrass.xlsx"), sheet = "quadrants") %>%  
   clean_names()
+```
 
+Percent cover by species
+```{r}
 # expanding dataset by species
 seagrass_spp <- seagrass %>%
   expand(nesting(site, transect, quadrant), species) %>%
   left_join(seagrass %>%
               select(site, transect, quadrant, species, percent)) %>%
   mutate(percent = if_else(is.na(percent), 0, percent)) # can't get replace_na to work so using this instead
+
+pc_spp_site <- seagrass_spp %>%
+  group_by(site, transect, species) %>%
+  summarize(pc_t = mean(percent)) %>%
+  group_by(site, species) %>%
+  summarize(pc_mean = mean(pc_t),
+            pc_se = sd(pc_t)/sqrt(n()))
+
+pc_spp <- pc_spp_site %>%
+  group_by(species) %>%
+  summarize(pc_mean_sum = mean(pc_mean),
+            pc_se = sd(pc_mean)/sqrt(n())) %>%
+  rename(pc_mean = pc_mean_sum) %>%
+  mutate(site = "Mean across sites") %>%
+  rbind(pc_spp_site)
+
 ```
 
-Percent cover by species
+Percent cover by category
 ```{r}
-cover_spp <- seagrass %>%
-  group_by(site, transect, species) %>%
-  summarize(cover_mean = mean(percent),
-            cover_se = sd(percent)/sqrt())
+# expanding dataset by category
+seagrass_cat <- seagrass %>%
+  expand(nesting(site, transect, quadrant), category) %>%
+  left_join(seagrass %>%
+              select(site, transect, quadrant, category, percent)) %>%
+  mutate(percent = if_else(is.na(percent), 0, percent))
+
+pc_cat_site <- seagrass_cat %>%
+  group_by(site, transect, category) %>%
+  summarize(pc_t = mean(percent)) %>%
+  group_by(site, category) %>%
+  summarize(pc_mean = mean(pc_t),
+            pc_se = sd(pc_t)/sqrt(n()))
+
+pc_cat <- pc_cat_site %>%
+  group_by(category) %>%
+  summarize(pc_mean_sum = mean(pc_mean),
+            pc_se = sd(pc_mean)/sqrt(n())) %>%
+  rename(pc_mean = pc_mean_sum) %>%
+  mutate(site = "Mean across sites") %>%
+  rbind(pc_cat_site)
 ```
+
 
 
 
