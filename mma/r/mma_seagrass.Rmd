@@ -2,8 +2,11 @@
 title: "MMA Seagrass"
 author: "Molly Wilson"
 date: "6/18/2022"
-output: html_document
+output: 
+  html_document:
+    code_folding: hide
 ---
+# {.tabset}
 
 ```{r, message = F, warning = F, echo = F}
 library(tidyverse)
@@ -14,39 +17,74 @@ library(janitor)
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
-Import and clean data
 ```{r}
+# Import and clean data
 seagrass <- read_excel(here("mma", "data", "mma_seagrass.xlsx"), sheet = "quadrants") %>%  
   clean_names()
 ```
 
-Percent cover by species
+# Percent cover by species
+* Only hard corals and seagrasses were identified to the species level
 ```{r}
 # expanding dataset by species
 seagrass_spp <- seagrass %>%
   expand(nesting(site, transect, quadrant), species) %>%
   left_join(seagrass %>%
-              select(site, transect, quadrant, species, percent)) %>%
+              select(site, transect, quadrant, species, category, percent)) %>%
   mutate(percent = if_else(is.na(percent), 0, percent)) # can't get replace_na to work so using this instead
 
 pc_spp_site <- seagrass_spp %>%
-  group_by(site, transect, species) %>%
+  group_by(site, transect, species, category) %>%
   summarize(pc_t = mean(percent)) %>%
-  group_by(site, species) %>%
+  group_by(site, species, category) %>%
   summarize(pc_mean = mean(pc_t),
             pc_se = sd(pc_t)/sqrt(n()))
 
 pc_spp <- pc_spp_site %>%
-  group_by(species) %>%
+  group_by(species, category) %>%
   summarize(pc_mean_sum = mean(pc_mean),
             pc_se = sd(pc_mean)/sqrt(n())) %>%
-  rename(pc_mean = pc_mean_sum) %>%
-  mutate(site = "Mean across sites") %>%
-  rbind(pc_spp_site)
+  rename(pc_mean = pc_mean_sum)
 
+ggplot(pc_spp %>% 
+         filter(category == "Sea grass"), 
+       aes(x = reorder(species, pc_mean), y = pc_mean)) +
+  geom_col(fill = "seagreen") +
+  coord_flip() +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+
+ggplot(pc_spp_site %>% 
+         filter(category == "Sea grass"), 
+       aes(x = reorder(species, pc_mean), y = pc_mean)) +
+  geom_col(fill = "seagreen") +
+  facet_grid(. ~ site) +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+
+ggplot(pc_spp %>% 
+         filter(category == "Stony coral"), 
+       aes(x = reorder(species, pc_mean), y = pc_mean)) +
+  geom_col(fill = "coral") +
+  coord_flip() +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+
+ggplot(pc_spp_site %>% 
+         filter(category == "Stony coral"), 
+       aes(x = reorder(species, pc_mean), y = pc_mean)) +
+  geom_col(fill = "coral") +
+  facet_grid(. ~ site) +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+  
 ```
 
-Percent cover by category
+# Percent cover by category
 ```{r}
 # expanding dataset by category
 seagrass_cat <- seagrass %>%

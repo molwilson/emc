@@ -21,7 +21,7 @@ Sys.setenv(TZ="America/Guadeloupe")
 ```
 
 ```{r}
-sources <- read_excel(here("nursery_monitoring", "frag sources.xlsx"), sheet = "sources") %>%  
+sources <- read_excel(here("nursery_monitoring", "data", "frag sources.xlsx"), sheet = "sources") %>%  
   clean_names() %>%
   mutate(site = replace(site, site == "Cervi Heaven", "North Green")) %>%
   select(source = site, genotype = id_number) %>%
@@ -31,7 +31,7 @@ YlGnBu <- brewer.pal(8,"Set3")
 names(YlGnBu) <- levels(sources$source)
 colScale <- scale_colour_manual(name = "source",values = YlGnBu)
 
-apal <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "palmata") %>%  
+apal <- read_excel(here("nursery_monitoring", "data", "gb monitoring.xlsx"), sheet = "palmata") %>%  
   clean_names() %>%
   mutate(species = "A. palmata") %>%
   filter(!is.na(m1)) %>%
@@ -41,7 +41,7 @@ apal <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "pa
          month = lubridate::month(date, label = TRUE, abbr = TRUE)) %>%
   left_join(sources, by = "genotype")
 
-acer <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "cervicornis") %>%  
+acer <- read_excel(here("nursery_monitoring", "data", "gb monitoring.xlsx"), sheet = "cervicornis") %>%  
   clean_names() %>%
   mutate(species = "A. cervicornis") %>%
   unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
@@ -55,7 +55,7 @@ acer <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "ce
                        month = lubridate::month(date, label = TRUE, abbr = TRUE)) %>% 
   left_join(sources, by = "genotype")
   
-apro <- read_excel(here("nursery_monitoring", "gb monitoring.xlsx"), sheet = "prolifera") %>%  
+apro <- read_excel(here("nursery_monitoring", "data", "gb monitoring.xlsx"), sheet = "prolifera") %>%  
   clean_names() %>%
   mutate(species = "A. prolifera") %>%
   unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
