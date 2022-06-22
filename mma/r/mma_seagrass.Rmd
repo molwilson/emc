@@ -77,14 +77,14 @@ ggplot(pc_cat_site,
 ```{r}
 # expanding dataset by species
 sg_spp <- sg_quads %>%
-  expand(nesting(site, transect, quadrant), species) %>%
+  expand(nesting(site, transect, quadrant), species) %>% ## try adding nesting(species, category)
   left_join(sg_quads %>% select(site, transect, quadrant, species, percent)) %>%
   left_join(sg_quads %>% select (species, category)) %>% # not sure why this wasn't working in the same line
   mutate(percent = if_else(is.na(percent), 0, percent)) %>% # can't get replace_na to work so using this instead
   distinct()
 
 # calculating percent cover by transect -> site
-pc_spp_site <- sg_spp %>%
+sg_pc_spp_site <- sg_spp %>%
   group_by(site, transect, species, category) %>%
   summarize(pc_t = mean(percent)) %>%
   group_by(site, species, category) %>%
@@ -92,7 +92,7 @@ pc_spp_site <- sg_spp %>%
             pc_se = sd(pc_t)/sqrt(n()))
 
 # calculating percent cover across all sites
-pc_spp <- pc_spp_site %>%
+sg_pc_spp <- sg_pc_spp_site %>%
   group_by(species, category) %>%
   summarize(pc_mean_sum = mean(pc_mean),
             pc_se = sd(pc_mean)/sqrt(n())) %>%
@@ -105,13 +105,13 @@ test3 <- sg_spp %>%
   group_by(site, transect, species, category) %>%
   summarize(pc_t = mean(percent)) %>%
   filter(site == "Garden of Eden" & species == "Penicillus spp.")
-test4 <- pc_spp_site %>% filter(site == "Garden of Eden" & species == "Penicillus spp.")
+test4 <- sg_pc_spp_site %>% filter(site == "Garden of Eden" & species == "Penicillus spp.")
 
 # graphs
 
 ## seagrass
 
-ggplot(pc_spp %>% 
+ggplot(sg_pc_spp %>% 
          filter(category == "Seagrass"), 
        aes(x = reorder(species, pc_mean), y = pc_mean)) +
   geom_col(fill = "seagreen") +
@@ -120,7 +120,7 @@ ggplot(pc_spp %>%
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
-ggplot(pc_spp_site %>% 
+ggplot(sg_pc_spp_site %>% 
          filter(category == "Seagrass"), 
        aes(x = species, y = pc_mean)) +
   geom_col(fill = "seagreen") +
@@ -131,7 +131,7 @@ ggplot(pc_spp_site %>%
 
 # macroalgae
 
-ggplot(pc_spp %>% 
+ggplot(sg_pc_spp %>% 
          filter(category == "Algae"), 
        aes(x = reorder(species, pc_mean), y = pc_mean)) +
   geom_col(fill = "forestgreen") +
@@ -140,7 +140,7 @@ ggplot(pc_spp %>%
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
-ggplot(pc_spp_site %>% 
+ggplot(sg_pc_spp_site %>% 
          filter(category == "Algae"), 
        aes(x = species, y = pc_mean)) +
   geom_col(fill = "forestgreen") +
@@ -151,7 +151,7 @@ ggplot(pc_spp_site %>%
 
 # stony coral
 
-ggplot(pc_spp %>% 
+ggplot(sg_pc_spp %>% 
          filter(category == "Stony coral"), 
        aes(x = reorder(species, pc_mean), y = pc_mean)) +
   geom_col(fill = "coral") +
@@ -160,7 +160,7 @@ ggplot(pc_spp %>%
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
-ggplot(pc_spp_site %>% 
+ggplot(sg_pc_spp_site %>% 
          filter(category == "Stony coral"), 
        aes(x = species, y = pc_mean)) +
   geom_col(fill = "coral") +
