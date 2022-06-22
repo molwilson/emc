@@ -18,11 +18,11 @@ library(janitor)
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
-# Inverts 
+# Invertebrates 
 
 ```{r}
 # Import and clean data
-mgr_invert <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "inverts") %>%  
+mg_invert <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "inverts") %>%  
   clean_names() %>%
   unite(site_tran, site, transect, sep = "_", remove = FALSE) %>%
   mutate(type = str_to_title(type)) %>% # would prefer first cap, rest lower - maybe fix in data?
@@ -32,9 +32,9 @@ mgr_invert <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "inv
 ## Mean abundance by type
 * Need to consolidate into smaller number of "type"
 ```{r}
-mgr_invert_cat_site <- mgr_invert %>%
+mg_invert_cat_site <- mg_invert %>%
   expand(nesting(site, transect), type) %>%
-  left_join(mgr_invert %>%
+  left_join(mg_invert %>%
               select(site, transect, type, number)) %>%
   mutate(number = if_else(is.na(number), 0, number)) %>%
   group_by(site, transect, type) %>%
@@ -43,13 +43,13 @@ mgr_invert_cat_site <- mgr_invert %>%
   summarize(abundance_mean = mean(abundance),
             abundance_se = sd(abundance)/sqrt(n()))
 
-mgr_invert_cat <- mgr_invert_cat_site %>%
+mg_invert_cat <- mg_invert_cat_site %>%
   group_by(type) %>%
   summarize(abundance = mean(abundance_mean),
             abundance_se = sd(abundance_mean)/sqrt(n())) %>%
   rename(abundance_mean = abundance)
   
-ggplot(mgr_invert_cat, aes(x = reorder(type, -abundance_mean), y = abundance_mean)) +
+ggplot(mg_invert_cat, aes(x = reorder(type, -abundance_mean), y = abundance_mean)) +
   geom_col(position = "dodge", fill = "seagreen") +
   geom_errorbar(aes(ymin = abundance_mean - abundance_se, ymax = abundance_mean + abundance_se), width = .2,
                  position = position_dodge(.9)) +
@@ -57,7 +57,7 @@ ggplot(mgr_invert_cat, aes(x = reorder(type, -abundance_mean), y = abundance_mea
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-ggplot(mgr_invert_cat_site %>%
+ggplot(mg_invert_cat_site %>%
          filter(abundance_mean > 0), 
        aes(x = site, y = abundance_mean, fill = type)) +
   geom_col(position = "dodge") +
@@ -69,9 +69,9 @@ ggplot(mgr_invert_cat_site %>%
 
 ## Mean abundance by species
 ```{r}
-mgr_invert_spp <- mgr_invert %>%
+mg_invert_spp <- mg_invert %>%
   expand(nesting(site, transect), species) %>%
-  left_join(mgr_invert %>%
+  left_join(mg_invert %>%
               select(site, transect, species, number)) %>%
   mutate(number = if_else(is.na(number), 0, number)) %>%
   group_by(site, transect, species) %>%
@@ -84,7 +84,7 @@ mgr_invert_spp <- mgr_invert %>%
             abundance_se = sd(abundance_mean)/sqrt(n())) %>%
   rename(abundance_mean = abundance)
 
-ggplot(mgr_invert_spp, aes(x = reorder(species, abundance_mean), y = abundance_mean)) +
+ggplot(mg_invert_spp, aes(x = reorder(species, abundance_mean), y = abundance_mean)) +
   geom_col(position = "dodge", fill = "seagreen") +
   geom_errorbar(aes(ymin = abundance_mean - abundance_se, ymax = abundance_mean + abundance_se), width = .2,
                  position = position_dodge(.9)) +
@@ -94,15 +94,14 @@ ggplot(mgr_invert_spp, aes(x = reorder(species, abundance_mean), y = abundance_m
   theme(axis.text.y = element_text(face = "italic"))
 ```
 
-
 # Fish
 ```{r}
 # Import and clean data
 
-mgr_fish <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "fish") %>%  
+mg_fish <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "fish") %>%  
   clean_names() %>%
   filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
-  unite(site_tran, site, transect, sep = "_", remove = FALSE) %>%
+  # unite(site_tran, site, transect, sep = "_", remove = FALSE) %>%
   mutate(number = if_else(is.na(number), 1, number)) %>% # all entries with no number specified were single observations
   uncount(number) %>% # expand to replicate rows if multiple fish were recorded to look at length distributions
   mutate(biomass = as.numeric(biomass),
@@ -110,19 +109,20 @@ mgr_fish <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "fish"
          phase = case_when(phase == "j" ~ "Juvenile",
                            phase == "i" ~ "Initial",
                            phase == "t" ~ "Terminal"),
-         family_con = if_else(family %in% c("Atherinidae", "Clupeidae", "Scaridae", "Haemulidae", "Lutjanidae", "Sphyraenidae"), family, "Other")) # reducing number of families
+         family_c = if_else(family %in% c("Atherinidae", "Clupeidae", "Scaridae", "Haemulidae", "Lutjanidae", "Sphyraenidae"), family, "Other")) # consolidating the number of families
 ```
 
 ## Mean total biomass by site
 ```{r}
-mgr_fish_site <- mgr_fish %>% 
+# calculating total biomass in each transect (sum) -> mean at each site
+mg_fish_site <- mg_fish %>% 
   group_by(site, transect) %>%
   summarize(biomass_tot = sum(biomass)/1000/120*10000) %>% #kg/ha
   group_by(site) %>%
   summarize(biomass_mean = mean(biomass_tot),
             biomass_se = sd(biomass_tot)/sqrt(n()))
 
-ggplot(mgr_fish_site, aes(x = site, y = biomass_mean)) +
+ggplot(mg_fish_site, aes(x = site, y = biomass_mean)) +
   geom_col(fill = "lightblue", alpha = 0.8) +
   geom_errorbar(aes(ymin = biomass_mean - biomass_se, ymax = biomass_mean + biomass_se), width = .2,
                  position = position_dodge(.9)) +
@@ -133,23 +133,25 @@ ggplot(mgr_fish_site, aes(x = site, y = biomass_mean)) +
 
 ## Mean biomass and fish length by family and site
 ```{r}
-mgr_fish_family_site <- mgr_fish %>% 
-  expand(nesting(site, transect), family_con) %>%
-  left_join(mgr_fish %>%
-      select(site, transect, family_con, length, biomass)) %>%
+# calculating total biomass and mean length per family at each transect -> mean at each site
+mg_fish_fam_site <- mg_fish %>% 
+  expand(nesting(site, transect), family_c) %>%
+  left_join(mg_fish %>%
+      select(site, transect, family_c, length, biomass)) %>%
   mutate(biomass = if_else(is.na(biomass), 0, biomass),
          length = if_else(is.na(length), 0, length)) %>%
-  group_by(site, transect, family_con) %>%
+  distinct() %>%
+  group_by(site, transect, family_c) %>%
   summarize(biomass_tot = sum(biomass)/1000/120*10000, #kg/ha
             length = mean(length)) %>%
-  group_by(site, family_con) %>%
+  group_by(site, family_c) %>%
   summarize(biomass_mean = mean(biomass_tot),
             biomass_se = sd(biomass_tot)/sqrt(n()),
             length_mean = mean(length),
             length_se = sd(length)/sqrt(n()))
 
-mgr_fish_family <- mgr_fish_family_site %>%
-  group_by(family_con) %>%
+mg_fish_fam <- mg_fish_fam_site %>%
+  group_by(family_c) %>%
   summarize(biomass = mean(biomass_mean),
             biomass_se = sd(biomass_mean)/sqrt(n()),
             length = mean(length_mean),
@@ -157,20 +159,29 @@ mgr_fish_family <- mgr_fish_family_site %>%
   rename(biomass_mean = biomass,
          length_mean = length) %>%
   mutate(site = "Mean across sites") %>%
-  rbind(mgr_fish_family_site) 
+  rbind(mg_fish_family_site) 
+
+# testing accuracy of site-level calculations
+test1 <- sg_quads %>% filter(site == "Garden of Eden"  & species == "Penicillus spp.")
+test2 <- sg_spp %>% filter(site == "Garden of Eden" & species == "Penicillus spp.")
+test3 <- sg_spp %>%
+  group_by(site, transect, species, category) %>%
+  summarize(pc_t = mean(percent)) %>%
+  filter(site == "Garden of Eden" & species == "Penicillus spp.")
+test4 <- pc_spp_site %>% filter(site == "Garden of Eden" & species == "Penicillus spp.")
   
-ggplot(mgr_fish_family %>% 
+ggplot(mg_fish_family %>% 
          filter(biomass_mean >0 & site == "Mean across sites"), 
-       aes(x = reorder(family_con, -biomass_mean), y = biomass_mean)) +
+       aes(x = reorder(family_c, -biomass_mean), y = biomass_mean)) +
   geom_col(position = "dodge", fill = "slategray4", alpha = 0.9) +
   geom_errorbar(aes(ymin = biomass_mean - biomass_se, ymax = biomass_mean + biomass_se), width = .2,
                  position = position_dodge(.9)) +
   labs(x = "Family", y = "Biomass (kg/ha)") +
   theme_bw()
 
-ggplot(mgr_fish_family %>% 
+ggplot(mg_fish_family %>% 
          filter(biomass_mean >0 & site != "Mean across sites"), 
-       aes(x = site, y = biomass_mean, fill = family_con)) +
+       aes(x = site, y = biomass_mean, fill = family_c)) +
   geom_col(position = "dodge") +
   geom_errorbar(aes(ymin = biomass_mean - biomass_se, ymax = biomass_mean + biomass_se), width = .2,
                  position = position_dodge(.9)) +
@@ -180,11 +191,11 @@ ggplot(mgr_fish_family %>%
 
 ## Mean biomass and fish length by species
 ```{r}
-mgr_fish_spp_site <- mgr_fish %>%
+mg_fish_spp_site <- mg_fish %>%
   expand(nesting(site, transect), species_code) %>%
-  left_join(mgr_fish %>%
+  left_join(mg_fish %>%
       select(site, transect, species_code, length, biomass)) %>%
-  left_join(mgr_fish %>%
+  left_join(mg_fish %>%
               select(species_code, species_name, common_name) %>%
               distinct(), 
             by = "species_code") %>%
@@ -199,7 +210,7 @@ mgr_fish_spp_site <- mgr_fish %>%
             length_mean = mean(length),
             length_se = sd(length)/sqrt(n()))
 
-mgr_fish_spp <- mgr_fish_spp_site %>%
+mg_fish_spp <- mg_fish_spp_site %>%
   group_by(species_code, species_name, common_name) %>%
   summarize(biomass = mean(biomass_mean),
             biomass_se = sd(biomass_mean)/sqrt(n()),
@@ -208,7 +219,7 @@ mgr_fish_spp <- mgr_fish_spp_site %>%
   rename(biomass_mean = biomass,
          length_mean = length)
 
-ggplot(mgr_fish_spp, aes(x = reorder(species_name, biomass_mean), y = biomass_mean)) +
+ggplot(mg_fish_spp, aes(x = reorder(species_name, biomass_mean), y = biomass_mean)) +
   geom_col(color = "black", fill = "lightblue2", alpha = 0.8, stat = "identity",
            position = position_dodge()) +
   geom_errorbar(aes(ymin = biomass_mean - biomass_se, ymax = biomass_mean + biomass_se), width = .2,
@@ -223,12 +234,12 @@ ggplot(mgr_fish_spp, aes(x = reorder(species_name, biomass_mean), y = biomass_me
 * Issue here is that we have more transects for some sites than others... is there a way to scale them?
 * Need to add common names for families
 ```{r}
-ggplot(mgr_fish, aes(x = site, y = length)) +
+ggplot(mg_fish, aes(x = site, y = length)) +
   geom_violin() +
   theme_bw()
 
 # Density plots of lengths by family across all sites/transects?
-ggplot(mgr_fish %>% 
+ggplot(mg_fish %>% 
          filter(family %in% c("Acanthuridae", "Scaridae", "Haemulidae", "Lutjanidae")),
        aes(x = length, fill = family)) +
   geom_density(alpha = 0.4) +
