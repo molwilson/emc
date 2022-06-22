@@ -1,0 +1,124 @@
+---
+title: "MMA Reef"
+author: "Molly Wilson"
+date: "6/22/2022"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+# {.tabset}
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+# Benthic
+
+```{r}
+# Import and clean data
+
+benthic <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = "benthic") %>%  
+  clean_names() %>%
+  filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
+  # separate(species_code, c("species_code", "indicator")) %>% # separating variables with an underscore into two columns
+  mutate(species = to_any_case(species, case = "sentence"), # this makes sure species names are correctly capitalized
+         site = to_any_case(site, case = "title"),
+         benthic_class = case_when(category_code %in% c("LC", "SLC") ~ "Hard corals",
+                                  category_code %in% c("MA") ~ "Macroalgae",
+                                  category_code %in% c("TA") ~ "Turf algae",
+                                  category_code %in% c("CCA", "CCA_ND") ~ "CCA",
+                                  category_code %in% c("OINV", "SPON", "AINV", "CYAN", "PEY") ~ "Other competitors",
+                                  category_code %in% c("SAND", "HOLE", "SG", "PAVE") ~ "Other substratum"
+                                    ),
+         algal_type = case_when(type_code %in% c("BFMA", "GFMA", "RFMA") ~ "Fleshy macroalgae",
+                                type_code %in% c("GCMA", "RCMA") ~ "Calcareous macroalgae",
+                                type_code %in% c("TA", "TAS", "STA") ~ "Turf algae"),
+         av_sub_yn = if_else(category_code %in% c("SAND", "HOLE", "SG", "PAVE"), "no", "yes")
+         )
+
+# "Expand" a dataframe so that it contains all benthic classes per site/transect/meter, and then join the full dataset so that any meters where a species was absent it will show up as 0 (as opposed to just not having an entry at all)
+
+benthic.pc.class.m <- benthic %>%
+  filter(av_sub_yn == "yes") %>%
+  expand(nesting(site, transect, meter), benthic_class) %>%
+  # this is where we add in our actual data to this expanded template:
+  left_join(benthic %>% 
+              filter(av_sub_yn == "yes") %>% # only looking at what is considered available substrate (no sand, etc.)
+              group_by(site, transect, meter) %>%
+              mutate(n_pts = n()) %>% # showing total number of points per meter that are considered available substrate
+              ungroup() %>%
+              group_by(site, transect, meter, n_pts, benthic_class) %>%
+              summarize(pc.m = 100*n()/n_pts) %>% # n() counts the number of entries within a given group
+              ungroup() %>%
+              distinct() %>%
+              select(-n_pts), 
+            by = c("site", "transect", "meter", "benthic_class")) %>%
+  mutate(pc.m = if_else(is.na(pc.m), 0, pc.m))
+
+# average these meter-level results within transect, then within sites
+benthic.pc.class <- benthic.pc.class.m %>%
+  group_by(site, transect, benthic_class) %>%
+  summarize(pc.t = mean(pc.m)) %>%
+  ungroup() %>%
+  group_by(site, benthic_class) %>%
+  summarize(n.test = n(),
+            pc = mean(pc.t),
+            se = sd(pc.t)/sqrt(n())
+            ) %>%
+  filter(benthic_class != "Other substratum") %>% 
+  mutate(benthic_class = factor(benthic_class, levels = c("Hard corals", "CCA", "Macroalgae", "Turf algae", "Other competitors")))
+
+# quick check to make sure everything adds up to 100% at the meter and site level
+test.m <- benthic.pc.class.m %>%
+  group_by(site, transect, meter) %>%
+  summarize(total = sum(pc.m))
+test.site <- benthic.pc.class %>%
+  group_by(site) %>%
+  summarize(total = sum(pc))
+
+# calculating percent cover by type and site
+
+benthic.pc.type.m <- benthic %>%
+  expand(nesting(site, transect, meter), nesting(type, type_code)) %>%
+  left_join(benthic %>% 
+              filter(av_sub_yn == "yes") %>% 
+              group_by(site, transect, meter) %>%
+              mutate(n_pts = n()) %>% 
+              ungroup() %>%
+              group_by(site, transect, meter, n_pts, type, type_code) %>%
+              summarize(pc.m = 100*n()/n_pts) %>%
+              ungroup() %>%
+              distinct() %>%
+              select(-n_pts), 
+            by = c("site", "transect", "meter", "type", "type_code")) %>%
+  mutate(pc.m = if_else(is.na(pc.m), 0, pc.m))
+
+benthic.pc.type <- benthic.pc.type.m %>%
+  group_by(site, transect, type, type_code) %>%
+  summarize(pc.t = mean(pc.m)) %>%
+  ungroup() %>%
+  group_by(site, type, type_code) %>%
+  summarize(pc = mean(pc.t),
+            se = sd(pc.t)/sqrt(n())
+            ) %>%
+  ungroup() %>%
+  left_join(benthic %>%
+              select(type, benthic_class) %>%
+              distinct(),
+            by = "type") %>%
+  filter(benthic_class != "Other substratum")
+
+test.m <- benthic.pc.type.m %>%
+  group_by(site, transect, meter) %>%
+  summarize(total = sum(pc.m))
+test.site <- benthic.pc.type %>%
+  group_by(site) %>%
+  summarize(total = sum(pc))
+```
