@@ -135,14 +135,14 @@ mg_fish <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "fish")
 # calculating total biomass in each transect (sum) -> mean at each site
 mg_fish_site <- mg_fish %>% 
   group_by(site, transect) %>%
-  summarize(biomass_tot = sum(biomass)/1000/30*10000) %>% # kg/ha, 30m^2 transects
+  summarize(bm_tot = sum(biomass)/1000/30*10000) %>% # kg/ha, 30m^2 transects
   group_by(site) %>%
-  summarize(biomass_mean = mean(biomass_tot),
-            biomass_se = sd(biomass_tot)/sqrt(n()))
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()))
 
-ggplot(mg_fish_site, aes(x = site, y = biomass_mean)) +
+ggplot(mg_fish_site, aes(x = site, y = bm_mean)) +
   geom_col(fill = "lightblue", color = "black", alpha = 0.8) +
-  geom_errorbar(aes(ymin = biomass_mean - biomass_se, ymax = biomass_mean + biomass_se), width = .2,
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   labs(x = "Site", y = "Biomass (kg/ha)") +
   theme_bw()
@@ -158,11 +158,11 @@ mg_fish_fam_site <- mg_fish %>%
       select(site, transect, family_c, length, biomass)) %>% # can't use distinct() here because count >1 will replicate on multiple lines, so will check below to make sure rows haven't been duplicated with the left_join()
   mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>% # transects with none of a given family have 0 biomass, but length would still be NA
   group_by(site, transect, family_c) %>%
-  summarize(biomass_tot = sum(biomass)/1000/30*10000, # kg/ha
+  summarize(bm_tot = sum(biomass)/1000/30*10000, # kg/ha
             length = mean(length)) %>%
   group_by(site, family_c) %>%
-  summarize(biomass_mean = mean(biomass_tot),
-            biomass_se = sd(biomass_tot)/sqrt(n()),
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()),
             length_mean = mean(length, na.rm = TRUE), # ignore NAs from transects with no fish in a family
             length_se = sd(length, na.rm = TRUE)/sqrt(sum(!is.na(.))))
 
@@ -179,13 +179,13 @@ test3 <- mg_fish %>%
       select(site, transect, family_c, length, biomass)) %>% 
   mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>%
   group_by(site, transect, family_c) %>%
-  summarize(biomass_tot = sum(biomass), # don't change units for this test
+  summarize(bm_tot = sum(biomass), # don't change units for this test
             length = mean(length)) %>%
   filter(site == "Emerald Cove" & family_c == "Sphyraenidae")
 test4 <- test3 %>% 
   group_by(site, family_c) %>%
-  summarize(biomass_mean = mean(biomass_tot),
-            biomass_se = sd(biomass_tot)/sqrt(n()),
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()),
             length_mean = mean(length, na.rm = TRUE),
             length_se = sd(length, na.rm = TRUE)/sqrt(sum(!is.na(.)))) %>% 
   filter(site == "Emerald Cove"  & family_c == "Sphyraenidae")
@@ -193,11 +193,11 @@ test4 <- test3 %>%
 # calculating mean biomass and fish length across all sites
 mg_fish_fam <- mg_fish_fam_site %>%
   group_by(family_c) %>%
-  summarize(biomass = mean(biomass_mean),
-            biomass_se = sd(biomass_mean)/sqrt(n()),
+  summarize(biomass = mean(bm_mean),
+            bm_se = sd(bm_mean)/sqrt(n()),
             length = mean(length_mean),
             length_se = sd(length_mean)/sqrt(n())) %>%
-  rename(biomass_mean = biomass,
+  rename(bm_mean = biomass,
          length_mean = length) %>%
   mutate(site = "Mean across sites") %>%
   rbind(mg_fish_fam_site) 
@@ -205,19 +205,19 @@ mg_fish_fam <- mg_fish_fam_site %>%
 # graphs
 
 ggplot(mg_fish_fam %>% 
-         filter(biomass_mean > 0 & site == "Mean across sites"), 
-       aes(x = reorder(family_c, -biomass_mean), y = biomass_mean)) +
+         filter(bm_mean > 0 & site == "Mean across sites"), 
+       aes(x = reorder(family_c, -bm_mean), y = bm_mean)) +
   geom_col(position = "dodge", fill = "slategray4", alpha = 0.9) +
-  geom_errorbar(aes(ymin = biomass_mean - biomass_se, ymax = biomass_mean + biomass_se), width = .2,
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   labs(x = "Family", y = "Biomass (kg/ha)") +
   theme_bw()
 
 ggplot(mg_fish_fam %>% 
-         filter(biomass_mean >0 & site != "Mean across sites"), 
-       aes(x = site, y = biomass_mean, fill = family_c)) +
+         filter(bm_mean >0 & site != "Mean across sites"), 
+       aes(x = site, y = bm_mean, fill = family_c)) +
   geom_col(position = "dodge") +
-  geom_errorbar(aes(ymin = biomass_mean - biomass_se, ymax = biomass_mean + biomass_se), width = .2,
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   labs(x = "Family", y = "Biomass (kg/ha)", fill = "Family") +
   theme_bw()
@@ -235,27 +235,27 @@ mg_fish_spp_site <- mg_fish %>%
             by = "species_code") %>%
   mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>%
   group_by(site, transect, species_code, species_name, common_name) %>%
-  summarize(biomass_tot = sum(biomass)/1000/120*10000, #kg/ha
+  summarize(bm_tot = sum(biomass)/1000/120*10000, #kg/ha
             length = mean(length)) %>%
   group_by(site, species_code, species_name, common_name) %>%
-  summarize(biomass_mean = mean(biomass_tot),
-            biomass_se = sd(biomass_tot)/sqrt(n()),
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()),
             length_mean = mean(length, na.rm = TRUE),
             length_se = sd(length, na.rm = TRUE)/sqrt(sum(!is.na(.))))
 
 mg_fish_spp <- mg_fish_spp_site %>%
   group_by(species_code, species_name, common_name) %>%
-  summarize(biomass = mean(biomass_mean),
-            biomass_se = sd(biomass_mean)/sqrt(n()),
+  summarize(biomass = mean(bm_mean),
+            bm_se = sd(bm_mean)/sqrt(n()),
             length = mean(length_mean),
             length_se = sd(length_mean)/sqrt(n())) %>%
-  rename(biomass_mean = biomass,
+  rename(bm_mean = biomass,
          length_mean = length)
 
-ggplot(mg_fish_spp, aes(x = reorder(species_name, biomass_mean), y = biomass_mean)) +
+ggplot(mg_fish_spp, aes(x = reorder(species_name, bm_mean), y = bm_mean)) +
   geom_col(color = "black", fill = "lightblue2", alpha = 0.8, stat = "identity",
            position = position_dodge()) +
-  geom_errorbar(aes(ymin = biomass_mean - biomass_se, ymax = biomass_mean + biomass_se), width = .2,
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   coord_flip() +
   labs(x = "", y = "Mean biomass (kg/ha)") +
