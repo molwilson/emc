@@ -13,6 +13,8 @@ library(tidyverse)
 library(here) 
 library(readxl) 
 library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr)
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
@@ -28,7 +30,7 @@ mg_invert <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "inve
   filter(!is.na(site)) # remove any incomplete rows at the end of the data
 ```
 
-### Mean abundance by type
+### Density by type
 * Need to consolidate into smaller number of "type" / create "other" category
 ```{r}
 # calculate total abundance by transect -> mean density by site
@@ -74,6 +76,7 @@ ggplot(mg_invert_cat, aes(x = reorder(type, -dens_mean), y = dens_mean)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+# graph
 ggplot(mg_invert_cat_site %>%
          filter(dens_mean > 0), 
        aes(x = type, y = dens_mean)) +
@@ -84,9 +87,11 @@ ggplot(mg_invert_cat_site %>%
   labs(x = "Site", y = "Mean density (indv./m2)") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1))
+
+kable(mg_invert_cat_site %>% select(site, type, dens_mean, dens_se))
 ```
 
-### Mean abundance by species
+### Density by species
 ```{r}
 mg_invert_spp <- mg_invert %>%
   expand(nesting(site, transect), species) %>%
@@ -103,6 +108,7 @@ mg_invert_spp <- mg_invert %>%
             dens_se = sd(dens_mean)/sqrt(n())) %>%
   rename(dens_mean = dens)
 
+# graph
 ggplot(mg_invert_spp, aes(x = reorder(species, dens_mean), y = dens_mean)) +
   geom_col(position = "dodge", fill = "darkgoldenrod1", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
@@ -111,6 +117,8 @@ ggplot(mg_invert_spp, aes(x = reorder(species, dens_mean), y = dens_mean)) +
   labs(x = "", y = "Mean abundance (indv./m2)") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
+
+kable(mg_invert_spp %>% select(species, dens_mean, dens_se))
 ```
 
 ## Fish
@@ -131,7 +139,7 @@ mg_fish <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "fish")
          family_c = if_else(family %in% c("Atherinidae", "Clupeidae", "Scaridae", "Haemulidae", "Lutjanidae", "Sphyraenidae"), family, "Other")) # consolidating the number of families
 ```
 
-### Mean total biomass by site
+### Total biomass by site
 ```{r}
 # calculating total biomass in each transect (sum) -> mean at each site
 mg_fish_site <- mg_fish %>% 
@@ -141,16 +149,19 @@ mg_fish_site <- mg_fish %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
 
+# graph
 ggplot(mg_fish_site, aes(x = site, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   labs(x = "Site", y = "Biomass (kg/ha)") +
   theme_bw()
+
+kable(mg_fish_site %>% select(site, bm_mean, bm_se))
 ```
 
 
-### Mean biomass and fish length by family and site
+### Biomass and fish length by family and site
 ```{r}
 # calculating total biomass and mean length per family at each transect -> mean at each site
 mg_fish_fam_site <- mg_fish %>% 
@@ -199,14 +210,12 @@ mg_fish_fam <- mg_fish_fam_site %>%
             length = mean(length_mean),
             length_se = sd(length_mean)/sqrt(n())) %>%
   rename(bm_mean = biomass,
-         length_mean = length) %>%
-  mutate(site = "Mean across sites") %>%
-  rbind(mg_fish_fam_site) 
+         length_mean = length)
 
 # graphs
 
 ggplot(mg_fish_fam %>% 
-         filter(bm_mean > 0 & site == "Mean across sites"), 
+         filter(bm_mean > 0), 
        aes(x = reorder(family_c, -bm_mean), y = bm_mean)) +
   geom_col(position = "dodge", fill = "cadetblue3", alpha = 0.9, color = "black") +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
@@ -214,17 +223,23 @@ ggplot(mg_fish_fam %>%
   labs(x = "Family", y = "Biomass (kg/ha)") +
   theme_bw()
 
-ggplot(mg_fish_fam %>% 
-         filter(bm_mean >0 & site != "Mean across sites"), 
-       aes(x = site, y = bm_mean, fill = family_c)) +
+kable(mg_fish_fam %>% select(family = family_c, bm_mean, bm_se))
+
+ggplot(mg_fish_fam_site %>% 
+         filter(bm_mean >0), 
+       aes(x = family_c, y = bm_mean)) +
   geom_col(position = "dodge", fill = "cadetblue3", alpha = 0.9, color = "black") +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
+  facet_wrap(. ~ site) +
   labs(x = "Family", y = "Biomass (kg/ha)", fill = "Family") +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1))
+
+kable(mg_fish_fam_site %>% select(site, family = family_c, bm_mean, bm_se))
 ```
 
-### Mean biomass and fish length by species
+### Biomass and fish length by species
 ```{r}
 mg_fish_spp_site <- mg_fish %>%
   expand(nesting(site, transect), species_code) %>%
@@ -253,6 +268,8 @@ mg_fish_spp <- mg_fish_spp_site %>%
   rename(bm_mean = biomass,
          length_mean = length)
 
+# graph
+
 ggplot(mg_fish_spp, aes(x = reorder(species_name, bm_mean), y = bm_mean)) +
   geom_col(color = "black", fill = "cadetblue3", color = "black", alpha = 0.9, stat = "identity",
            position = position_dodge()) +
@@ -262,6 +279,8 @@ ggplot(mg_fish_spp, aes(x = reorder(species_name, bm_mean), y = bm_mean)) +
   labs(x = "", y = "Mean biomass (kg/ha)") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
+
+kable(mg_fish_spp %>% select(species_name, bm_mean, bm_se))
 ```
 
 ### Distribution of fish lengths (or relative abundance of juveniles?)
