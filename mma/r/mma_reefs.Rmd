@@ -15,6 +15,7 @@ library(here)
 library(readxl) 
 library(janitor)
 library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
@@ -49,7 +50,6 @@ rf_benthic <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = 
 ```
 
 ### Percent cover by site and category
-* Eventually pie charts again for these...?
 
 ```{r}
 # "expand" dataframe so that it contains all benthic categories per site/transect/meter -> join full dataset so that any meters where a species was absent it will show up as 0 (as opposed to having no entry)
@@ -92,16 +92,33 @@ test2 <- rf_pc_cat_site %>%
   summarize(total = sum(pc_mean))
 
 # graphs
+cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
 ggplot(rf_pc_cat_site, 
-       aes(x = cat_c, y = pc_mean)) +
-  geom_col(fill = "slategray3", color = "black", alpha = 0.9) +
+       aes(x = cat_c, y = pc_mean, fill = cat_c)) +
+  geom_col(color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
+  scale_fill_manual(values = cat_palette) +
   facet_wrap(. ~ site, ncol = 2) +
   labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+
+cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
+ggplot(rf_pc_cat_site, 
+       aes(x = "cat_c", y = pc_mean, fill = cat_c)) + 
+  geom_bar(width = 1, stat = "identity", color = "black") +
+  coord_polar("y", start=0) +
+  scale_fill_manual(values = cat_palette) +
+  facet_wrap(vars(site), nrow = 2) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        panel.spacing = unit(1, "lines"))
+
+kable(rf_pc_cat_site %>% select(site, category = cat_c, pc_mean, pc_se))
 ```
+
 
 ### Percent cover by site and species
 
@@ -162,6 +179,8 @@ ggplot(rf_pc_spp %>%
   labs(y = "Mean percent cover", x = "Species", fill = "") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
+
+kable(rf_pc_spp %>% filter(cat_c == "Hard corals") %>% select(species, pc_mean, pc_se))
 ```
 
 ## Fish
@@ -183,7 +202,8 @@ rf_fish <- read_excel(here("mma", "data", "mma_coral_fish.xlsx"), sheet = "fish"
          ) # consolidating the number of families
 ```
 
-### Mean total biomass by site
+### Total biomass by site
+* Regional averages are taken from Karr et al. 2015
 ```{r}
 # calculating total biomass in each transect (sum) -> mean at each site
 rf_fish_site <- rf_fish %>% 
@@ -193,15 +213,20 @@ rf_fish_site <- rf_fish %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
 
+# graph
 ggplot(rf_fish_site, aes(x = site, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.8) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
-  labs(x = "", y = "Biomass (kg/ha)") +
+  geom_hline(yintercept = 1300, linetype = "dashed", color = "black") +
+  annotate("text", x = 6.5, y = 1350, size = 3, hjust = 1, label=c('Caribbean mean unfished biomass')) +
+  labs(x = "", y = expression(Total~fish~biomass~(kg~ha^-1))) +
   theme_bw()
+
+kable(rf_fish_site %>% select(site, bm_mean, bm_se))
 ```
 
-### Mean biomass by site and family
+### Biomass by site and family
 ```{r}
 rf_fish_fam_site <- rf_fish %>% 
   expand(nesting(site, transect), family_c) %>%
@@ -214,6 +239,7 @@ rf_fish_fam_site <- rf_fish %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
 
+# graph
 ggplot(rf_fish_fam_site, aes(x = family_c, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
@@ -222,7 +248,34 @@ ggplot(rf_fish_fam_site, aes(x = family_c, y = bm_mean)) +
   labs(x = "Site", y = "Biomass (kg/ha)") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1))
+
+kable(rf_fish_fam_site %>% select(site, family = family_c, bm_mean, bm_se))
 ```
+
+### Herbivore biomass
+*  - Eastern Caribbean average parrotfish biomass for NTRs from Steneck et al. 2018 was ~ 1550 g/100m2, or 155 kg/ha. Note that this is potentially misleading because I'm sure a lot of these NTRs do experience some fishing. But mean fished parrotfish biomasses for the same region was ~ 750 g/100m2
+```{r}
+ggplot(rf_fish_fam_site %>%
+        filter(family_c == "Scaridae"),
+       aes(x = site, y = bm_mean)) +
+  geom_col(color = "black", fill = "cadetblue3", alpha = 0.8, stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  geom_hline(yintercept = 155, linetype = "dashed", color = "black") +
+  annotate("text", x = 8.5, y = 165, size = 3, hjust = 1, label=c('Eastern Caribbean mean unfished biomass')) +
+  labs(x = "", y = expression(Parrotfish~biomass~(kg~ha^-1))) +
+  theme_bw()
+
+ggplot(rf_fish_fam_site %>%
+        filter(family_c == "Acanthuridae"),
+       aes(x = site, y = bm_mean)) +
+  geom_col(color = "black", fill = "cadetblue3", alpha = 0.8, stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Surgeonfish~biomass~(kg~ha^-1))) +
+  theme_bw()
+```
+
 
 ### Biomass by species across all sites
 
@@ -255,7 +308,40 @@ ggplot(rf_fish_spp, aes(x = reorder(species_name, bm_mean), y = bm_mean)) +
   labs(x = "Site", y = "Biomass (kg/ha)") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
+
+kable(rf_fish_spp %>% select(species_name, bm_mean, bm_se))
 ```
 
 
-### Something with fish length...? (same scarid phase/size graphs? Overall fish length distribution?)
+### Fish lengths
+* What else can we show here beyond parrotfish sizes vs. sex change?
+
+#### Parrotfish lengths relative to sex change
+- Minimum sizes at maturity from O'Farrell et al. 2015:
+      - Sp. viride, 18 cm (Winn and Bardach 1960);
+      - Sp. aurofrenatum, 15 cm (Garcı´a-Cagide et al. 1994); 
+      - Sc. vetula, 19 cm (Winn and Bardach 1960); 
+      - and Sc. taeniopterus, 19 cm (Munro 1983).
+      
+```{r}
+scarids <- rf_fish %>%
+  filter(species_code %in% c("stop", "rbp", "qup", "strp") & !is.na(phase)) %>%
+  mutate(sex = case_when(phase %in% c("Juvenile", "Initial") ~ "Female",
+                         phase == "Terminal" ~ "Male"))
+
+ggplot(scarids, aes(x = length, fill = sex)) +
+  geom_histogram(stat = "count", alpha = 0.8, position = 'identity') +
+  facet_wrap(vars(species_name), ncol = 4) +
+  geom_vline(data = filter(scarids, species_code == "stop"), aes(xintercept = 18, color = "Minimum length at maturity"), linetype = "dashed") +
+  geom_vline(data = filter(scarids, species_code == "qup"), aes(xintercept = 19, color = "Minimum length at maturity"), linetype = "dashed") +
+  geom_vline(data = filter(scarids, species_code == "rbp"), aes(xintercept = 15, color = "Minimum length at maturity"), linetype = "dashed") +
+  geom_vline(data = filter(scarids, species_code == "strp"), aes(xintercept = 19, color = "Minimum length at maturity"), linetype = "dashed") +
+  scale_color_manual(values = c("black")) +
+  scale_fill_manual(values=c("pink2", "turquoise3")) +
+  theme_bw() +
+  labs(x = "Fish length (cm)", y = "Number observed", fill="") +
+  theme(strip.text = element_text(face = "italic"),
+        legend.title = element_blank(),
+        legend.position = "top")
+```
+
