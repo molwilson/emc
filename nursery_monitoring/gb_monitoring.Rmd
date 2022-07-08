@@ -81,8 +81,11 @@ acer_growth_long <- acer %>%
 
 acer_growth_wide <- acer %>%
   pivot_wider(id_cols = c(id, genotype, source), names_from = date, values_from = tle) %>%
-  mutate(growth = .[[n_mo + 3]] - .[[4]],
-         growth_percent = growth/.[[4]]) %>%
+  mutate(growth = .[[n_mo + 3]] - .[[4]], #latest size column - first size column
+         growth_percent = growth/.[[4]],
+         gr_cm_mo = growth/(n_mo),
+         gr_cm_day = growth/(n_mo*30),
+         gr_cm_yr = gr_cm_day*365) %>%
   filter(!is.na(growth))
 
 acer_growth_sum <- acer_growth_wide %>%
@@ -106,10 +109,73 @@ ggplot(acer_growth_sum, aes(x = genotype, y = mean_growth)) +
   geom_col(aes(fill = source), color = "black") +
   scale_fill_manual(values = YlGnBu) +
   geom_errorbar(aes(ymin = mean_growth - se, ymax = mean_growth + se), width = .2) +
-  labs(y = "Mean fragment growth (Aug. 2021 - Jan. 2022)", x = "Genotype", fill = "Source") +
+  labs(y = "Mean fragment growth over 8 months", x = "Genotype", fill = "Source") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("nursery_monitoring", "figs", "growth_acer_bar.png"), width = 6, height = 4)
+```
+
+Comparitive growth graphs
+```{r}
+# calculating growth of primary fragment only
+acer_growth_wide_m1 <- read_excel(here("nursery_monitoring", "data", "gb monitoring.xlsx"), sheet = "cervicornis") %>%  
+  clean_names() %>%
+  mutate(species = "A. cervicornis") %>%
+  unite(id, genotype, position, iteration, sep = "_", remove = FALSE) %>%
+  pivot_longer(cols = starts_with("m"), names_to = "branch", values_to = "length") %>%
+  filter(branch == "m1", !is.na(length)) %>%
+  pivot_wider(id_cols = c(id, genotype), names_from = date, values_from = length) %>%
+  mutate(growth = .[[n_mo + 2]] - .[[3]], # latest size column - first size column
+         gr_cm_mo = growth/(n_mo), 
+         gr_cm_day = growth/(n_mo*30), 
+         gr_cm_yr = gr_cm_day*365) %>% 
+  filter(growth > 0)
+
+# York Island means
+mean_gr_m1_cm_mo <- acer_growth_wide_m1 %>%
+  group_by(genotype) %>%
+  summarize(mean = mean(gr_cm_mo),
+            se = sd(gr_cm_mo)/sqrt(n()))
+mean_gr_tle_cm_mo <- acer_growth_wide %>%
+  group_by(genotype) %>%
+  summarize(mean = mean(gr_cm_mo),
+            se = sd(gr_cm_mo)/sqrt(n()))
+
+# reference growth rates (cm/mo)
+## primary branch
+bonaire_nurs <- 2.3 # Hilgers et al. 2015
+caribbean_wild <- 10.8/12 # Cummings et al. 2015
+## TLE
+puertorico_wild <- 3.1
+puertorico_nurs <- 4.4 # but 2.6 in first 6 mo
+cayman_nurs <- 0.17*30
+florida_nurs <- 1.7 # Herlan and Lirman 2008
+
+
+ggplot(mean_gr_m1_cm_mo, aes(x = genotype, y = mean)) +
+  geom_point(shape = 16, size = 2) +
+  # geom_point(data = acer_growth_wide_m1, aes(x = genotype, y = gr_cm_mo), shape = 1) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = .2) +
+  geom_hline(aes(yintercept = bonaire_nurs, linetype = "Bonaire nursery"), color = "lightseagreen") +
+  geom_hline(aes(yintercept = caribbean_wild, linetype = "Caribbean wild colonies"), color = "dodgerblue4") +
+  geom_hline(aes(yintercept = mean(mean), linetype = "York Island nursery"), color = "black") +
+  scale_linetype_manual(name = "Reference means", values = c(5,5,3), guide = guide_legend(override.aes = list(color = c("lightseagreen", "dodgerblue4", "black")))) +
+  ylim(0,3) +
+  labs(y = "Primary branch growth rate (cm/mo)", x = "Genotype") +
+  theme_bw()
+
+ggplot(mean_gr_tle_cm_mo, aes(x = genotype, y = mean)) +
+  geom_point(shape = 16, size = 2) +
+  # geom_point(data = acer_growth_wide, aes(x = genotype, y = gr_cm_mo), shape = 1) +
+  geom_errorbar(aes(ymax = mean + se, ymin = mean - se), width = 0.2) +
+  geom_hline(aes(yintercept = puertorico_nurs, linetype = "Puerto Rico nursery"), color = "deepskyblue4") +
+  geom_hline(aes(yintercept = cayman_nurs, linetype = "Cayman Islands nursery"), color = "goldenrod1") +
+  geom_hline(aes(yintercept = florida_nurs, linetype = "Biscayne Bay nursery"), color = "red") +
+  geom_hline(aes(yintercept = mean(mean), linetype = "York Island nursery"), color = "deepskyblue4") +
+  scale_linetype_manual(name = "Reference means", values = c(5,5,5,3), guide = guide_legend(override.aes = list(color = c("red", "goldenrod1", "deepskyblue4", "black")))) +
+  ylim(0,12) +
+  labs(y = "Total linear extension growth rate (cm/mo)", x = "Genotype") +
+  theme_bw()
 ```
 
 Quantifying growth: A. prolifera
