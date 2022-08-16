@@ -1,0 +1,143 @@
+---
+title: "Jumby Bay Baseline Assessment"
+author: "Molly Wilson"
+date: "8/14/2022"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+# {.tabset}
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+## Benthic
+# need to update autofills on original sheets
+```{r, run = F}
+# import and clean data
+
+rf_benthic <- read_excel(here("jumby_baseline", "data", "JB_reefs.xlsx"), sheet = "benthic") %>%  
+  clean_names() %>%
+  filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
+  # separate(species_code, c("species_code", "indicator")) %>% # separating variables with an underscore into two columns
+  mutate(species = to_any_case(species, case = "sentence"), # this makes sure species names are correctly capitalized
+         site = to_any_case(site, case = "title"),
+         # consolidating categories here for graphs:
+         cat_c = case_when(category_code %in% c("LC", "SLC") ~ "Hard corals",
+                                  category_code %in% c("MA") ~ "Macroalgae",
+                                  category_code %in% c("TA") ~ "Turf algae",
+                                  category_code %in% c("CCA", "CCA_ND") ~ "CCA",
+                                  category_code %in% c("OINV", "SPON", "AINV", "CYAN", "PEY") ~ "Other competitors",
+                                  category_code %in% c("SAND", "HOLE", "SG", "PAVE") ~ "Other substratum"
+                                    ),
+         # adding algal type for graphs about palatability:
+         algal_type = case_when(type_code %in% c("BFMA", "GFMA", "RFMA") ~ "Fleshy macroalgae",
+                                type_code %in% c("GCMA", "RCMA") ~ "Calcareous macroalgae",
+                                type_code %in% c("TA", "TAS", "STA") ~ "Turf algae"),
+         # certain substrates are not suitable for coral or algal growth, so should not detract from percent cover
+         av_sub_yn = if_else(category_code %in% c("SAND", "HOLE", "SG", "PAVE"), "no", "yes")
+         ) %>%
+    filter(!is.na(cat_c) & !is.na(species)) # need GRB to fix some data errors, but using this for now
+```
+
+## Fish
+
+```{r}
+# import and clean data
+
+rf_fish <- read_excel(here("jumby_baseline", "data", "JB_reefs.xlsx"), sheet = "fish") %>%  
+  clean_names() %>%
+  filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
+  mutate(number = if_else(is.na(number), 1, number)) %>% # all entries with no number specified were single observations
+  uncount(number) %>% # expand to replicate rows if multiple fish were recorded to look at length distributions
+  mutate(biomass = as.numeric(biomass),
+         phase_code = tolower(phase),
+         phase = case_when(phase == "j" ~ "Juvenile",
+                           phase == "i" ~ "Initial",
+                           phase == "t" ~ "Terminal"),
+         family_c = if_else(family %in% c("Scaridae", "Acanthuridae", "Haemulidae", "Serranidae", "Lutjanidae", "Balistidae", "Pomacentridae"), family, "Other")
+         ) # consolidating the number of families
+```
+
+### Total biomass by site
+* Regional averages are taken from Karr et al. 2015
+```{r}
+# calculating total biomass in each transect (sum) -> mean at each site
+rf_fish_site <- rf_fish %>% 
+  group_by(site, transect) %>%
+  summarize(bm_tot = sum(biomass)/1000/120*10000) %>% #kg/ha
+  group_by(site) %>%
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()))
+
+# graph
+ggplot(rf_fish_site, aes(x = site, y = bm_mean)) +
+  geom_col(fill = "cadetblue3", color = "black", alpha = 0.8) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  geom_hline(yintercept = 1300, linetype = "dashed", color = "black") +
+  annotate("text", x = 5.5, y = 1350, size = 3, hjust = 1, label=c('Caribbean mean unfished biomass')) +
+  labs(x = "", y = expression(Total~fish~biomass~(kg~ha^-1))) +
+  theme_bw()
+
+kable(rf_fish_site %>% select(site, bm_mean, bm_se))
+```
+
+### Biomass by site and family
+```{r}
+rf_fish_fam_site <- rf_fish %>% 
+  expand(nesting(site, transect), family_c) %>%
+  left_join(rf_fish %>%
+      select(site, transect, family_c, length, biomass)) %>%
+  mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>%
+  group_by(site, transect, family_c) %>%
+  summarize(bm_tot = sum(biomass)/1000/120*10000) %>% #kg/ha
+  group_by(site, family_c) %>%
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()))
+
+# graph
+ggplot(rf_fish_fam_site, aes(x = family_c, y = bm_mean)) +
+  geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_wrap(. ~ site, ncol = 2) +
+  labs(x = "Site", y = "Biomass (kg/ha)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1))
+
+kable(rf_fish_fam_site %>% select(site, family = family_c, bm_mean, bm_se))
+```
+
+### Herbivore biomass
+*  - Eastern Caribbean average parrotfish biomass for NTRs from Steneck et al. 2018 was ~ 1550 g/100m2, or 155 kg/ha. Note that this is potentially misleading because I'm sure a lot of these NTRs do experience some fishing. But mean fished parrotfish biomasses for the same region was ~ 750 g/100m2
+```{r}
+ggplot(rf_fish_fam_site %>%
+        filter(family_c == "Scaridae"),
+       aes(x = site, y = bm_mean)) +
+  geom_col(color = "black", fill = "cadetblue3", alpha = 0.8, stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  geom_hline(yintercept = 155, linetype = "dashed", color = "black") +
+  annotate("text", x = 8.5, y = 165, size = 3, hjust = 1, label=c('Eastern Caribbean mean unfished biomass')) +
+  labs(x = "", y = expression(Parrotfish~biomass~(kg~ha^-1))) +
+  theme_bw()
+
+ggplot(rf_fish_fam_site %>%
+        filter(family_c == "Acanthuridae"),
+       aes(x = site, y = bm_mean)) +
+  geom_col(color = "black", fill = "cadetblue3", alpha = 0.8, stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Surgeonfish~biomass~(kg~ha^-1))) +
+  theme_bw()
+```
