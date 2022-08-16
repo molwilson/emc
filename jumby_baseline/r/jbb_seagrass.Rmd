@@ -1,0 +1,109 @@
+---
+title: "JB Baseline - Seagrass"
+author: "Molly Wilson"
+date: "8/15/2022"
+output: html_document
+output: 
+  html_document:
+    code_folding: hide
+---
+# {.tabset}
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE) # sets default for each chunk
+```
+
+## Seagrass
+
+```{r}
+# Import and clean data
+
+sg_quads <- read_excel(here("jumby_baseline", "data", "jb_seagrass.xlsx"), sheet = "quadrants") %>%  
+  clean_names()
+```
+
+### Percent cover by category
+* technically I think we should be removing other invertebrates...?
+```{r}
+# expanding dataset by category
+sg_cat <- sg_quads %>%
+  expand(nesting(site, transect, quadrant), category) %>%
+  left_join(sg_quads %>%
+              select(site, transect, quadrant, category, percent, surveyor)) %>%
+  mutate(percent = if_else(is.na(percent), 0, percent)) %>%
+  group_by(site, transect, quadrant, category) %>%
+  summarize(pc = sum(percent))
+
+sg_pc_cat_site <- sg_cat %>%
+  group_by(site, transect, category) %>%
+  summarize(pc_t = mean(pc),
+            n = n()) %>% # testing to make sure there are 10 entries per category within each transect
+  group_by(site, category) %>%
+  summarize(pc_mean = mean(pc_t),
+            pc_se = sd(pc_t)/sqrt(n()))
+
+sg_pc_cat <- sg_pc_cat_site %>%
+  group_by(category) %>%
+  summarize(pc_mean_sum = mean(pc_mean),
+            pc_se = sd(pc_mean)/sqrt(n())) %>%
+  rename(pc_mean = pc_mean_sum)
+
+# test percent cover adds up to 100 per quadrant, transect, and site
+test1 <- sg_cat %>%
+  group_by(site, transect, quadrant) %>%
+  summarize(total = sum(pc)) %>%
+  filter(total != 100) %>%
+  left_join(sg_quads %>%
+              select(surveyor, site, transect, quadrant)) %>%
+  distinct()
+test2 <- sg_pc_cat_site %>%
+  group_by(site) %>%
+  summarize(total = sum(pc_mean))
+
+# graphs
+cat_palette <- c("olivedrab", "wheat", "palevioletred4", "tan3", "darkseagreen4", "slategray3", "coral2")
+
+ggplot(sg_pc_cat, 
+       aes(x = reorder(category, pc_mean), y = pc_mean, fill = category)) +
+  geom_col(color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  scale_fill_manual(values = cat_palette) +
+  coord_flip() +
+  labs(y = "Mean percent cover", x = "Category", fill = "") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+
+kable(sg_pc_cat %>% select(category, pc_mean, pc_se))
+
+ggplot(sg_pc_cat_site,
+       aes(x = category, y = pc_mean, fill = category)) +
+  geom_col(color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+    scale_fill_manual(values = cat_palette) +
+  facet_wrap(. ~ site) +
+  labs(y = "Mean percent cover", x = "Category", fill = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+
+ggplot(sg_pc_cat_site, 
+       aes(x = "category", y = pc_mean, fill = category)) + 
+  geom_bar(width = 1, stat = "identity", color = "black") +
+  coord_polar("y", start=0) +
+  scale_fill_manual(values = cat_palette) +
+  facet_wrap(vars(site), nrow = 2) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        panel.spacing = unit(1, "lines"))
+
+kable(sg_pc_cat_site %>% select(site, category, pc_mean, pc_se))
+```

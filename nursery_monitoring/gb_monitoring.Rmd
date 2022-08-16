@@ -147,9 +147,21 @@ bonaire_nurs <- 2.3 # Hilgers et al. 2015
 caribbean_wild <- 10.8/12 # Cummings et al. 2015
 ## TLE
 puertorico_wild <- 3.1
-puertorico_nurs <- 4.4 # but 2.6 in first 6 mo
-cayman_nurs <- 0.17*30
+puertorico_nurs <- 4.4 # but 2.6 in first 6 mo Griffin et al. 2012
+cayman_nurs <- 0.17*30 # Maneval 2021
 florida_nurs <- 1.7 # Herlan and Lirman 2008
+
+references <- read_excel(here("nursery_monitoring", "data", "ACER growth references.xlsx")) %>%  
+  clean_names() %>%
+  mutate(category = if_else(location == "York Island", "EMC", "reference"))
+
+ggplot(references %>% filter(method == "TLE"), aes(x = location, y = growth_rate, fill = category)) +
+  geom_col(color = "black", alpha = 0.8) +
+  scale_fill_manual(values = c("steelblue3", "slategray")) +
+  labs(y = expression(paste(italic("A. cervicornis"), " growth rate (cm/mo)")), x = "") +
+  theme_bw() +
+  theme(legend.position = "none")
+ggsave(here("nursery_monitoring", "figs", "growth_acer_refs.png"), width = 6, height = 4)
 
 
 ggplot(mean_gr_m1_cm_mo, aes(x = genotype, y = mean)) +
@@ -176,6 +188,22 @@ ggplot(mean_gr_tle_cm_mo, aes(x = genotype, y = mean)) +
   ylim(0,12) +
   labs(y = "Total linear extension growth rate (cm/mo)", x = "Genotype") +
   theme_bw()
+
+ggplot(mean_gr_tle_cm_mo %>%
+         mutate(nursery = "York Island"), aes(x = nursery, y = mean)) +
+  geom_point(shape = 16, size = 2) +
+  # geom_point(data = acer_growth_wide, aes(x = genotype, y = gr_cm_mo), shape = 1) +
+  # geom_errorbar(aes(ymax = mean + se, ymin = mean - se), width = 0.2) +
+  geom_hline(aes(yintercept = puertorico_nurs, linetype = "Puerto Rico nursery"), color = "deepskyblue4") +
+  geom_hline(aes(yintercept = cayman_nurs, linetype = "Cayman Islands nursery"), color = "goldenrod1") +
+  geom_hline(aes(yintercept = florida_nurs, linetype = "Biscayne Bay nursery"), color = "red") +
+  geom_hline(aes(yintercept = mean(mean), linetype = "York Island nursery"), color = "deepskyblue4") +
+  scale_linetype_manual(name = "Reference means", values = c(5,5,5,3), guide = guide_legend(override.aes = list(color = c("red", "goldenrod1", "deepskyblue4", "black")))) +
+  ylim(0,12) +
+  labs(y = "Total linear extension growth rate (cm/mo)", x = "Genotype") +
+  theme_bw()
+
+mean_tle <- mean(mean_gr_tle_cm_mo$mean)
 ```
 
 Quantifying growth: A. prolifera
