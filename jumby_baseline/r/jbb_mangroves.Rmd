@@ -1,0 +1,94 @@
+---
+title: "JB Baseline - Mangroves"
+author: "Molly Wilson"
+date: "8/16/2022"
+output: 
+  html_document:
+    code_folding: hide
+---
+# {.tabset}
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+Note - we only did one mangrove site so far
+
+## Invertebrates 
+
+```{r}
+# import and clean data
+mg_invert <- read_excel(here("jumby_baseline", "data", "jb_mangroves.xlsx"), sheet = "inverts") %>%  
+  clean_names() %>%
+  unite(site_tran, site, transect, sep = "_", remove = FALSE) %>%
+  mutate(type = str_to_title(type)) %>% # would prefer first cap, rest lower - maybe fix in data?
+  filter(!is.na(site)) # remove any incomplete rows at the end of the data
+```
+
+### Density by type
+* Need to consolidate into smaller number of "type" / create "other" category
+```{r}
+# calculate total abundance by transect -> mean density by site
+mg_invert_cat_site <- mg_invert %>%
+  expand(nesting(site, transect), type) %>%
+  left_join(mg_invert %>%
+              select(site, transect, type, number)) %>%
+  mutate(number = if_else(is.na(number), 0, number)) %>%
+  group_by(site, transect, type) %>%
+  summarize(abundance = sum(number)) %>% 
+  group_by(site, type) %>%
+  summarize(dens_mean = mean(abundance/30), # density as indv./m2 on 30m^2 transect
+            dens_se = sd(abundance/30)/sqrt(n()))
+
+# testing above code
+test1 <- mg_invert %>% filter(site == "Islet" & type == "Sponge")
+test2 <- mg_invert %>%
+  expand(nesting(site, transect), type) %>%
+  left_join(mg_invert %>%
+              select(site, transect, type, number)) %>%
+  mutate(number = if_else(is.na(number), 0, number)) %>%
+  filter(site == "Islet" & type == "Sponge")
+test3 <- test2 %>%
+  group_by(site, transect, type) %>%
+  summarize(abundance = sum(number)) %>%
+  filter(site == "Islet" & type == "Sponge")
+test4 <- test3 %>% group_by(site, type) %>%
+  summarize(dens_mean = mean(abundance/30), # density as indv./m2 on 30m^2 transect
+            dens_se = sd(abundance/30)/sqrt(n())) %>%
+  filter(site == "Islet" & type == "Sponge")
+
+mg_invert_cat <- mg_invert_cat_site %>%
+  group_by(type) %>%
+  summarize(dens = mean(dens_mean),
+            dens_se = sd(dens_mean)/sqrt(n())) %>%
+  rename(dens_mean = dens)
+  
+ggplot(mg_invert_cat, aes(x = reorder(type, -dens_mean), y = dens_mean)) +
+  geom_col(position = "dodge", fill = "darkgoldenrod1", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = "Mean density (indv./m2)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# graph
+ggplot(mg_invert_cat_site %>%
+         filter(dens_mean > 0), 
+       aes(x = type, y = dens_mean)) +
+  geom_col(position = "dodge", fill = "darkgoldenrod1", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_wrap(. ~ site, ncol = 3) +
+  labs(x = "Site", y = "Mean density (indv./m2)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1))
+
+kable(mg_invert_cat_site %>% select(site, type, dens_mean, dens_se))
+```
