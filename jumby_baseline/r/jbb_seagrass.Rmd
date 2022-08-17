@@ -2,7 +2,6 @@
 title: "JB Baseline - Seagrass"
 author: "Molly Wilson"
 date: "8/15/2022"
-output: html_document
 output: 
   html_document:
     code_folding: hide
@@ -30,7 +29,6 @@ sg_quads <- read_excel(here("jumby_baseline", "data", "jb_seagrass.xlsx"), sheet
 ```
 
 ### Percent cover by category
-* technically I think we should be removing other invertebrates...?
 ```{r}
 # expanding dataset by category
 sg_cat <- sg_quads %>%
