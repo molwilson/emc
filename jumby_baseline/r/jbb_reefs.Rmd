@@ -21,7 +21,6 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
 ## Benthic
-(need to update autofills on original sheets)
 ```{r, eval = F}
 # import and clean data
 
@@ -49,9 +48,147 @@ rf_benthic <- read_excel(here("jumby_baseline", "data", "JBB_reefs.xlsx"), sheet
     filter(!is.na(cat_c) & !is.na(species)) # need GRB to fix some data errors, but using this for now
 ```
 
-```{r}
+### Percent cover 
 
+#### Percent cover by site and category
+```{r}
+# "expand" dataframe so that it contains all benthic categories per site/transect/meter -> join full dataset so that any meters where a species was absent it will show up as 0 (as opposed to having no entry)
+rf_pc_cat_m <- rf_benthic %>%
+  filter(av_sub_yn == "yes") %>% # percent cover is relative to available substrate
+  expand(nesting(site, transect, meter), cat_c) %>%
+  # this is where we add in our actual data to this expanded template:
+  left_join(rf_benthic %>% 
+              filter(av_sub_yn == "yes") %>% # only looking at what is considered available substrate (no sand, etc.)
+              group_by(site, transect, meter) %>%
+              mutate(n_pts = n()) %>% # showing total number of points per meter that are considered available substrate
+              ungroup() %>%
+              group_by(site, transect, meter, n_pts, cat_c) %>%
+              summarize(pc_m = 100*n()/n_pts) %>% # n() counts the number of entries within a given group
+              ungroup() %>%
+              distinct() %>%
+              select(-n_pts), 
+            by = c("site", "transect", "meter", "cat_c")) %>%
+  mutate(pc_m = if_else(is.na(pc_m), 0, pc_m))
+
+# average these meter-level results within transect, then within sites
+rf_pc_cat_site <- rf_pc_cat_m %>%
+  group_by(site, transect, cat_c) %>%
+  summarize(pc_t = mean(pc_m)) %>%
+  ungroup() %>%
+  group_by(site, cat_c) %>%
+  summarize(n_test = n(),
+            pc_mean = mean(pc_t),
+            pc_se = sd(pc_t)/sqrt(n())
+            ) %>%
+  filter(cat_c != "Other substratum") %>% 
+  mutate(cat_c = factor(cat_c, levels = c("Hard corals", "CCA", "Macroalgae", "Turf algae", "Other competitors")))
+
+# quick check to make sure everything adds up to 100% at the meter and site level
+test1 <- rf_pc_cat_m %>%
+  group_by(site, transect, meter) %>%
+  summarize(total = sum(pc_m))
+test2 <- rf_pc_cat_site %>%
+  group_by(site) %>%
+  summarize(total = sum(pc_mean))
 ```
+
+
+```{r, eval = F}
+cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
+ggplot(rf_pc_cat_site, 
+       aes(x = cat_c, y = pc_mean, fill = cat_c)) +
+  geom_col(color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  scale_fill_manual(values = cat_palette) +
+  facet_wrap(. ~ site, ncol = 2) +
+  labs(y = "Mean percent cover", x = "", fill = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+```
+
+
+```{r, eval = F}
+cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
+ggplot(rf_pc_cat_site, 
+       aes(x = "cat_c", y = pc_mean, fill = cat_c)) + 
+  geom_bar(width = 1, stat = "identity", color = "black") +
+  coord_polar("y", start=0) +
+  scale_fill_manual(values = cat_palette) +
+  facet_wrap(vars(site), nrow = 2) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        panel.spacing = unit(1, "lines"))
+
+kable(rf_pc_cat_site %>% select(site, category = cat_c, pc_mean, pc_se))
+```
+
+
+#### Percent cover by site and species
+```{r}
+# calculating percent cover by species at each meter
+rf_pc_spp_m <- rf_benthic %>%
+  filter(av_sub_yn == "yes") %>%
+  expand(nesting(site, transect, meter), nesting(species, cat_c)) %>%
+  left_join(rf_benthic %>% 
+              filter(av_sub_yn == "yes") %>% 
+              group_by(site, transect, meter) %>%
+              mutate(n_pts = n()) %>% 
+              ungroup() %>%
+              group_by(site, transect, meter, n_pts, species, cat_c) %>%
+              summarize(pc_m = 100*n()/n_pts) %>%
+              ungroup() %>%
+              distinct() %>%
+              select(-n_pts), 
+            by = c("site", "transect", "meter", "species", "cat_c")) %>%
+  mutate(pc_m = if_else(is.na(pc_m), 0, pc_m))
+
+# calculating mean percent cover by transect -> site
+rf_pc_spp_site <- rf_pc_spp_m %>%
+  group_by(site, transect, species, cat_c) %>%
+  summarize(pc_t = mean(pc_m)) %>%
+  ungroup() %>%
+  group_by(site, species, cat_c) %>%
+  summarize(pc_mean = mean(pc_t),
+            pc_se = sd(pc_t)/sqrt(n())
+            ) %>%
+  ungroup() %>%
+  distinct()
+
+# calculating mean percent cover by species across all sites
+rf_pc_spp <- rf_pc_spp_site %>%
+  group_by(species, cat_c) %>%
+  summarize(pc = mean(pc_mean),
+            pc_se = sd(pc_mean)/sqrt(n())) %>%
+  rename(pc_mean = pc) 
+
+# testing that total percent cover per transect and site add up to 100
+test1 <- rf_pc_spp_m %>%
+  group_by(site, transect, meter) %>%
+  summarize(total = sum(pc_m))
+test2 <- rf_pc_spp_site %>%
+  group_by(site) %>%
+  summarize(total = sum(pc_mean))
+test3 <- sum(rf_pc_spp$pc_mean)
+
+# graphs
+ggplot(rf_pc_spp %>%
+         filter(cat_c == "Hard corals"),
+       aes(x = reorder(species, pc_mean), y = pc_mean)) +
+  geom_col(fill = "coral2", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  coord_flip() +
+  labs(y = "Mean percent cover", x = "", fill = "") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+
+kable(rf_pc_spp %>% filter(cat_c == "Hard corals") %>% select(species, pc_mean, pc_se))
+```
+### Need to add:
+#### MA canopy height
+#### Recruits/urchins
 
 ## Fish
 
@@ -72,7 +209,9 @@ rf_fish <- read_excel(here("jumby_baseline", "data", "JBB_reefs.xlsx"), sheet = 
          ) # consolidating the number of families
 ```
 
-### Total biomass by site
+### Fish biomass
+
+#### Total biomass at each site
 * Regional averages are taken from Karr et al. 2015
 ```{r}
 # calculating total biomass in each transect (sum) -> mean at each site
@@ -82,7 +221,10 @@ rf_fish_site <- rf_fish %>%
   group_by(site) %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
+```
 
+
+```{r}
 # graph
 ggplot(rf_fish_site, aes(x = site, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.8) +
@@ -97,6 +239,9 @@ kable(rf_fish_site %>% select(site, bm_mean, bm_se))
 ```
 
 ### Biomass by site and family
+* Need to reorder to put "other" last
+* Are these good for families to feature?
+* Should I switch to common family names, or both?
 ```{r}
 rf_fish_fam_site <- rf_fish %>% 
   expand(nesting(site, transect), family_c) %>%
@@ -108,21 +253,26 @@ rf_fish_fam_site <- rf_fish %>%
   group_by(site, family_c) %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
+```
 
+
+```{r, fig.height = 10, fig.width = 4}
 # graph
 ggplot(rf_fish_fam_site, aes(x = family_c, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
-  facet_wrap(. ~ site, ncol = 2) +
+  facet_wrap(. ~ site, ncol = 1) +
   labs(x = "Site", y = expression(Biomass~(kg~ha^-1))) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, h = 1))
+  theme(axis.text.x = element_text(angle = 90, h = 1))
 
 kable(rf_fish_fam_site %>% select(site, family = family_c, bm_mean, bm_se))
 ```
 
-### Herbivore biomass
+### Herbivore biomasses
+
+#### Scarid biomass by site
 *  - Eastern Caribbean average parrotfish biomass for NTRs from Steneck et al. 2018 was ~ 1550 g/100m2, or 155 kg/ha. Note that this is potentially misleading because I'm sure a lot of these NTRs do experience some fishing. But mean fished parrotfish biomasses for the same region was ~ 750 g/100m2
 ```{r}
 ggplot(rf_fish_fam_site %>%
@@ -132,10 +282,13 @@ ggplot(rf_fish_fam_site %>%
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   geom_hline(yintercept = 155, linetype = "dashed", color = "black") +
-  annotate("text", x = 5.5, y = 165, size = 3, hjust = 1, label=c('Eastern Caribbean mean unfished biomass')) +
+  annotate("text", x = 4.9, y = 165, size = 3, hjust = 1, label=c('Eastern Caribbean mean unfished biomass')) +
   labs(x = "", y = expression(Parrotfish~biomass~(kg~ha^-1))) +
   theme_bw()
+```
 
+#### Acanthurid biomass by site
+```{r}
 ggplot(rf_fish_fam_site %>%
         filter(family_c == "Acanthuridae"),
        aes(x = site, y = bm_mean)) +
@@ -146,10 +299,11 @@ ggplot(rf_fish_fam_site %>%
   theme_bw()
 ```
 
-### Fish size distributions
+### Fish lengths
+* These were calculated by taking the mean density of fish of each size at each size (averaged across transects). Because we have distribution data within each transect, we can't make density plots/violin plots straight from the raw data (i.e., some sites could have more transects)
+* Open to any suggestions about how we want to communicate size data!
 
-All fish across sites
-
+#### Length distributions of all fish by site
 ```{r}
 rf_fish_length <- rf_fish %>%
   expand(nesting(site, transect), length) %>%
@@ -170,7 +324,7 @@ ggplot(rf_fish_length, aes(x = length, y = density_mean)) +
   theme_bw()
 ```
 
-Scarids only
+#### Length distributions of scarids at each site
 
 ```{r}
 rf_fish_length_scarids <- rf_fish %>%

@@ -16,11 +16,10 @@ library(janitor)
 library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
 library(knitr) # for including tables
 
-
 knitr::opts_chunk$set(message = FALSE, warning = FALSE) # sets default for each chunk
 ```
 
-## Seagrass
+## Quadrants
 
 ```{r}
 # Import and clean data
@@ -66,8 +65,11 @@ test1 <- sg_cat %>%
 test2 <- sg_pc_cat_site %>%
   group_by(site) %>%
   summarize(total = sum(pc_mean))
+```
 
-# graphs
+
+#### Mean percent cover by category across all sites surveyed
+```{r}
 cat_palette <- c("olivedrab", "wheat", "palevioletred4", "darkseagreen4", "slategray3", "coral2")
 
 ggplot(sg_pc_cat, 
@@ -77,7 +79,7 @@ ggplot(sg_pc_cat,
                  position = position_dodge(.9)) +
   scale_fill_manual(values = cat_palette) +
   coord_flip() +
-  labs(y = "Mean percent cover", x = "Category", fill = "") +
+  labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
@@ -85,6 +87,7 @@ kable(sg_pc_cat %>% select(category, pc_mean, pc_se))
 ```
 
 
+#### Mean percent cover at each site
 ```{r, eval = F}
 ggplot(sg_pc_cat_site,
        aes(x = category, y = pc_mean, fill = category)) +
@@ -97,7 +100,6 @@ ggplot(sg_pc_cat_site,
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
 ```
-
 
 ```{r}
 ggplot(sg_pc_cat_site, 
@@ -116,7 +118,7 @@ kable(sg_pc_cat_site %>% select(site, category, pc_mean, pc_se))
 
 ### Percent cover by species
 * Only hard corals and seagrasses were identified to the species level
-* Algae was identified to genus level (would love to figure out how to make "spp." not italicized, or could convert all to genus!)
+* Algae was identified to genus level (would love to figure out how to make "spp." not italicized - on deck!)
 
 ```{r}
 # expanding dataset by species
@@ -150,13 +152,10 @@ test3 <- sg_spp %>%
   summarize(pc_t = mean(percent)) %>%
   filter(site == "Davis Bay" & species == "Penicillus spp.")
 test4 <- sg_pc_spp_site %>% filter(site == "Davis Bay" & species == "Penicillus spp.")
-
-
 ```
 
-#### Seagrasses - percent cover by species
+#### Seagrasses - percent cover by species across sites
 ```{r}
-# graphs
 ggplot(sg_pc_spp %>%
          filter(category == "Seagrass") %>%
          mutate(Status = if_else(species == "Halophila stipulacea", "Invasive", "Native")), 
@@ -166,12 +165,15 @@ ggplot(sg_pc_spp %>%
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   coord_flip() +
-  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
 kable(sg_pc_spp %>% filter(category == "Seagrass") %>% select(species, pc_mean, pc_se))
+```
 
+#### Seagrasses - percent cover by species at each site
+```{r}
 ggplot(sg_pc_spp_site %>% 
          filter(category == "Seagrass") %>%
          mutate(Status = if_else(species == "Halophila stipulacea", "Invasive", "Native")), 
@@ -181,14 +183,15 @@ ggplot(sg_pc_spp_site %>%
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(vars(site), nrow = 2) +
-  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
 
 kable(sg_pc_spp_site %>% filter(category == "Seagrass") %>% select(site, species, pc_mean, pc_se))
 ```
 
-#### Algae - percent cover by species/genus
+
+#### Algae - percent cover by genus across sites
 ```{r}
 # graphs
 ggplot(sg_pc_spp %>% 
@@ -198,12 +201,16 @@ ggplot(sg_pc_spp %>%
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   coord_flip() +
-  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
 kable(sg_pc_spp %>% filter(category == "Algae") %>% select(species, pc_mean, pc_se))
+```
 
+
+#### Algae - percent cover by genus at each site
+```{r}
 ggplot(sg_pc_spp_site %>% 
          filter(category == "Algae"), 
        aes(x = species, y = pc_mean)) +
@@ -211,14 +218,15 @@ ggplot(sg_pc_spp_site %>%
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(vars(site), nrow = 2) +
-  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
 
 kable(sg_pc_spp_site %>% filter(category == "Algae") %>% select(site, species, pc_mean, pc_se))
 ```
 
-#### Stony coral - percent cover by species
+
+#### Stony coral - percent cover by species across sites
 ```{r}
 # graphs
 
@@ -229,12 +237,15 @@ ggplot(sg_pc_spp %>%
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   coord_flip() +
-  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
 kable(sg_pc_spp %>% filter(category == "Stony coral") %>% select(species, pc_mean, pc_se))
+```
 
+#### Stony coral - percent cover by species at each site
+```{r}
 ggplot(sg_pc_spp_site %>% 
          filter(category == "Stony coral"), 
        aes(x = species, y = pc_mean)) +
@@ -242,9 +253,81 @@ ggplot(sg_pc_spp_site %>%
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(vars(site), nrow = 2) +
-  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
 
 kable(sg_pc_spp_site %>% filter(category == "Stony coral") %>% select(site, species, pc_mean, pc_se))
+```
+
+## Invertebrates
+
+```{r}
+# import and clean data
+sg_inverts <- read_excel(here("jumby_baseline", "data", "jbb_seagrass.xlsx"), sheet = "inverts") %>%  
+   clean_names()
+```
+
+#### Conch density by phase and site
+```{r}
+# expand data frame to include sites/transects where no conch were present
+sg_conch <- sg_quads %>% # need to use the quads data to expand, because not all sites/transects are in invert data
+  expand(nesting(site, transect)) %>%
+  left_join(sg_inverts %>%
+              select(site, transect, phase)) %>%
+  expand(nesting(site, transect), phase) %>% # incorporating phase combinations
+  filter(!is.na(phase)) %>%
+  left_join(sg_inverts %>%
+              filter(organism == "queen conch") %>%
+              select(site, transect, phase, count)) %>%
+  mutate(count = if_else(is.na(count), 0, count))
+
+# calculate densities
+sg_conch_dens <- sg_conch %>%
+  group_by(site, transect, phase) %>%
+  summarize(dens_t = sum(count)/20) %>% # indv/m2 (10m * 2m transects) 
+  group_by(site, phase) %>%
+  summarize(dens_mean = mean(dens_t),
+            dens_se = sd(dens_t)/sqrt(n()))
+
+# graph
+ggplot(sg_conch_dens, aes(x = phase, y = dens_mean)) +
+  geom_col(fill = "pink", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_wrap(. ~ site) +
+  labs(y = "Queen conch density (indv./m2)", x = "Phase") +
+  theme_bw()
+
+kable(sg_conch_dens %>% select(phase, dens_mean, dens_se))
+```
+
+
+#### Cushion star density by site
+```{r}
+# expand data frame to include sites/transects where no conch were present
+sg_cushstar <- sg_quads %>% # need to use the quads data to expand, because not all sites/transects are in invert data
+  expand(nesting(site, transect)) %>%
+  left_join(sg_inverts %>%
+              filter(organism == "cushion star") %>%
+              select(site, transect, count)) %>%
+  mutate(count = if_else(is.na(count), 0, count))
+
+# calculate densities
+sg_cushstar_dens <- sg_cushstar %>%
+  group_by(site, transect) %>%
+  summarize(dens_t = sum(count)/20) %>% # indv/m2 (10m * 2m transects) 
+  group_by(site) %>%
+  summarize(dens_mean = mean(dens_t),
+            dens_se = sd(dens_t)/sqrt(n()))
+
+# graph
+ggplot(sg_cushstar_dens, aes(x = site, y = dens_mean)) +
+  geom_col(fill = "coral", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(y = "Cushion star density (indv./m2)", x = "Phase") +
+  theme_bw()
+
+kable(sg_conch_dens %>% select(phase, dens_mean, dens_se))
 ```

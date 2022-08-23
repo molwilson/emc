@@ -260,7 +260,7 @@ sg_conch <- sg_quads %>% # need to use the quads data to expand, because not all
   expand(nesting(site, transect), phase) %>% # incorporating phase combinations
   filter(!is.na(phase)) %>%
   left_join(sg_inverts %>%
-              filter(species == "Aliger gigas") %>%
+              filter(species == "queen conch") %>%
               select(site, transect, phase, count)) %>%
   mutate(count = if_else(is.na(count), 0, count))
 
@@ -278,7 +278,7 @@ ggplot(sg_conch_dens, aes(x = phase, y = dens_mean)) +
   geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(. ~ site) +
-  labs(y = "Mean density (indv./m2)", x = "Phase") +
+  labs(y = "Queen conch density (indv./m2)", x = "Phase") +
   theme_bw()
 
 kable(sg_conch_dens %>% select(phase, dens_mean, dens_se))
