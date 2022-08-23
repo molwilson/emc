@@ -19,7 +19,7 @@ library(knitr)
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
-Note - we only did one mangrove site so far
+Note - we only did one quantitative mangrove site so far, and only one of the transects had invertebrates (?) so I'm not sure exactly how we want to present this data. Should we try and do one more site if the vis allows?
 
 ## Invertebrates 
 
@@ -33,7 +33,7 @@ mg_invert <- read_excel(here("jumby_baseline", "data", "jbb_mangroves.xlsx"), sh
 ```
 
 ### Density by type
-* Need to consolidate into smaller number of "type" / create "other" category
+
 ```{r}
 # calculate total abundance by transect -> mean density by site
 mg_invert_cat_site <- mg_invert %>%
@@ -48,37 +48,24 @@ mg_invert_cat_site <- mg_invert %>%
             dens_se = sd(abundance/30)/sqrt(n()))
 
 # testing above code
-test1 <- mg_invert %>% filter(site == "Islet" & type == "Sponge")
+test1 <- mg_invert %>% filter(site == "Loblolly Bay" & type == "Sponge")
 test2 <- mg_invert %>%
   expand(nesting(site, transect), type) %>%
   left_join(mg_invert %>%
               select(site, transect, type, number)) %>%
   mutate(number = if_else(is.na(number), 0, number)) %>%
-  filter(site == "Islet" & type == "Sponge")
+  filter(site == "Loblolly Bay" & type == "Sponge")
 test3 <- test2 %>%
   group_by(site, transect, type) %>%
   summarize(abundance = sum(number)) %>%
-  filter(site == "Islet" & type == "Sponge")
+  filter(site == "Loblolly Bay" & type == "Sponge")
 test4 <- test3 %>% group_by(site, type) %>%
   summarize(dens_mean = mean(abundance/30), # density as indv./m2 on 30m^2 transect
             dens_se = sd(abundance/30)/sqrt(n())) %>%
-  filter(site == "Islet" & type == "Sponge")
+  filter(site == "Loblolly Bay" & type == "Sponge")
+```
 
-mg_invert_cat <- mg_invert_cat_site %>%
-  group_by(type) %>%
-  summarize(dens = mean(dens_mean),
-            dens_se = sd(dens_mean)/sqrt(n())) %>%
-  rename(dens_mean = dens)
-  
-ggplot(mg_invert_cat, aes(x = reorder(type, -dens_mean), y = dens_mean)) +
-  geom_col(position = "dodge", fill = "darkgoldenrod1", color = "black", alpha = 0.9) +
-  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
-                 position = position_dodge(.9)) +
-  labs(x = "", y = "Mean density (indv./m2)") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# graph
+```{r}
 ggplot(mg_invert_cat_site %>%
          filter(dens_mean > 0), 
        aes(x = type, y = dens_mean)) +
@@ -86,12 +73,12 @@ ggplot(mg_invert_cat_site %>%
   geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(. ~ site, ncol = 3) +
-  labs(x = "Site", y = "Mean density (indv./m2)") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, h = 1))
+  labs(x = "", y = "Mean density (indv./m2)") +
+  theme_bw()
 
 kable(mg_invert_cat_site %>% select(site, type, dens_mean, dens_se))
 ```
+
 
 ## Fish
 
@@ -126,14 +113,14 @@ ggplot(mg_fish_site, aes(x = site, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
-  labs(x = "Site", y = "Biomass (kg/ha)") +
+  labs(x = "", y = "Biomass (kg/ha)") +
   theme_bw()
 
 kable(mg_fish_site %>% select(site, bm_mean, bm_se))
 ```
 
 
-### Biomass by family
+### Biomass by family and site
 ```{r}
 # calculating total biomass and mean length per family at each transect -> mean at each site
 mg_fish_fam_site <- mg_fish %>% 
@@ -183,21 +170,10 @@ mg_fish_fam <- mg_fish_fam_site %>%
             length_se = sd(length_mean)/sqrt(n())) %>%
   rename(bm_mean = biomass,
          length_mean = length)
+```
 
-# graphs
 
-# use this if summarizing multiple sites
-# ggplot(mg_fish_fam %>% 
-#          filter(bm_mean > 0), 
-#        aes(x = reorder(family_c, -bm_mean), y = bm_mean)) +
-#   geom_col(position = "dodge", fill = "cadetblue3", alpha = 0.9, color = "black") +
-#   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
-#                  position = position_dodge(.9)) +
-#   labs(x = "Family", y = "Biomass (kg/ha)") +
-#   theme_bw()
-# 
-# kable(mg_fish_fam %>% select(family = family_c, bm_mean, bm_se))
-
+```{r}
 ggplot(mg_fish_fam_site %>% 
          filter(bm_mean >0), 
        aes(x = family_c, y = bm_mean)) +
@@ -205,7 +181,7 @@ ggplot(mg_fish_fam_site %>%
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(. ~ site) +
-  labs(x = "Family", y = "Biomass (kg/ha)", fill = "Family") +
+  labs(x = "", y = "Biomass (kg/ha)") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1))
 
@@ -214,6 +190,7 @@ kable(mg_fish_fam_site %>% select(site, family = family_c, bm_mean, bm_se))
 
 ### Fish length
 
+#### Length distributions of all fish
 ```{r}
 mg_fish_length <- mg_fish %>%
   expand(nesting(site, transect), length) %>%
@@ -228,9 +205,31 @@ mg_fish_length <- mg_fish %>%
             density_se = sd(density)/sqrt(n()))
 
 ggplot(mg_fish_length, aes(x = length, y = density_mean)) +
-  geom_col() +
+  geom_col(fill = "deepskyblue4", alpha = 0.9, color = "black") +
   facet_wrap(. ~ site) +
   labs(x = "Fish length (cm)", y = expression(Density~(indv.~m^-2))) +
   theme_bw()
 ```
+
+#### Length distributions by fish class
+```{r, fig.height = 6, fig.width = 3}
+mg_fish_length_fam <- mg_fish %>%
+  expand(nesting(site, transect, family_c), length) %>%
+  left_join(mg_fish %>%
+        group_by(site, transect, family_c, length) %>%
+        summarize(count = n())) %>%
+  mutate(count = as.numeric(count),
+         count = if_else(is.na(count), 0, count),
+         density = count/120) %>% # indv./m2
+  group_by(site, family_c, length) %>%
+  summarize(density_mean = mean(density),
+            density_se = sd(density)/sqrt(n()))
+
+ggplot(mg_fish_length_fam, aes(x = length, y = density_mean)) +
+  geom_col(fill = "deepskyblue4", alpha = 0.9, color = "black") +
+  facet_wrap(. ~ family_c, ncol = 1) +
+  labs(x = "Fish length (cm)", y = expression(Density~(indv.~m^-2))) +
+  theme_bw()
+```
+
 

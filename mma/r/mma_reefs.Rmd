@@ -90,8 +90,10 @@ test1 <- rf_pc_cat_m %>%
 test2 <- rf_pc_cat_site %>%
   group_by(site) %>%
   summarize(total = sum(pc_mean))
+```
 
-# graphs
+
+```{r, eval = F}
 cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
 ggplot(rf_pc_cat_site, 
        aes(x = cat_c, y = pc_mean, fill = cat_c)) +
@@ -103,7 +105,10 @@ ggplot(rf_pc_cat_site,
   labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+```
 
+
+```{r}
 cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
 ggplot(rf_pc_cat_site, 
        aes(x = "cat_c", y = pc_mean, fill = cat_c)) + 
@@ -120,7 +125,7 @@ kable(rf_pc_cat_site %>% select(site, category = cat_c, pc_mean, pc_se))
 ```
 
 
-### Percent cover by site and species
+### Percent cover by species
 
 ```{r}
 # calculating percent cover by species at each meter
@@ -167,8 +172,10 @@ test2 <- rf_pc_spp_site %>%
   group_by(site) %>%
   summarize(total = sum(pc_mean))
 test3 <- sum(rf_pc_spp$pc_mean)
+```
 
-# graphs
+#### Stony coral - percent cover by species across all sites
+```{r}
 ggplot(rf_pc_spp %>%
          filter(cat_c == "Hard corals"),
        aes(x = reorder(species, pc_mean), y = pc_mean)) +

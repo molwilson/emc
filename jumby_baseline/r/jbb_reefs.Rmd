@@ -2,7 +2,8 @@
 title: "JB Baseline - Reefs"
 author: "Molly Wilson"
 date: "8/14/2022"
-output: 
+output:
+  pdf_document: default
   html_document:
     code_folding: hide
 ---
@@ -21,7 +22,7 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
 ## Benthic
-```{r, eval = F}
+```{r}
 # import and clean data
 
 rf_benthic <- read_excel(here("jumby_baseline", "data", "JBB_reefs.xlsx"), sheet = "benthic") %>%  
@@ -29,7 +30,7 @@ rf_benthic <- read_excel(here("jumby_baseline", "data", "JBB_reefs.xlsx"), sheet
   filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
   # separate(species_code, c("species_code", "indicator")) %>% # separating variables with an underscore into two columns
   mutate(species = to_any_case(species, case = "sentence"), # this makes sure species names are correctly capitalized
-         site = to_any_case(site, case = "title"),
+         # site = to_any_case(site, case = "title"),
          # consolidating categories here for graphs:
          cat_c = case_when(category_code %in% c("LC", "SLC") ~ "Hard corals",
                                   category_code %in% c("MA") ~ "Macroalgae",
@@ -108,7 +109,7 @@ ggplot(rf_pc_cat_site,
 ```
 
 
-```{r, eval = F}
+```{r}
 cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
 ggplot(rf_pc_cat_site, 
        aes(x = "cat_c", y = pc_mean, fill = cat_c)) + 
@@ -125,7 +126,7 @@ kable(rf_pc_cat_site %>% select(site, category = cat_c, pc_mean, pc_se))
 ```
 
 
-#### Percent cover by site and species
+### Percent cover by species
 ```{r}
 # calculating percent cover by species at each meter
 rf_pc_spp_m <- rf_benthic %>%
@@ -171,8 +172,10 @@ test2 <- rf_pc_spp_site %>%
   group_by(site) %>%
   summarize(total = sum(pc_mean))
 test3 <- sum(rf_pc_spp$pc_mean)
+```
 
-# graphs
+#### Stony coral - percent cover by species across all sites
+```{r}
 ggplot(rf_pc_spp %>%
          filter(cat_c == "Hard corals"),
        aes(x = reorder(species, pc_mean), y = pc_mean)) +
@@ -186,9 +189,31 @@ ggplot(rf_pc_spp %>%
 
 kable(rf_pc_spp %>% filter(cat_c == "Hard corals") %>% select(species, pc_mean, pc_se))
 ```
+
+### Macroalgal canopy heights
+* No macroalgae present at Pierce Shoals W
+* Macroalgae only present on one transect at Pasture Point, hence no standard error can be calculated
+```{r}
+ma_height <- rf_benthic %>%
+  filter(category_code == "MA") %>%
+  group_by(site, transect) %>%
+  summarize(height = mean(height)) %>%
+  filter(!is.na(height)) %>%
+  group_by(site) %>%
+  summarize(height_mean = mean(height),
+            height_se = sd(height)/sqrt(n()))
+
+ggplot(ma_height, aes(x = site, y = height_mean)) +
+  geom_col(fill = "darkolivegreen", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = height_mean - height_se, ymax = height_mean + height_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = "Macroalgal canopy height (cm)") +
+  theme_bw()
+```
+
 ### Need to add:
-#### MA canopy height
-#### Recruits/urchins
+* recruits
+* urchins
 
 ## Fish
 
@@ -256,16 +281,16 @@ rf_fish_fam_site <- rf_fish %>%
 ```
 
 
-```{r, fig.height = 10, fig.width = 4}
+```{r, fig.height = 7, fig.width = 4}
 # graph
 ggplot(rf_fish_fam_site, aes(x = family_c, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(. ~ site, ncol = 1) +
-  labs(x = "Site", y = expression(Biomass~(kg~ha^-1))) +
+  labs(x = "", y = expression(Biomass~(kg~ha^-1))) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, h = 1))
+  theme(axis.text.x = element_text(angle = 45, h = 1))
 
 kable(rf_fish_fam_site %>% select(site, family = family_c, bm_mean, bm_se))
 ```
@@ -318,7 +343,7 @@ rf_fish_length <- rf_fish %>%
             density_se = sd(density)/sqrt(n()))
 
 ggplot(rf_fish_length, aes(x = length, y = density_mean)) +
-  geom_col() +
+  geom_col(fill = "deepskyblue4", alpha = 0.9, color = "black") +
   facet_wrap(. ~ site) +
   labs(x = "Fish length (cm)", y = expression(Density~(indv.~m^-2))) +
   theme_bw()
@@ -341,9 +366,9 @@ rf_fish_length_scarids <- rf_fish %>%
             density_se = sd(density)/sqrt(n()))
 
 ggplot(rf_fish_length_scarids, aes(x = length, y = density_mean)) +
-  geom_col() +
+  geom_col(fill = "deepskyblue4", alpha = 0.9, color = "black") +
   facet_wrap(. ~ site) +
-  labs(x = "Fish length (cm)", y = expression(Density~(indv.~m^-2))) +
+  labs(x = "Fish length (cm)", y = expression(Scarid~density~(indv.~m^-2))) +
   theme_bw()
 ```
 
