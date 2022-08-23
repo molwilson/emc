@@ -1,5 +1,5 @@
 ---
-title: "JB Baseline - Seagrass"
+title: "JB Seagrass"
 author: "Molly Wilson"
 date: "8/15/2022"
 output: 
@@ -16,6 +16,7 @@ library(janitor)
 library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
 library(knitr) # for including tables
 
+
 knitr::opts_chunk$set(message = FALSE, warning = FALSE) # sets default for each chunk
 ```
 
@@ -24,8 +25,9 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE) # sets default for each 
 ```{r}
 # Import and clean data
 
-sg_quads <- read_excel(here("jumby_baseline", "data", "jb_seagrass.xlsx"), sheet = "quadrants") %>%  
+sg_quads <- read_excel(here("jumby_baseline", "data", "jbb_seagrass.xlsx"), sheet = "quadrants") %>%  
   clean_names()
+  
 ```
 
 ### Percent cover by category
@@ -66,7 +68,7 @@ test2 <- sg_pc_cat_site %>%
   summarize(total = sum(pc_mean))
 
 # graphs
-cat_palette <- c("olivedrab", "wheat", "palevioletred4", "tan3", "darkseagreen4", "slategray3", "coral2")
+cat_palette <- c("olivedrab", "wheat", "palevioletred4", "darkseagreen4", "slategray3", "coral2")
 
 ggplot(sg_pc_cat, 
        aes(x = reorder(category, pc_mean), y = pc_mean, fill = category)) +
@@ -80,18 +82,24 @@ ggplot(sg_pc_cat,
   theme(axis.text.y = element_text(face = "italic"))
 
 kable(sg_pc_cat %>% select(category, pc_mean, pc_se))
+```
 
+
+```{r, eval = F}
 ggplot(sg_pc_cat_site,
        aes(x = category, y = pc_mean, fill = category)) +
   geom_col(color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
     scale_fill_manual(values = cat_palette) +
-  facet_wrap(. ~ site) +
+  facet_wrap(vars(site), nrow = 2) +
   labs(y = "Mean percent cover", x = "Category", fill = "") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+```
 
+
+```{r}
 ggplot(sg_pc_cat_site, 
        aes(x = "category", y = pc_mean, fill = category)) + 
   geom_bar(width = 1, stat = "identity", color = "black") +
@@ -104,4 +112,139 @@ ggplot(sg_pc_cat_site,
         panel.spacing = unit(1, "lines"))
 
 kable(sg_pc_cat_site %>% select(site, category, pc_mean, pc_se))
+```
+
+### Percent cover by species
+* Only hard corals and seagrasses were identified to the species level
+* Algae was identified to genus level (would love to figure out how to make "spp." not italicized, or could convert all to genus!)
+
+```{r}
+# expanding dataset by species
+sg_spp <- sg_quads %>%
+  expand(nesting(site, transect, quadrant), species) %>% ## try adding nesting(species, category)
+  left_join(sg_quads %>% select(site, transect, quadrant, species, percent)) %>%
+  left_join(sg_quads %>% select (species, category)) %>% # not sure why this wasn't working in the same line
+  mutate(percent = if_else(is.na(percent), 0, percent)) %>% # can't get replace_na to work so using this instead
+  distinct()
+
+# calculating percent cover by transect -> site
+sg_pc_spp_site <- sg_spp %>%
+  group_by(site, transect, species, category) %>%
+  summarize(pc_t = mean(percent)) %>%
+  group_by(site, species, category) %>%
+  summarize(pc_mean = mean(pc_t),
+            pc_se = sd(pc_t)/sqrt(n()))
+
+# calculating percent cover across all sites
+sg_pc_spp <- sg_pc_spp_site %>%
+  group_by(species, category) %>%
+  summarize(pc_mean_sum = mean(pc_mean),
+            pc_se = sd(pc_mean)/sqrt(n())) %>%
+  rename(pc_mean = pc_mean_sum)
+
+# testing accuracy of site-level calculations
+test1 <- sg_quads %>% filter(site == "Davis Bay"  & species == "Penicillus spp.")
+test2 <- sg_spp %>% filter(site == "Davis Bay" & species == "Penicillus spp.")
+test3 <- sg_spp %>%
+  group_by(site, transect, species, category) %>%
+  summarize(pc_t = mean(percent)) %>%
+  filter(site == "Davis Bay" & species == "Penicillus spp.")
+test4 <- sg_pc_spp_site %>% filter(site == "Davis Bay" & species == "Penicillus spp.")
+
+
+```
+
+#### Seagrasses - percent cover by species
+```{r}
+# graphs
+ggplot(sg_pc_spp %>%
+         filter(category == "Seagrass") %>%
+         mutate(Status = if_else(species == "Halophila stipulacea", "Invasive", "Native")), 
+       aes(x = reorder(species, pc_mean), y = pc_mean)) +
+  geom_col(fill = "darkseagreen4", alpha = 0.9, aes(color = Status)) +
+  scale_color_manual(values = c("red", "black")) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  coord_flip() +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+
+kable(sg_pc_spp %>% filter(category == "Seagrass") %>% select(species, pc_mean, pc_se))
+
+ggplot(sg_pc_spp_site %>% 
+         filter(category == "Seagrass") %>%
+         mutate(Status = if_else(species == "Halophila stipulacea", "Invasive", "Native")), 
+       aes(x = species, y = pc_mean)) +
+  geom_col(fill = "darkseagreen4", alpha = 0.9, aes(color = Status)) +
+  scale_color_manual(values = c("red", "black")) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_wrap(vars(site), nrow = 2) +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+
+kable(sg_pc_spp_site %>% filter(category == "Seagrass") %>% select(site, species, pc_mean, pc_se))
+```
+
+#### Algae - percent cover by species/genus
+```{r}
+# graphs
+ggplot(sg_pc_spp %>% 
+         filter(category == "Algae"), 
+       aes(x = reorder(species, pc_mean), y = pc_mean)) +
+  geom_col(fill = "olivedrab", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  coord_flip() +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+
+kable(sg_pc_spp %>% filter(category == "Algae") %>% select(species, pc_mean, pc_se))
+
+ggplot(sg_pc_spp_site %>% 
+         filter(category == "Algae"), 
+       aes(x = species, y = pc_mean)) +
+  geom_col(fill = "olivedrab", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_wrap(vars(site), nrow = 2) +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+
+kable(sg_pc_spp_site %>% filter(category == "Algae") %>% select(site, species, pc_mean, pc_se))
+```
+
+#### Stony coral - percent cover by species
+```{r}
+# graphs
+
+ggplot(sg_pc_spp %>% 
+         filter(category == "Stony coral"), 
+       aes(x = reorder(species, pc_mean), y = pc_mean)) +
+  geom_col(fill = "coral2", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  coord_flip() +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "italic"))
+
+kable(sg_pc_spp %>% filter(category == "Stony coral") %>% select(species, pc_mean, pc_se))
+
+ggplot(sg_pc_spp_site %>% 
+         filter(category == "Stony coral"), 
+       aes(x = species, y = pc_mean)) +
+  geom_col(fill = "coral2", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_wrap(vars(site), nrow = 2) +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+
+kable(sg_pc_spp_site %>% filter(category == "Stony coral") %>% select(site, species, pc_mean, pc_se))
 ```
