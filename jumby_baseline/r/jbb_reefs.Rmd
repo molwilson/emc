@@ -25,7 +25,7 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```{r, eval = F}
 # import and clean data
 
-rf_benthic <- read_excel(here("jumby_baseline", "data", "JB_reefs.xlsx"), sheet = "benthic") %>%  
+rf_benthic <- read_excel(here("jumby_baseline", "data", "JBB_reefs.xlsx"), sheet = "benthic") %>%  
   clean_names() %>%
   filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
   # separate(species_code, c("species_code", "indicator")) %>% # separating variables with an underscore into two columns
@@ -58,7 +58,7 @@ rf_benthic <- read_excel(here("jumby_baseline", "data", "JB_reefs.xlsx"), sheet 
 ```{r}
 # import and clean data
 
-rf_fish <- read_excel(here("jumby_baseline", "data", "JB_reefs.xlsx"), sheet = "fish") %>%  
+rf_fish <- read_excel(here("jumby_baseline", "data", "JBB_reefs.xlsx"), sheet = "fish") %>%  
   clean_names() %>%
   filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
   mutate(number = if_else(is.na(number), 1, number)) %>% # all entries with no number specified were single observations
@@ -115,7 +115,7 @@ ggplot(rf_fish_fam_site, aes(x = family_c, y = bm_mean)) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(. ~ site, ncol = 2) +
-  labs(x = "Site", y = "Biomass (kg/ha)") +
+  labs(x = "Site", y = expression(Biomass~(kg~ha^-1))) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1))
 
@@ -145,3 +145,51 @@ ggplot(rf_fish_fam_site %>%
   labs(x = "", y = expression(Surgeonfish~biomass~(kg~ha^-1))) +
   theme_bw()
 ```
+
+### Fish size distributions
+
+All fish across sites
+
+```{r}
+rf_fish_length <- rf_fish %>%
+  expand(nesting(site, transect), length) %>%
+  left_join(rf_fish %>%
+        group_by(site, transect, length) %>%
+        summarize(count = n())) %>%
+  mutate(count = as.numeric(count),
+         count = if_else(is.na(count), 0, count),
+         density = count/120) %>% # indv./m2
+  group_by(site, length) %>%
+  summarize(density_mean = mean(density),
+            density_se = sd(density)/sqrt(n()))
+
+ggplot(rf_fish_length, aes(x = length, y = density_mean)) +
+  geom_col() +
+  facet_wrap(. ~ site) +
+  labs(x = "Fish length (cm)", y = expression(Density~(indv.~m^-2))) +
+  theme_bw()
+```
+
+Scarids only
+
+```{r}
+rf_fish_length_scarids <- rf_fish %>%
+  expand(nesting(site, transect), length) %>%
+  left_join(rf_fish %>%
+        filter(family == "Scaridae") %>%
+        group_by(site, transect, length) %>%
+        summarize(count = n())) %>%
+  mutate(count = as.numeric(count),
+         count = if_else(is.na(count), 0, count),
+         density = count/120) %>% # invd/m2
+  group_by(site, length) %>%
+  summarize(density_mean = mean(density),
+            density_se = sd(density)/sqrt(n()))
+
+ggplot(rf_fish_length_scarids, aes(x = length, y = density_mean)) +
+  geom_col() +
+  facet_wrap(. ~ site) +
+  labs(x = "Fish length (cm)", y = expression(Density~(indv.~m^-2))) +
+  theme_bw()
+```
+

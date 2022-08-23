@@ -1,5 +1,5 @@
 ---
-title: "JB Baseline - Mangroves"
+title: "JB Mangroves"
 author: "Molly Wilson"
 date: "8/16/2022"
 output: 
@@ -25,7 +25,7 @@ Note - we only did one mangrove site so far
 
 ```{r}
 # import and clean data
-mg_invert <- read_excel(here("jumby_baseline", "data", "jb_mangroves.xlsx"), sheet = "inverts") %>%  
+mg_invert <- read_excel(here("jumby_baseline", "data", "jbb_mangroves.xlsx"), sheet = "inverts") %>%  
   clean_names() %>%
   unite(site_tran, site, transect, sep = "_", remove = FALSE) %>%
   mutate(type = str_to_title(type)) %>% # would prefer first cap, rest lower - maybe fix in data?
@@ -92,3 +92,145 @@ ggplot(mg_invert_cat_site %>%
 
 kable(mg_invert_cat_site %>% select(site, type, dens_mean, dens_se))
 ```
+
+## Fish
+
+```{r}
+# import and clean data
+
+mg_fish <- read_excel(here("jumby_baseline", "data", "JBB_mangroves.xlsx"), sheet = "fish") %>%  
+  clean_names() %>%
+  filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
+  mutate(number = if_else(is.na(number), 1, number)) %>% # all entries with no number specified were single observations
+  uncount(number) %>% # expand to replicate rows if multiple fish were recorded to look at length distributions
+  mutate(biomass = as.numeric(biomass),
+         phase_code = tolower(phase),
+         phase = case_when(phase == "j" ~ "Juvenile",
+                           phase == "i" ~ "Initial",
+                           phase == "t" ~ "Terminal"),
+         family_c = if_else(family %in% c("Atherinidae", "Clupeidae", "Scaridae", "Haemulidae", "Lutjanidae", "Sphyraenidae"), family, "Other")) # consolidating the number of families
+```
+
+### Total biomass by site
+```{r}
+# calculating total biomass in each transect (sum) -> mean at each site
+mg_fish_site <- mg_fish %>% 
+  group_by(site, transect) %>%
+  summarize(bm_tot = sum(biomass)/1000/30*10000) %>% # kg/ha, 30m^2 transects
+  group_by(site) %>%
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()))
+
+# graph
+ggplot(mg_fish_site, aes(x = site, y = bm_mean)) +
+  geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "Site", y = "Biomass (kg/ha)") +
+  theme_bw()
+
+kable(mg_fish_site %>% select(site, bm_mean, bm_se))
+```
+
+
+### Biomass by family
+```{r}
+# calculating total biomass and mean length per family at each transect -> mean at each site
+mg_fish_fam_site <- mg_fish %>% 
+  expand(nesting(site, transect), family_c) %>%
+  left_join(mg_fish %>%
+      select(site, transect, family_c, length, biomass)) %>% # can't use distinct() here because count >1 will replicate on multiple lines, so will check below to make sure rows haven't been duplicated with the left_join()
+  mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>% # transects with none of a given family have 0 biomass, but length would still be NA
+  group_by(site, transect, family_c) %>%
+  summarize(bm_tot = sum(biomass)/1000/30*10000, # kg/ha
+            length = mean(length)) %>%
+  group_by(site, family_c) %>%
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()),
+            length_mean = mean(length, na.rm = TRUE), # ignore NAs from transects with no fish in a family
+            length_se = sd(length, na.rm = TRUE)/sqrt(sum(!is.na(.))))
+
+# testing above code, checking for erroneous duplicates, etc.
+test1 <- mg_fish %>% filter(site == "Loblolly Bay" & family_c == "Lutjanidae")
+test2 <- mg_fish %>% 
+  expand(nesting(site, transect), family_c) %>%
+  left_join(mg_fish %>%
+      select(site, transect, family_c, length, biomass)) %>%
+  filter(site == "Loblolly Bay" & family_c == "Lutjanidae")
+test3 <- mg_fish %>% 
+  expand(nesting(site, transect), family_c) %>%
+  left_join(mg_fish %>%
+      select(site, transect, family_c, length, biomass)) %>% 
+  mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>%
+  group_by(site, transect, family_c) %>%
+  summarize(bm_tot = sum(biomass), # don't change units for this test
+            length = mean(length)) %>%
+  filter(site == "Loblolly Bay" & family_c == "Lutjanidae")
+test4 <- test3 %>% 
+  group_by(site, family_c) %>%
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()),
+            length_mean = mean(length, na.rm = TRUE),
+            length_se = sd(length, na.rm = TRUE)/sqrt(sum(!is.na(.)))) %>% 
+  filter(site == "Loblolly Bay"  & family_c == "Sphyraenidae")
+
+# calculating mean biomass and fish length across all sites
+mg_fish_fam <- mg_fish_fam_site %>%
+  group_by(family_c) %>%
+  summarize(biomass = mean(bm_mean),
+            bm_se = sd(bm_mean)/sqrt(n()),
+            length = mean(length_mean),
+            length_se = sd(length_mean)/sqrt(n())) %>%
+  rename(bm_mean = biomass,
+         length_mean = length)
+
+# graphs
+
+# use this if summarizing multiple sites
+# ggplot(mg_fish_fam %>% 
+#          filter(bm_mean > 0), 
+#        aes(x = reorder(family_c, -bm_mean), y = bm_mean)) +
+#   geom_col(position = "dodge", fill = "cadetblue3", alpha = 0.9, color = "black") +
+#   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+#                  position = position_dodge(.9)) +
+#   labs(x = "Family", y = "Biomass (kg/ha)") +
+#   theme_bw()
+# 
+# kable(mg_fish_fam %>% select(family = family_c, bm_mean, bm_se))
+
+ggplot(mg_fish_fam_site %>% 
+         filter(bm_mean >0), 
+       aes(x = family_c, y = bm_mean)) +
+  geom_col(position = "dodge", fill = "cadetblue3", alpha = 0.9, color = "black") +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_wrap(. ~ site) +
+  labs(x = "Family", y = "Biomass (kg/ha)", fill = "Family") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1))
+
+kable(mg_fish_fam_site %>% select(site, family = family_c, bm_mean, bm_se))
+```
+
+### Fish length
+
+```{r}
+mg_fish_length <- mg_fish %>%
+  expand(nesting(site, transect), length) %>%
+  left_join(mg_fish %>%
+        group_by(site, transect, length) %>%
+        summarize(count = n())) %>%
+  mutate(count = as.numeric(count),
+         count = if_else(is.na(count), 0, count),
+         density = count/120) %>% # indv./m2
+  group_by(site, length) %>%
+  summarize(density_mean = mean(density),
+            density_se = sd(density)/sqrt(n()))
+
+ggplot(mg_fish_length, aes(x = length, y = density_mean)) +
+  geom_col() +
+  facet_wrap(. ~ site) +
+  labs(x = "Fish length (cm)", y = expression(Density~(indv.~m^-2))) +
+  theme_bw()
+```
+

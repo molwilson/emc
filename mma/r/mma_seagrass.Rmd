@@ -67,7 +67,7 @@ test2 <- sg_pc_cat_site %>%
   summarize(total = sum(pc_mean))
 
 # graphs
-cat_palette <- c("olivedrab", "wheat", "palevioletred4", "tan3", "darkseagreen4", "slategray3", "coral2")
+cat_palette <- c("olivedrab", "wheat", "palevioletred4", "darkseagreen4", "slategray3", "coral2")
 
 ggplot(sg_pc_cat, 
        aes(x = reorder(category, pc_mean), y = pc_mean, fill = category)) +
@@ -151,9 +151,11 @@ test4 <- sg_pc_spp_site %>% filter(site == "Garden of Eden" & species == "Penici
 ```{r}
 # graphs
 ggplot(sg_pc_spp %>% 
-         filter(category == "Seagrass"), 
+         filter(category == "Seagrass")%>%
+         mutate(Status = if_else(species == "Halophila stipulacea", "Invasive", "Native")), 
        aes(x = reorder(species, pc_mean), y = pc_mean)) +
-  geom_col(fill = "darkseagreen4", color = "black", alpha = 0.9) +
+  geom_col(fill = "darkseagreen4", alpha = 0.9, aes(color = Status)) +
+  scale_color_manual(values = c("red", "black")) +
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   coord_flip() +
@@ -164,9 +166,11 @@ ggplot(sg_pc_spp %>%
 kable(sg_pc_spp %>% filter(category == "Seagrass") %>% select(species, pc_mean, pc_se))
 
 ggplot(sg_pc_spp_site %>% 
-         filter(category == "Seagrass"), 
+         filter(category == "Seagrass") %>%
+         mutate(Status = if_else(species == "Halophila stipulacea", "Invasive", "Native")), 
        aes(x = species, y = pc_mean)) +
-  geom_col(fill = "darkseagreen4", color = "black", alpha = 0.9) +
+  geom_col(fill = "darkseagreen4", alpha = 0.9, aes(color = Status)) +
+  scale_color_manual(values = c("red", "black")) +
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(. ~ site) +
