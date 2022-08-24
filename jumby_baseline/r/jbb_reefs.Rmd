@@ -3,7 +3,6 @@ title: "JB Baseline - Reefs"
 author: "Molly Wilson"
 date: "8/14/2022"
 output:
-  pdf_document: default
   html_document:
     code_folding: hide
 ---
@@ -211,9 +210,85 @@ ggplot(ma_height, aes(x = site, y = height_mean)) +
   theme_bw()
 ```
 
-### Need to add:
-* recruits
-* urchins
+### Coral recruits
+
+```{r}
+rf_recruits <- read_excel(here("jumby_baseline", "data", "JBB_reefs.xlsx"), sheet = "recruits") %>%  
+  clean_names() %>%
+  pivot_longer(cols = starts_with("count"),
+               names_to = "size",
+               names_pattern = "count_(.*)",
+               values_to = "count") %>%
+  mutate(size = if_else(size == "0_2cm", "<2 cm", "2-4 cm")) %>%
+  select(site, transect, meter, size, code, species, count)
+```
+
+#### Density of coral recruits (all species) by site
+* Need to check size of quadrats
+```{r}
+rf_recruits_tot <- rf_recruits %>%
+  group_by(site, transect, size, meter) %>%
+  summarize(count = sum(count)) %>%
+  group_by(site, transect, size) %>%
+  summarize(density = mean(count)) %>% # need to check actual size of quadrat 
+  group_by(site, size) %>%
+  summarize(density_mean = mean(density),
+            density_se = sd(density)/sqrt(n())) # se = mean here, which I assume just means there is a lot of variation/not many samples
+
+ggplot(rf_recruits_tot, aes(x = site, y = density_mean)) +
+  geom_col(fill = "coral2", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Larval~recruit~density~(recruits~m^-2))) +
+  facet_wrap(. ~ size) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1))
+
+kable(rf_recruits_tot)
+```
+
+#### Proportion of coral recruits by species
+```{r}
+rf_recruits_spp <- rf_recruits %>%
+  filter(count > 0) %>%
+  uncount(count) %>%
+  group_by(size, species) %>%
+  summarize(n = n()) %>%
+  mutate(freq = n / sum(n))
+
+ggplot(rf_recruits_spp, aes(x = species, y = freq)) +
+  geom_col(fill = "coral2", color = "black", alpha = 0.9) +
+  facet_wrap(. ~ size) +
+  labs(x = "", y = "Fraction of recruits") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+```
+
+### Diadema
+
+#### Density of *Diadema* by site and phase
+* Need to convert to density when I check belt width with GRB
+```{r}
+diadema <- rf_recruits <- read_excel(here("jumby_baseline", "data", "JBB_reefs.xlsx"), sheet = "inverts") %>%  
+  clean_names() %>%
+  select(site, transect, diadema_adult, diadema_juvenile) %>%
+  pivot_longer(cols = starts_with("diadema"),
+               names_to = "phase",
+               names_pattern = "diadema_(.*)",
+               values_to = "count") %>%
+  group_by(site, phase) %>%
+  summarize(density_mean = mean(count/20),
+            density_se = sd(count/20)/sqrt(n())) # 2x10m belt?
+
+ggplot(diadema, aes(x = phase, y = density_mean)) +
+  geom_col(fill = "black", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_wrap(. ~ site) +
+  labs(x = "", y = expression(Density~(indv.~m^-2))) +
+  theme_bw()
+```
+
 
 ## Fish
 

@@ -19,12 +19,12 @@ library(knitr) # for including tables
 knitr::opts_chunk$set(message = FALSE, warning = FALSE) # sets default for each chunk
 ```
 
-## Quadrants
+## Quadrats
 
 ```{r}
 # Import and clean data
 
-sg_quads <- read_excel(here("jumby_baseline", "data", "jbb_seagrass.xlsx"), sheet = "quadrants") %>%  
+sg_quads <- read_excel(here("jumby_baseline", "data", "jbb_seagrass.xlsx"), sheet = "quadrats") %>%  
   clean_names()
   
 ```
@@ -33,11 +33,11 @@ sg_quads <- read_excel(here("jumby_baseline", "data", "jbb_seagrass.xlsx"), shee
 ```{r}
 # expanding dataset by category
 sg_cat <- sg_quads %>%
-  expand(nesting(site, transect, quadrant), category) %>%
+  expand(nesting(site, transect, quadrat), category) %>%
   left_join(sg_quads %>%
-              select(site, transect, quadrant, category, percent, surveyor)) %>%
+              select(site, transect, quadrat, category, percent, surveyor)) %>%
   mutate(percent = if_else(is.na(percent), 0, percent)) %>%
-  group_by(site, transect, quadrant, category) %>%
+  group_by(site, transect, quadrat, category) %>%
   summarize(pc = sum(percent))
 
 sg_pc_cat_site <- sg_cat %>%
@@ -54,13 +54,13 @@ sg_pc_cat <- sg_pc_cat_site %>%
             pc_se = sd(pc_mean)/sqrt(n())) %>%
   rename(pc_mean = pc_mean_sum)
 
-# test percent cover adds up to 100 per quadrant, transect, and site
+# test percent cover adds up to 100 per quadrat, transect, and site
 test1 <- sg_cat %>%
-  group_by(site, transect, quadrant) %>%
+  group_by(site, transect, quadrat) %>%
   summarize(total = sum(pc)) %>%
   filter(total != 100) %>%
   left_join(sg_quads %>%
-              select(surveyor, site, transect, quadrant)) %>%
+              select(surveyor, site, transect, quadrat)) %>%
   distinct()
 test2 <- sg_pc_cat_site %>%
   group_by(site) %>%
@@ -123,8 +123,8 @@ kable(sg_pc_cat_site %>% select(site, category, pc_mean, pc_se))
 ```{r}
 # expanding dataset by species
 sg_spp <- sg_quads %>%
-  expand(nesting(site, transect, quadrant), species) %>% ## try adding nesting(species, category)
-  left_join(sg_quads %>% select(site, transect, quadrant, species, percent)) %>%
+  expand(nesting(site, transect, quadrat), species) %>% ## try adding nesting(species, category)
+  left_join(sg_quads %>% select(site, transect, quadrat, species, percent)) %>%
   left_join(sg_quads %>% select (species, category)) %>% # not sure why this wasn't working in the same line
   mutate(percent = if_else(is.na(percent), 0, percent)) %>% # can't get replace_na to work so using this instead
   distinct()
