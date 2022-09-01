@@ -27,6 +27,11 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE) # sets default for each 
 sg_quads <- read_excel(here("jumby_baseline", "data", "jbb_seagrass.xlsx"), sheet = "quadrats") %>%  
   clean_names()
   
+n_transects <- sg_quads %>%
+  select(site, transect) %>%
+  distinct() %>%
+  group_by(site) %>%
+  summarize(n = n())
 ```
 
 ### Percent cover by category
@@ -46,7 +51,8 @@ sg_pc_cat_site <- sg_cat %>%
             n = n()) %>% # testing to make sure there are 10 entries per category within each transect
   group_by(site, category) %>%
   summarize(pc_mean = mean(pc_t),
-            pc_se = sd(pc_t)/sqrt(n()))
+            pc_se = sd(pc_t)/sqrt(n())) %>%
+  mutate(category = if_else(category == "Seagrass", "Native seagrass", category))
 
 sg_pc_cat <- sg_pc_cat_site %>%
   group_by(category) %>%
@@ -69,8 +75,8 @@ test2 <- sg_pc_cat_site %>%
 
 
 #### Mean percent cover by category across all sites surveyed
-```{r}
-cat_palette <- c("olivedrab", "wheat", "palevioletred4", "darkseagreen4", "slategray3", "coral2")
+```{r, eval = F}
+cat_palette <- c("olivedrab", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3", "coral2")
 
 ggplot(sg_pc_cat, 
        aes(x = reorder(category, pc_mean), y = pc_mean, fill = category)) +
@@ -89,6 +95,8 @@ kable(sg_pc_cat %>% select(category, pc_mean, pc_se))
 
 #### Mean percent cover at each site
 ```{r, eval = F}
+cat_palette <- c("olivedrab", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3", "coral2")
+
 ggplot(sg_pc_cat_site,
        aes(x = category, y = pc_mean, fill = category)) +
   geom_col(color = "black", alpha = 0.9) +
@@ -102,6 +110,8 @@ ggplot(sg_pc_cat_site,
 ```
 
 ```{r}
+cat_palette <- c("olivedrab", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3", "coral2") 
+
 ggplot(sg_pc_cat_site, 
        aes(x = "category", y = pc_mean, fill = category)) + 
   geom_bar(width = 1, stat = "identity", color = "black") +
@@ -112,6 +122,7 @@ ggplot(sg_pc_cat_site,
   theme(legend.position = "bottom",
         legend.title = element_blank(),
         panel.spacing = unit(1, "lines"))
+ggsave(here("jumby_baseline", "figs", "seagrass_benthic_pc.png"))
 
 kable(sg_pc_cat_site %>% select(site, category, pc_mean, pc_se))
 ```
@@ -268,7 +279,7 @@ sg_inverts <- read_excel(here("jumby_baseline", "data", "jbb_seagrass.xlsx"), sh
    clean_names()
 ```
 
-#### Conch density by phase and site
+#### Conch density by site
 ```{r}
 # expand data frame to include sites/transects where no conch were present
 sg_conch <- sg_quads %>% # need to use the quads data to expand, because not all sites/transects are in invert data
@@ -281,9 +292,12 @@ sg_conch <- sg_quads %>% # need to use the quads data to expand, because not all
               filter(organism == "queen conch") %>%
               select(site, transect, phase, count)) %>%
   mutate(count = if_else(is.na(count), 0, count))
+```
 
-# calculate densities
-sg_conch_dens <- sg_conch %>%
+
+```{r, eval = F}
+# calculate densities by phase
+sg_conch_dens_ph <- sg_conch %>%
   group_by(site, transect, phase) %>%
   summarize(dens_t = sum(count)/20) %>% # indv/m2 (10m * 2m transects) 
   group_by(site, phase) %>%
@@ -291,7 +305,7 @@ sg_conch_dens <- sg_conch %>%
             dens_se = sd(dens_t)/sqrt(n()))
 
 # graph
-ggplot(sg_conch_dens, aes(x = phase, y = dens_mean)) +
+ggplot(sg_conch_dens_ph, aes(x = phase, y = dens_mean)) +
   geom_col(fill = "pink", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
                  position = position_dodge(.9)) +
@@ -302,9 +316,60 @@ ggplot(sg_conch_dens, aes(x = phase, y = dens_mean)) +
 kable(sg_conch_dens %>% select(phase, dens_mean, dens_se))
 ```
 
-
-#### Cushion star density by site
 ```{r}
+# calculate total densities
+sg_conch_dens <- sg_conch %>%
+  group_by(site, transect) %>%
+  summarize(dens_t = sum(count)/20) %>% # indv/m2 (10m * 2m transects) 
+  group_by(site) %>%
+  summarize(dens_mean = mean(dens_t),
+            dens_se = sd(dens_t)/sqrt(n()))
+
+# graph
+ggplot(sg_conch_dens, aes(x = site, y = dens_mean)) +
+  geom_col(fill = "pink", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(y = expression(Queen~conch~density~(indv.~m^-2)), x = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+ggsave(here("jumby_baseline", "figs", "seagrass_conch.png"))
+
+kable(sg_conch_dens %>% select(dens_mean, dens_se))
+```
+
+#### Sea cucumber density
+* Only one sea cucumber was observed during all of our transects (at Maiden Island N, so probably not worth graphing and maybe mention in the text?)
+```{r, eval = F}
+# expand data frame to include sites/transects where no conch were present
+sg_seacucumber <- sg_quads %>% # need to use the quads data to expand, because not all sites/transects are in invert data
+  expand(nesting(site, transect)) %>%
+  left_join(sg_inverts %>%
+              filter(organism == "donkey dung sea cucumber") %>%
+              select(site, transect, count)) %>%
+  mutate(count = if_else(is.na(count), 0, count))
+
+# calculate densities
+sg_seacucumber_dens <- sg_seacucumber %>%
+  group_by(site, transect) %>%
+  summarize(dens_t = sum(count)/20) %>% # indv/m2 (10m * 2m transects) 
+  group_by(site) %>%
+  summarize(dens_mean = mean(dens_t),
+            dens_se = sd(dens_t)/sqrt(n()))
+
+# graph
+ggplot(sg_seacucumber_dens, aes(x = site, y = dens_mean)) +
+  geom_col(fill = "coral", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(y = "Cushion star density (indv./m2)", x = "Phase") +
+  theme_bw()
+
+kable(sg_seacucumber %>% select( dens_mean, dens_se))
+```
+
+```{r, eval = F}
+#### Cushion star density by site
 # expand data frame to include sites/transects where no conch were present
 sg_cushstar <- sg_quads %>% # need to use the quads data to expand, because not all sites/transects are in invert data
   expand(nesting(site, transect)) %>%
