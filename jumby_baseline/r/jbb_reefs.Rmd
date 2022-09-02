@@ -285,8 +285,7 @@ ggplot(rf_recruits_tot, aes(x = site, y = density_mean)) +
   geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
                  position = position_dodge(.9)) +
   labs(x = "", y = expression(Larval~recruit~density~(recruits~m^-2))) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, h = 1))
+  theme_bw()
 ggsave(here("jumby_baseline", "figs", "reef_recruits.png"))
 
 kable(rf_recruits_tot)
@@ -460,7 +459,8 @@ rf_fish_fam <- rf_fish %>%
   summarize(bm_site = mean(bm_tot)) %>%
   group_by(family_com) %>%
   summarize(bm_mean = mean(bm_site),
-            bm_se = sd(bm_site)/sqrt(n()))
+            bm_se = sd(bm_site)/sqrt(n())) %>%
+  mutate(family_com = factor(family_com, levels = c("Damselfish", "Grouper", "Grunts", "Parrotfish", "Snapper", "Surgeonfish", "Other")))
 
 # graph
 ggplot(rf_fish_fam, aes(x = family_com, y = bm_mean)) +
@@ -468,8 +468,8 @@ ggplot(rf_fish_fam, aes(x = family_com, y = bm_mean)) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   labs(x = "", y = expression(Biomass~(kg~ha^-1))) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, h = 1))
+  theme_bw()
+  # theme(axis.text.x = element_text(angle = 45, h = 1))
 ggsave(here("jumby_baseline", "figs", "reef_fish_fam_bm.png"))
 
 kable(rf_fish_fam)
@@ -492,8 +492,9 @@ ggplot(rf_fish_fam_site %>%
   geom_hline(yintercept = 119, linetype = "dashed", color = "black") +
   annotate("text", x = 5.5, y = 126, size = 3, hjust = 1, label=c('Antigua mean biomass')) +
   labs(x = "", y = expression(Parrotfish~biomass~(kg~ha^-1))) +
-  theme_bw()
-ggsave(here("jumby_baseline", "figs", "reef_scarid_bm.png"))
+  theme_bw() +
+  theme(axis.text.x = element_blank())
+ggsave(here("jumby_baseline", "figs", "reef_scarid_bm.png"), height = 3, width = 5)
 ```
 
 #### Acanthurid biomass by site
@@ -507,8 +508,9 @@ ggplot(rf_fish_fam_site %>%
   geom_hline(yintercept = 137, linetype = "dashed", color = "black") +
   annotate("text", x = 5.5, y = 142, size = 3, hjust = 1, label=c('Antigua mean biomass')) +
   labs(x = "", y = expression(Surgeonfish~biomass~(kg~ha^-1))) +
-  theme_bw()
-ggsave(here("jumby_baseline", "figs", "reef_acan_bm.png"))
+  theme_bw() +
+  theme(axis.text.x = element_text(hjust = 1, angle = 45))
+ggsave(here("jumby_baseline", "figs", "reef_acan_bm.png"), height = 4, width = 5)
 ```
 
 ### Fish lengths
