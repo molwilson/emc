@@ -409,6 +409,10 @@ rf_fish_site <- rf_fish %>%
   group_by(site) %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
+
+rf_bm_sum <- rf_fish_site %>%
+  summarize(bm_mean_sum = mean(bm_mean),
+            bm_se_sum = sd(bm_mean)/sqrt(n()))
 ```
 
 
@@ -427,12 +431,10 @@ ggplot(rf_fish_site, aes(x = site, y = bm_mean)) +
 ggsave(here("jumby_baseline", "figs", "reef_fish_dens.png"))
 
 kable(rf_fish_site %>% select(site, bm_mean, bm_se))
+kable(rf_bm_sum)
 ```
 
 ### Biomass by site and family
-* Need to reorder to put "other" last
-* Are these good for families to feature?
-* Should I switch to common family names, or both?
 
 ```{r}
 # by site
@@ -490,6 +492,35 @@ ggsave(here("jumby_baseline", "figs", "reef_fish_fam_bm.png"))
 
 kable(rf_fish_fam)
 ```
+#### Density by site and family
+```{r}
+rf_fish_fam_dens <- rf_fish %>% 
+  expand(nesting(site, transect), family_com) %>%
+  left_join(rf_fish %>%
+      select(site, transect, family_com)) %>%
+  group_by(site, transect, family_com) %>%
+  summarize(dens_t = n()/120) %>% #indv./m2
+  group_by(site, family_com) %>%
+  summarize(dens_site = mean(dens_t)) %>%
+  group_by(family_com) %>%
+  summarize(dens_mean = mean(dens_site),
+            dens_se = sd(dens_site)/sqrt(n())) %>%
+  mutate(family_com = factor(family_com, levels = c("Damselfish", "Grouper", "Grunts", "Parrotfish", "Snapper", "Surgeonfish", "Other")))
+
+# graph
+ggplot(rf_fish_fam_dens, aes(x = family_com, y = dens_mean)) +
+  geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Density~(indv.~m^-2))) +
+  theme_bw()
+  # theme(axis.text.x = element_text(angle = 45, h = 1))
+# ggsave(here("jumby_baseline", "figs", "reef_fish_fam_bm.png"))
+
+kable(rf_fish_fam_dens)
+```
+
+#### Fish density by family and site
 
 ### Herbivore biomasses
 
