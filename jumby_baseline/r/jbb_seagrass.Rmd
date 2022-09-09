@@ -76,7 +76,7 @@ test2 <- sg_pc_cat_site %>%
 
 #### Mean percent cover by category across all sites surveyed
 ```{r, eval = F}
-cat_palette <- c("olivedrab", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3", "coral2")
+cat_palette <- c("darkolivegreen3", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3")
 
 ggplot(sg_pc_cat, 
        aes(x = reorder(category, pc_mean), y = pc_mean, fill = category)) +
@@ -95,7 +95,7 @@ kable(sg_pc_cat %>% select(category, pc_mean, pc_se))
 
 #### Mean percent cover at each site
 ```{r, eval = F}
-cat_palette <- c("olivedrab", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3", "coral2")
+cat_palette <- c("darkolivegreen3", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3")
 
 ggplot(sg_pc_cat_site,
        aes(x = category, y = pc_mean, fill = category)) +
@@ -110,7 +110,7 @@ ggplot(sg_pc_cat_site,
 ```
 
 ```{r}
-cat_palette <- c("olivedrab", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3", "coral2") 
+cat_palette <- c("darkolivegreen3", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3")
 
 ggplot(sg_pc_cat_site, 
        aes(x = "category", y = pc_mean, fill = category)) + 
@@ -242,7 +242,7 @@ kable(sg_pc_spp_site %>% filter(category == "Algae") %>% select(site, species, p
 # graphs
 
 ggplot(sg_pc_spp %>% 
-         filter(category == "Stony coral"), 
+         filter(species %in% c("Porites porites", "Porites furcata", "Porited astreoides", "Siderastrea radians", "Favia fragum", "Manicina areolata")), 
        aes(x = reorder(species, pc_mean), y = pc_mean)) +
   geom_col(fill = "coral2", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
@@ -256,9 +256,9 @@ kable(sg_pc_spp %>% filter(category == "Stony coral") %>% select(species, pc_mea
 ```
 
 #### Stony coral - percent cover by species at each site
-```{r}
+```{r, eval = F}
 ggplot(sg_pc_spp_site %>% 
-         filter(category == "Stony coral"), 
+         filter(species %in% c("Porites porites", "Porites furcata", "Porited astreoides", "Siderastrea radians", "Favia fragum", "Manicina areolata")), 
        aes(x = species, y = pc_mean)) +
   geom_col(fill = "coral2", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
