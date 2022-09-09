@@ -1,0 +1,52 @@
+---
+title: "Outplant monitoring"
+author: "Molly Wilson"
+date: '2022-09-09'
+output: html_document
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(knitr)
+library(stringr)
+library(RColorBrewer)
+library(lubridate)
+library(scales)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+Sys.setenv(TZ="America/Guadeloupe")
+```
+
+
+```{r}
+monitoring <- read_excel(here("nursery_monitoring", "data", "Outplant data.xlsx"), sheet = "monitoring") %>%
+  separate(id, into = c("species", NA), sep = 4, remove = F) %>%
+  separate(id, into = c("genotype", NA), sep = 6, remove = F) %>%
+  mutate(species = case_when(species == "ACER" ~ "A. cervicornis",
+                             species == "APRO" ~ "A. prolifera",
+                             species == "APAL" ~ "A. palmata"))
+```
+
+```{r}
+ggplot(monitoring %>% filter(date == as.Date("2022-09-05")),
+       aes(x = id, y = p_survival*100, fill = species)) +
+  geom_col(position = "dodge", alpha = 0.9, color = "black") +
+  labs(y = "Percent survival", x = "Outplant ID", fill = "Species") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.text = element_text(face = "italic"))
+ggsave(here("outplant_monitoring", "figs", "2022_sep.png"), width = 6, height = 4)
+
+# comparing TBP vs. York
+ggplot(monitoring %>% filter(genotype %in% c("APAL13", "APAL14", "APRO04") & date == as.Date("2022-09-05")),
+       aes(x = genotype, y = p_survival*100)) +
+  geom_col(aes(fill = site), position = "dodge", alpha = 0.9, color = "black") +
+  labs(x = "Genotype", y = "Percent survival", fill = "Outplant site") +
+  theme_bw()
+ggsave(here("outplant_monitoring", "figs", "2022_sep_sites.png"), width = 6, height = 4)
+
+```
+
+
