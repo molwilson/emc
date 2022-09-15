@@ -22,7 +22,7 @@ Sys.setenv(TZ="America/Guadeloupe")
 
 
 ```{r}
-monitoring <- read_excel(here("nursery_monitoring", "data", "Outplant data.xlsx"), sheet = "monitoring") %>%
+monitoring <- read_excel(here("outplant_monitoring", "data", "Outplant data.xlsx"), sheet = "monitoring") %>%
   separate(id, into = c("species", NA), sep = 4, remove = F) %>%
   separate(id, into = c("genotype", NA), sep = 6, remove = F) %>%
   mutate(species = case_when(species == "ACER" ~ "A. cervicornis",
@@ -34,7 +34,9 @@ monitoring <- read_excel(here("nursery_monitoring", "data", "Outplant data.xlsx"
 ggplot(monitoring %>% filter(date == as.Date("2022-09-05")),
        aes(x = id, y = p_survival*100, fill = species)) +
   geom_col(position = "dodge", alpha = 0.9, color = "black") +
-  labs(y = "Percent survival", x = "Outplant ID", fill = "Species") +
+  labs(y = "Percent survival at 2 mo.", x = "Outplant ID", fill = "Species") +
+  scale_fill_manual(values = c("coral2", "steelblue1", "aquamarine3")) +
+  lims(y = c(0,100)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.text = element_text(face = "italic"))
 ggsave(here("outplant_monitoring", "figs", "2022_sep.png"), width = 6, height = 4)
@@ -43,7 +45,9 @@ ggsave(here("outplant_monitoring", "figs", "2022_sep.png"), width = 6, height = 
 ggplot(monitoring %>% filter(genotype %in% c("APAL13", "APAL14", "APRO04") & date == as.Date("2022-09-05")),
        aes(x = genotype, y = p_survival*100)) +
   geom_col(aes(fill = site), position = "dodge", alpha = 0.9, color = "black") +
-  labs(x = "Genotype", y = "Percent survival", fill = "Outplant site") +
+  scale_fill_manual(values = c("steelblue1", "aquamarine3")) +
+  labs(x = "Genotype", y = "Percent survival at 2 mo.", fill = "Outplant site") +
+  lims(y = c(0,100)) +
   theme_bw()
 ggsave(here("outplant_monitoring", "figs", "2022_sep_sites.png"), width = 6, height = 4)
 
