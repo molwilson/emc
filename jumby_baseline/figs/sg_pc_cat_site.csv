@@ -1,0 +1,49 @@
+"site","category","pc_mean","pc_se"
+"Buckley Bay","Algae",3.35,0.926012958872607
+"Buckley Bay","Bare substrate",31.05,15.6698489675768
+"Buckley Bay","Cyanobacteria",18.575,18.309304328674
+"Buckley Bay","Invasive seagrass",22.975,8.1455892972823
+"Buckley Bay","Native seagrass",24.05,7.35181383514753
+"Buckley Bay","Sponges, tunicates & corals",0,0
+"Davis Bay","Algae",6.075,1.68590974451976
+"Davis Bay","Bare substrate",44.975,8.15979728097866
+"Davis Bay","Cyanobacteria",0,0
+"Davis Bay","Invasive seagrass",3.4,1.50055545271298
+"Davis Bay","Native seagrass",45.5,5.95580948878208
+"Davis Bay","Sponges, tunicates & corals",0.05,0.05
+"Jumby Bay","Algae",6.45,2.58247297501187
+"Jumby Bay","Bare substrate",31.425,6.54043512823625
+"Jumby Bay","Cyanobacteria",0,0
+"Jumby Bay","Invasive seagrass",0.5,0.5
+"Jumby Bay","Native seagrass",61.625,8.04139032340387
+"Jumby Bay","Sponges, tunicates & corals",0,0
+"Loblolly Bay","Algae",24,6.25872724015567
+"Loblolly Bay","Bare substrate",13.8,3.02737510064412
+"Loblolly Bay","Cyanobacteria",0,0
+"Loblolly Bay","Invasive seagrass",0,0
+"Loblolly Bay","Native seagrass",62.2,7.43011888644231
+"Loblolly Bay","Sponges, tunicates & corals",0,0
+"Maiden Island North","Algae",17.65,3.25102547923985
+"Maiden Island North","Bare substrate",46.35,14.3418095092635
+"Maiden Island North","Cyanobacteria",0,0
+"Maiden Island North","Invasive seagrass",0,0
+"Maiden Island North","Native seagrass",35.025,11.1696295820408
+"Maiden Island North","Sponges, tunicates & corals",0.975,0.606045927852557
+"Maiden Island West","Algae",8.525,2.21373553072629
+"Maiden Island West","Bare substrate",24.65,5.7779033106021
+"Maiden Island West","Cyanobacteria",0,0
+"Maiden Island West","Invasive seagrass",0,0
+"Maiden Island West","Native seagrass",66.8,3.87104637016918
+"Maiden Island West","Sponges, tunicates & corals",0.025,0.025
+"Pasture Bay","Algae",4.225,2.04994918636211
+"Pasture Bay","Bare substrate",43.725,11.1787279389622
+"Pasture Bay","Cyanobacteria",0.175,0.175
+"Pasture Bay","Invasive seagrass",12.4,7.73907832583011
+"Pasture Bay","Native seagrass",39.475,11.302608474743
+"Pasture Bay","Sponges, tunicates & corals",0,0
+"Pierce Shoals","Algae",0.95,0.253311402559511
+"Pierce Shoals","Bare substrate",22.65,8.23088695099137
+"Pierce Shoals","Cyanobacteria",0,0
+"Pierce Shoals","Invasive seagrass",0,0
+"Pierce Shoals","Native seagrass",76.175,7.88525786938301
+"Pierce Shoals","Sponges, tunicates & corals",0.225,0.193110503770941

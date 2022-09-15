@@ -53,6 +53,7 @@ sg_pc_cat_site <- sg_cat %>%
   summarize(pc_mean = mean(pc_t),
             pc_se = sd(pc_t)/sqrt(n())) %>%
   mutate(category = if_else(category == "Seagrass", "Native seagrass", category))
+write.csv(sg_pc_cat_site, here("jumby_baseline", "figs", "sg_pc_cat_site.csv"), row.names = FALSE)
 
 sg_pc_cat <- sg_pc_cat_site %>%
   group_by(category) %>%
@@ -335,7 +336,7 @@ ggplot(sg_conch_dens, aes(x = site, y = dens_mean)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ggsave(here("jumby_baseline", "figs", "seagrass_conch.png"))
 
-kable(sg_conch_dens %>% select(dens_mean, dens_se))
+kable(sg_conch_dens %>% select(site, dens_mean, dens_se))
 ```
 
 #### Sea cucumber density
