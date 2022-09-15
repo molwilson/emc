@@ -169,7 +169,7 @@ test4 <- sg_pc_spp_site %>% filter(site == "Davis Bay" & species == "Penicillus 
 #### Seagrasses - percent cover by species across sites
 ```{r}
 ggplot(sg_pc_spp %>%
-         filter(category == "Seagrass") %>%
+         filter(category %in% c("Seagrass", "Invasive seagrass")) %>%
          mutate(Status = if_else(species == "Halophila stipulacea", "Invasive", "Native")), 
        aes(x = reorder(species, pc_mean), y = pc_mean)) +
   geom_col(fill = "darkseagreen4", alpha = 0.9, aes(color = Status)) +
@@ -180,6 +180,7 @@ ggplot(sg_pc_spp %>%
   labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
+ggsave(here("jumby_baseline", "figs", "sg_seagrass_spp_pc.png"))
 
 kable(sg_pc_spp %>% filter(category == "Seagrass") %>% select(species, pc_mean, pc_se))
 ```
@@ -216,6 +217,7 @@ ggplot(sg_pc_spp %>%
   labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
+ggsave(here("jumby_baseline", "figs", "sg_algal_spp_pc.png"))
 
 kable(sg_pc_spp %>% filter(category == "Algae") %>% select(species, pc_mean, pc_se))
 ```
