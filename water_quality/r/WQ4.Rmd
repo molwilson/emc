@@ -46,18 +46,18 @@ WQ1-WQ4 trends
 ```{r}
 c_range <- "slategray1"
 shapes_dates <- c(1, 2, 16)
-colors_dates <- c("springgreen4", "turquoise4", "black")
+colors_dates <- c("black", "black", "blue")
 
 # pH: 7.7 and 8.5 units  (EPMA, 2019)
 rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 7.7, ymax = 8.5)
-ggplot() +
+ph <- ggplot() +
   geom_rect(data = rect_dat, 
               aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
               alpha = 0.2) +
   scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = ph, shape = date_cat, alpha = date_cat, color = type)) +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = ph, alpha = date_cat, shape = date_cat, color = date_cat)) +
   scale_shape_manual(name = "Sample date", values = shapes_dates) +
-  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_color_manual(name = "Sample date", values = colors_dates) +
   scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = "pH") +
   ylim(5, 9) +
@@ -66,9 +66,11 @@ ggplot() +
 ggsave(here("water_quality", "figs", "WQ4", "pH.png"), width = 6, height = 4)
 
 # TDS
-ggplot() +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = tds, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = labels_dates, values = shapes_dates) +
+tds <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = tds, shape = date_cat, alpha = date_cat, color = type)) +
+  scale_shape_manual(name = "Sample date", values = shapes_dates) +
+  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = "TDS") +
   ylim(30, 60) +
   theme_bw() +
@@ -77,13 +79,14 @@ ggsave(here("water_quality", "figs", "WQ4", "tds.png"), width = 6, height = 4)
 
 # Salinity: 32,000 to 42,000 ppm (NOAA)
 rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 32, ymax = 42)
-ggplot() +
+salinity <- ggplot() +
   geom_rect(data = rect_dat, 
               aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
-              alpha = 0.3) +
-  scale_fill_manual(values = c_range, name = "Target range", labels = c("NOAA 2021")) +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = salinity, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = labels_dates, values = shapes_dates) +
+              alpha = 0.2) +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = salinity, shape = date_cat, alpha = date_cat, color = type)) +
+  scale_shape_manual(name = "Sample date", values = shapes_dates) +
+  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = "Salinity") +
   ylim(25, 50) +
   theme_bw() +
@@ -91,9 +94,11 @@ ggplot() +
 ggsave(here("water_quality", "figs", "WQ4", "salinity.png"), width = 6, height = 4)
 
 # Turbidity (no reference)
-ggplot() +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = turbidity, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = labels_dates, values = shapes_dates) +
+turbidity <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = turbidity, shape = date_cat, alpha = date_cat, color = type)) +
+  scale_shape_manual(name = "Sample date", values = shapes_dates) +
+  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = "Turbidity (NTU)") +
   ylim(0, 5) +
   theme_bw() +
@@ -103,13 +108,15 @@ ggsave(here("water_quality", "figs", "WQ4", "turbidity.png"), width = 6, height 
 
 # DO: Must be greater than 6.0 ppm  (EPMA, 2019)
 rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 6, ymax = Inf)
-ggplot() +
+do <- ggplot() +
   geom_rect(data = rect_dat, 
               aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
-              alpha = 0.3) +
+              alpha = 0.2) +
   scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = do, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = labels_dates, values = shapes_dates) +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = do, shape = date_cat, alpha = date_cat, color = type)) +
+  scale_shape_manual(name = "Sample date", values = shapes_dates) +
+  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = "Dissolved oxygen (ppm)") +
   ylim(0, 12) +
   theme_bw() +
@@ -117,9 +124,11 @@ ggplot() +
 ggsave(here("water_quality", "figs", "WQ4", "do.png"), width = 6, height = 4)
 
 # Nitrates (no reference)
-ggplot() +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = nitrate, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = labels_dates, values = shapes_dates) +
+nitrates <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = nitrate, shape = date_cat, alpha = date_cat, color = type)) +
+  scale_shape_manual(name = "Sample date", values = shapes_dates) +
+  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = "Nitrate (ppm)") +
   ylim(0, 0.2) +
   theme_bw() +
@@ -127,9 +136,11 @@ ggplot() +
 ggsave(here("water_quality", "figs", "WQ4", "nitrate.png"), width = 6, height = 4)
 
 # Phosphates (no reference)
-ggplot() +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = phosphate, shape = date)) +
-  scale_shape_manual(name = "Sample date", labels = labels_dates, values = shapes_dates) +
+phosphates <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = phosphate, shape = date_cat, alpha = date_cat, color = type)) +
+  scale_shape_manual(name = "Sample date", values = shapes_dates) +
+  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = "Phosphate (ppm)") +
   ylim(0, 0.6) +
   theme_bw() +
@@ -138,13 +149,15 @@ ggsave(here("water_quality", "figs", "WQ4", "phosphate.png"), width = 6, height 
 
 # Temperature: 23°–29.6°Celsius (NOAA)
 rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6)
-ggplot() +
+temperature <- ggplot() +
   geom_rect(data = rect_dat, 
               aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
-              alpha = 0.3) +
+              alpha = 0.2) +
   scale_fill_manual(values = c_range, name = "Target range", labels = c("NOAA 2021")) +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = temperature, shape = date)) +
-   scale_shape_manual(name = "Sample date", labels = labels_dates, values = shapes_dates) +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = temperature, shape = date_cat, alpha = date_cat, color = type)) +
+  scale_shape_manual(name = "Sample date", values = shapes_dates) +
+  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = expression("Temperature ("*~degree*C*")")) +
   ylim(18, 32) +
   theme_bw() +
@@ -152,29 +165,37 @@ ggplot() +
 ggsave(here("water_quality", "figs", "WQ4", "temperature.png"), width = 6, height = 4)
 
 # Conductivity (no reference)
-ggplot() +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = conductivity, shape = date)) +
-   scale_shape_manual(name = "Sample date", labels = labels_dates, values = shapes_dates) +
+conductivity <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = conductivity, shape = date_cat, alpha = date_cat, color = type)) +
+  scale_shape_manual(name = "Sample date", values = shapes_dates) +
+  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = expression("Conductivity ("*mu*S*" "*cm^-1*")")) +
-  ylim(50000, 60000) +
+  ylim(30000, 60000) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("water_quality", "figs", "WQ4", "conductivity.png"), width = 6, height = 4)
 
 # Enterococci (below 33, EPMA)
 rect_dat = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 33)
-ggplot() +
+enterococci <- ggplot() +
   geom_rect(data = rect_dat, 
               aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
-              alpha = 0.3) +
+              alpha = 0.2) +
   scale_fill_manual(values = c_range, name = "Target range", labels = c("EPMA 2019")) +
-  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = enterococci, shape = date)) +
-   scale_shape_manual(name = "Sample date", labels = labels_dates, values = shapes_dates) +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = enterococci, shape = date_cat, alpha = date_cat, color = type)) +
+  scale_shape_manual(name = "Sample date", values = shapes_dates) +
+  scale_color_manual(name = "Site type", labels = c("Control", "Nursery", "Treatment"), values = colors_dates) +
+  scale_alpha_manual(name = "Sample date", values = c(0.3, 0.3, 1)) +
   labs(x = "", y = expression("Enterococci (cfu 100"*ml^-1*")")) +
   ylim(0, 35) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("water_quality", "figs", "WQ4", "enterococci.png"), width = 6, height = 4)
+
+ggarrange(ph, do, tds, turbidity, nitrates, phosphates, temperature, enterococci, salinity, conductivity, 
+          ncol = 2, nrow = 5)
+ggsave(here("water_quality", "figs", "WQ4", "summary_sites.png"), width = 10, height = 12)
 ```
 
 Means and SE
