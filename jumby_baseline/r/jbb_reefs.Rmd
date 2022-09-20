@@ -84,6 +84,11 @@ rf_pc_cat_site <- rf_pc_cat_m %>%
   mutate(cat_c = factor(cat_c, levels = c("Hard corals", "CCA", "Macroalgae", "Turf algae", "Other competitors")))
 write.csv(rf_pc_cat_site, here("jumby_baseline", "figs", "rf_pc_cat_site.csv"), row.names = FALSE)
 
+rf_pc_cat <- rf_pc_cat_site %>%
+  group_by(cat_c) %>%
+  summarize(pc = mean(pc_mean),
+            se = sd(pc_mean)/sqrt(n()))
+
 # quick check to make sure everything adds up to 100% at the meter and site level
 test1 <- rf_pc_cat_m %>%
   group_by(site, transect, meter) %>%
