@@ -419,10 +419,6 @@ rf_fish_site <- rf_fish %>%
 rf_bm_sum <- rf_fish_site %>%
   summarize(bm_mean_sum = mean(bm_mean),
             bm_se_sum = sd(bm_mean)/sqrt(n()))
-```
-
-
-```{r}
 # graph
 ggplot(rf_fish_site, aes(x = site, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.8) +
@@ -440,9 +436,9 @@ kable(rf_fish_site %>% select(site, bm_mean, bm_se))
 kable(rf_bm_sum)
 ```
 
-### Biomass by site and family
+### Biomass by family
 
-```{r}
+```{r, fig.height = 7, fig.width = 4, eval = F}
 # by site
 rf_fish_fam_site <- rf_fish %>% 
   expand(nesting(site, transect), family_c) %>%
@@ -454,10 +450,7 @@ rf_fish_fam_site <- rf_fish %>%
   group_by(site, family_c) %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
-```
 
-
-```{r, fig.height = 7, fig.width = 4, eval = F}
 # graph
 ggplot(rf_fish_fam_site, aes(x = family_c, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
@@ -525,8 +518,6 @@ ggplot(rf_fish_fam_dens, aes(x = family_com, y = dens_mean)) +
 
 kable(rf_fish_fam_dens)
 ```
-
-#### Fish density by family and site
 
 ### Herbivore biomasses
 
