@@ -93,21 +93,6 @@ test2 <- rf_pc_cat_site %>%
 ```
 
 
-```{r, eval = F}
-cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
-ggplot(rf_pc_cat_site, 
-       aes(x = cat_c, y = pc_mean, fill = cat_c)) +
-  geom_col(color = "black", alpha = 0.9) +
-  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
-                 position = position_dodge(.9)) +
-  scale_fill_manual(values = cat_palette) +
-  facet_wrap(. ~ site, ncol = 2) +
-  labs(y = "Mean percent cover", x = "", fill = "") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
-```
-
-
 ```{r}
 cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
 ggplot(rf_pc_cat_site, 
@@ -122,6 +107,7 @@ ggplot(rf_pc_cat_site,
         panel.spacing = unit(1, "lines"))
 
 kable(rf_pc_cat_site %>% select(site, category = cat_c, pc_mean, pc_se))
+ggsave(here("mma", "figs", "reef_benthic_pc.png"))
 ```
 
 
@@ -175,7 +161,7 @@ test3 <- sum(rf_pc_spp$pc_mean)
 ```
 
 #### Stony coral - percent cover by species across all sites
-```{r}
+```{r, fig.height = 2}
 ggplot(rf_pc_spp %>%
          filter(cat_c == "Hard corals"),
        aes(x = reorder(species, pc_mean), y = pc_mean)) +
@@ -183,32 +169,34 @@ ggplot(rf_pc_spp %>%
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   coord_flip() +
-  labs(y = "Mean percent cover", x = "Species", fill = "") +
+  labs(y = "Mean percent cover", x = "", fill = "") +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
 kable(rf_pc_spp %>% filter(cat_c == "Hard corals") %>% select(species, pc_mean, pc_se))
+ggsave(here("mma", "figs", "reef_coral_spp.png"))
 ```
 
-#### Other competitors - percent cover by species at each sites
-* Need to fix species names for other competitors in data sheet
-```{r}
+### Macroalgal explorations
+
+#### Macroalgae - percent cover by species and sites 
+```{r, fig.height = 6}
 ggplot(rf_pc_spp_site %>%
-         filter(cat_c == "Other competitors"),
-       aes(x = species, y = pc_mean)) +
-  geom_col(fill = "slategray3", color = "black", alpha = 0.9) +
+         filter(cat_c == "Macroalgae"),
+       aes(x = reorder(species, pc_mean), y = pc_mean)) +
+  geom_col(fill = "darkolivegreen", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(. ~ site, ncol = 3) +
-  labs(y = "Mean percent cover", x = "", fill = "") +
+  coord_flip() +
+  labs(y = "Mean percent cover", x = "Species", fill = "") +
   theme_bw() +
-  theme(axis.text.x = element_text(face = "italic", angle = 45, hjust = 1))
-ggsave(here("mma", "figs", "reef_comp_spp.png"))
+  theme(axis.text.y = element_text(face = "italic"))
 
-kable(rf_pc_spp_site %>% filter(cat_c == "Other competitors") %>% select(site, species, pc_mean, pc_se))
+ggsave(here("mma", "figs", "ma_site.png"))
 ```
-### Macroalgal canopy heights
 
+#### Canopy heights - all species
 ```{r}
 ma_height <- rf_benthic %>%
   filter(category_code == "MA" & height > 0) %>%
@@ -223,13 +211,38 @@ ggplot(ma_height, aes(x = site, y = height_mean)) +
   geom_col(fill = "darkolivegreen", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = height_mean - height_se, ymax = height_mean + height_se), width = .2,
                  position = position_dodge(.9)) +
-  labs(x = "", y = "Macroalgal canopy height (cm)") +
+  labs(x = "", y = "Macroalgal canopy height (cm) (all spp)") +
   theme_bw()
 ggsave(here("mma", "figs", "reef_ma_height.png"))
 
-kable(ma_height)
+#kable(ma_height)
+ggsave(here("mma", "figs", "ma_height_allspp.png"))
 ```
-### Macroalgal index
+
+#### Canopy heights - dictyota only
+```{r}
+ma_height_palatable <- rf_benthic %>%
+  filter(species_code == "DICT" & height > 0) %>%
+  group_by(site, transect) %>%
+  summarize(height = mean(height)) %>%
+  filter(!is.na(height)) %>%
+  group_by(site) %>%
+  summarize(height_mean = mean(height),
+            height_se = sd(height)/sqrt(n()))
+
+ggplot(ma_height_palatable, aes(x = site, y = height_mean)) +
+  geom_col(fill = "darkolivegreen", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = height_mean - height_se, ymax = height_mean + height_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = "Macroalgal canopy height (cm) (dict only)") +
+  theme_bw()
+ggsave(here("mma", "figs", "reef_ma_height.png"))
+
+#kable(ma_height)
+ggsave(here("mma", "figs", "ma_height_dict.png"))
+```
+
+#### Macroalgal index - all species
 ```{r}
 ma_index <- rf_pc_cat_site %>%
   filter(cat_c == "Macroalgae") %>%
@@ -239,10 +252,51 @@ ma_index <- rf_pc_cat_site %>%
   
 ggplot(ma_index, aes(x = site, y = index)) +
   geom_col(fill = "darkolivegreen", color = "black", alpha = 0.9) +
-  labs(x = "", y = "Macroalgal index") +
+  labs(x = "", y = "Macroalgal index (all spp)") +
   theme_bw()
 
-kable(ma_index %>% select(site, index))
+#kable(ma_index %>% select(site, index))
+ggsave(here("mma", "figs", "ma_index_allspp.png"))
+```
+#### Macroalgal index - dictyota only
+```{r}
+# calculating average canopy height by species at each transect
+ma_height_dict <- rf_benthic %>%
+  filter(species_code %in% c("DICT", "LOBO") & height > 0) %>%
+  group_by(site, transect) %>%
+  summarize(height = mean(height)) %>%
+  filter(!is.na(height)) %>%
+  group_by(site) %>%
+  summarize(height_mean = mean(height),
+            height_se = sd(height)/sqrt(n()))
+
+ma_index_dict <- rf_pc_spp_site %>%
+  filter(species == "Dictyota spp") %>%
+  left_join(ma_height_dict) %>%
+  mutate(index = height_mean * pc_mean,
+         index = if_else(is.na(index), 0, index))
+
+ggplot(ma_index_dict, aes(x = site, y = index)) +
+  geom_col(fill = "darkolivegreen", color = "black", alpha = 0.9) +
+  labs(x = "", y = "Macroalgal index (Dictyota spp.)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("mma", "figs", "ma_index_dict.png"))
+```
+
+```{r}
+# ma_index <- rf_pc_spp_site %>%
+#   filter(species == "Dictyota spp") %>%
+#   left_join(ma_height) %>%
+#   mutate(index = height_mean * pc_mean,
+#          index = if_else(is.na(index), 0, index))
+#   
+# ggplot(ma_index, aes(x = site, y = index)) +
+#   geom_col(fill = "darkolivegreen", color = "black", alpha = 0.9) +
+#   labs(x = "", y = "Macroalgal index") +
+#   theme_bw()
+# 
+# kable(ma_index %>% select(site, index))
 ```
 
 ### Coral recruits
@@ -303,6 +357,7 @@ ggplot(rf_recruits_tot, aes(x = site, y = density_mean)) +
 ggsave(here("mma", "figs", "reef_recruits.png"))
 
 kable(rf_recruits_tot)
+ggsave(here("mma", "figs", "reef_recruits.png"))
 ```
 
 #### Proportion of coral recruits by species
@@ -320,11 +375,12 @@ ggplot(rf_recruits_spp, aes(x = species, y = freq)) +
   labs(x = "", y = "Fraction of recruits") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
+ggsave(here("mma", "figs", "reef_recruits_spp.png"))
 ```
 
 ### Diadema
 
-```{r}
+```{r, fig.height = 2, fig.width = 3}
 diadema <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = "inverts") %>%  
   clean_names() %>%
   select(site, transect, diadema_adult, diadema_juvenile) %>%
@@ -333,18 +389,30 @@ diadema <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = "in
                names_pattern = "diadema_(.*)",
                values_to = "count")
 
-diadema_ph <- diadema %>%
+diadema_site <- diadema %>%
+  group_by(site,) %>%
+  summarize(density_mean = mean(count/10), # 1x10m belt
+            density_se = sd(count/10)/sqrt(n())) 
+  
+diadema_site_ph <- diadema %>%
   group_by(site, phase) %>%
   summarize(density_mean = mean(count/10), # 1x10m belt
             density_se = sd(count/10)/sqrt(n())) 
 
-ggplot(diadema_ph, aes(x = phase, y = density_mean)) +
-  geom_col(fill = "black", color = "black", alpha = 0.9) +
+rect_dat_diadema = data.frame(xmin = -Inf, xmax = Inf, ymin = 3, ymax = 20) # (3-20 indv/m2, Bak 1985)
+ggplot(diadema_site, aes(x = site, y = density_mean)) +
+  geom_col(fill = "black", position = "dodge") +
+  scale_fill_manual(values = c("gray10", "gray90"), name = "Phase", labels = c("Adult", "Juvenile")) +
   geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
                  position = position_dodge(.9)) +
-  facet_wrap(. ~ site) +
+  geom_rect(data = rect_dat_diadema, inherit.aes = FALSE,
+                              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), 
+                              fill = 'slategray1', alpha = 0.5) +
   labs(x = "", y = expression(Density~(indv.~m^-2))) +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("mma", "figs", "reef_diadema.png"))
 ```
 
 ```{r}
@@ -396,11 +464,13 @@ n_transects <- rf_fish %>%
 ### Total biomass by site
 * Regional averages are taken from Karr et al. 2015
 * Antigua averages are taken from Camacho et al. 2020 (5921 g/m2)
-```{r}
+```{r, fig.height = 2, fig.width = 3}
+belt_area <- 30*2 # 30m x 2m belt transects
+
 # calculating total biomass in each transect (sum) -> mean at each site
 rf_fish_site <- rf_fish %>% 
   group_by(site, transect) %>%
-  summarize(bm_tot = sum(biomass)/1000/120*10000) %>% #kg/ha
+  summarize(bm_tot = sum(biomass)/1000/belt_area*10000) %>% #kg/ha
   group_by(site) %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
@@ -415,14 +485,16 @@ ggplot(rf_fish_site, aes(x = site, y = bm_mean)) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   geom_hline(yintercept = 1300, linetype = "dashed", color = "black") +
-  annotate("text", x = 5.5, y = 1350, size = 3, hjust = 1, label=c('Caribbean mean unfished biomass')) +
+  annotate("text", x = 8.5, y = 1350, size = 3, hjust = 1, label=c('Caribbean mean unfished biomass')) +
   geom_hline(yintercept = 591, linetype = "dashed", color = "black") +
-  annotate("text", x = 5.5, y = 640, size = 3, hjust = 1, label=c('Antigua mean biomass')) +
+  annotate("text", x = 8.5, y = 640, size = 3, hjust = 1, label=c('Antigua mean biomass')) +
   labs(x = "", y = expression(Total~fish~biomass~(kg~ha^-1))) +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 kable(rf_fish_site %>% select(site, bm_mean, bm_se))
 kable(rf_bm_sum)
+ggsave(here("mma", "figs", "reef_fish_bm.png"))
 ```
 
 ### Biomass by family
@@ -433,26 +505,12 @@ rf_fish_fam_site <- rf_fish %>%
       select(site, transect, family_com, family_c, length, biomass)) %>%
   mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>%
   group_by(site, transect, family_com, family_c) %>%
-  summarize(bm_tot = sum(biomass)/1000/120*10000) %>% #kg/ha
+  summarize(bm_tot = sum(biomass)/1000/belt_area*10000) %>% #kg/ha
   group_by(site, family_com, family_c) %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
 ```
 
-
-```{r, eval = F}
-# graph
-ggplot(rf_fish_fam_site, aes(x = family_com, y = bm_mean)) +
-  geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
-  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
-                 position = position_dodge(.9)) +
-  facet_wrap(. ~ site, ncol = 2) +
-  labs(x = "Site", y = "Biomass (kg/ha)") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, h = 1))
-
-kable(rf_fish_fam_site %>% select(site, family = family_c, bm_mean, bm_se))
-```
 
 ```{r}
 rf_fish_fam <- rf_fish %>% 
@@ -461,72 +519,45 @@ rf_fish_fam <- rf_fish %>%
       select(site, transect, family_com, length, biomass)) %>%
   mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>%
   group_by(site, transect, family_com) %>%
-  summarize(bm_tot = sum(biomass)/1000/120*10000) %>% #kg/ha
+  summarize(bm_tot = sum(biomass)/1000/belt_area*10000) %>% #kg/ha
   group_by(site, family_com) %>%
   summarize(bm_site = mean(bm_tot)) %>%
   group_by(family_com) %>%
   summarize(bm_mean = mean(bm_site),
             bm_se = sd(bm_site)/sqrt(n())) %>%
   mutate(family_com = factor(family_com, levels = c("Damselfish", "Grouper", "Grunts", "Parrotfish", "Snapper", "Surgeonfish", "Triggerfish", "Other")))
-
-# graph
-ggplot(rf_fish_fam, aes(x = family_com, y = bm_mean)) +
-  geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
-  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
-                 position = position_dodge(.9)) +
-  labs(x = "", y = expression(Biomass~(kg~ha^-1))) +
-  theme_bw()
-  # theme(axis.text.x = element_text(angle = 45, h = 1))
-ggsave(here("mma", "figs", "reef_fish_fam_bm.png"))
-
-kable(rf_fish_fam)
 ```
 
 
 ### Herbivore biomasses
+* Combining scarid and acanthurids
+* Antigua scarid biomass (1,189 g/100 m2) and acanthurid biomass (1,369 g/100 m2) _> sum = 2558 g/100 m2 taken from Camacho et al. 2020
+```{r, fig.width = 3, fig.height = 2}
+rf_fish_herb <- rf_fish %>% 
+  filter(family %in% c("Scaridae", "Acanthuridae")) %>%
+  mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>%
+  group_by(site, transect) %>%
+  summarize(bm_t = sum(biomass)/1000/belt_area*10000) %>% #kg/ha
+  group_by(site) %>%
+  summarize(bm_mean = mean(bm_t),
+            bm_se = sd(bm_t)/sqrt(n()))
 
-#### Scarid biomass by site
-* Eastern Caribbean average parrotfish biomass for NTRs from Steneck et al. 2018 was ~ 1550 g/100m2, or 155 kg/ha. Note that this is potentially misleading because I'm sure a lot of these NTRs do experience some fishing. But mean fished parrotfish biomasses for the same region was ~ 750 g/100m2
-* Antigua scarid biomass (1,189 g/100 m2) and acanthurid biomass (1,369 g/100 m2) taken from Camacho et al. 2020
-```{r}
-ggplot(rf_fish_fam_site %>%
-        filter(family_c == "Scaridae"),
-       aes(x = site, y = bm_mean)) +
+ggplot(rf_fish_herb, aes(x = site, y = bm_mean)) +
   geom_col(color = "black", fill = "cadetblue3", alpha = 0.8, stat = "identity", position = position_dodge()) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2, color = "gray40",
                  position = position_dodge(.9)) +
-  geom_hline(yintercept = 155, linetype = "dashed", color = "black") +
-  annotate("text", x = 8.5, y = 162, size = 3, hjust = 1, label=c('Eastern Caribbean mean unfished biomass')) +
-  geom_hline(yintercept = 119, linetype = "dashed", color = "black") +
-  annotate("text", x = 8.5, y = 126, size = 3, hjust = 1, label=c('Antigua mean biomass')) +
-  labs(x = "", y = expression(Parrotfish~biomass~(kg~ha^-1))) +
+  # geom_hline(yintercept = 256, linetype = "dashed", color = "black") +
+  # annotate("text", x = 8.5, y = 258, size = 3, hjust = 1, label=c('Antigua mean biomass')) +
+  labs(x = "", y = expression(Herbivore~biomass~(kg~ha^-1))) +
   theme_bw() +
-  theme(axis.text.x = element_blank())
-ggsave(here("mma", "figs", "reef_scarid_bm.png"), height = 3, width = 5)
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("mma", "figs", "reef_herb_bm.png"))
 ```
-
-#### Acanthurid biomass by site
-```{r}
-ggplot(rf_fish_fam_site %>%
-        filter(family_c == "Acanthuridae"),
-       aes(x = site, y = bm_mean)) +
-  geom_col(color = "black", fill = "cadetblue3", alpha = 0.8, stat = "identity", position = position_dodge()) +
-  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2, color = "gray40",
-                 position = position_dodge(.9)) +
-  geom_hline(yintercept = 137, linetype = "dashed", color = "black") +
-  annotate("text", x = 8.5, y = 142, size = 3, hjust = 1, label=c('Antigua mean biomass')) +
-  labs(x = "", y = expression(Surgeonfish~biomass~(kg~ha^-1))) +
-  theme_bw() +
-  theme(axis.text.x = element_text(hjust = 1, angle = 45))
-ggsave(here("jumby_baseline", "figs", "reef_acan_bm.png"), height = 4, width = 5)
-```
-
-
 
 
 ### Biomass by species across all sites
 
-```{r, fig.height = 10}
+```{r, fig.height = 5, fig.width = 3}
 # calculate mean biomass by species for each transect -> site -> mean across sites
 rf_fish_spp <- rf_fish %>% 
   expand(nesting(site, transect), species_code) %>%
@@ -534,7 +565,7 @@ rf_fish_spp <- rf_fish %>%
       select(site, transect, species_code, length, biomass)) %>%
   mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>%
   group_by(site, transect, species_code) %>%
-  summarize(bm_tot = sum(biomass)/1000/120*10000) %>% #kg/ha
+  summarize(bm_tot = sum(biomass)/1000/belt_area*10000) %>% #kg/ha
   group_by(site, species_code) %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n())) %>%
@@ -552,11 +583,11 @@ ggplot(rf_fish_spp, aes(x = reorder(species_name, bm_mean), y = bm_mean)) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   coord_flip() +
-  labs(x = "Species", y = "Biomass (kg/ha)") +
+  labs(x = "Species", y = expression(Biomass~(kg~ha^-1))) +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
-kable(rf_fish_spp %>% select(species_name, bm_mean, bm_se))
+ggsave(here("mma", "figs", "reef_fish_spp.png"))
 ```
 
 
@@ -600,5 +631,6 @@ ggplot(scarids, aes(x = length, fill = sex)) +
   theme(strip.text = element_text(face = "italic"),
         legend.title = element_blank(),
         legend.position = "top")
+ggsave(here("mma", "figs", "reef_scarids_phase.png"))
 ```
 

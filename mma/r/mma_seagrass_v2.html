@@ -1689,65 +1689,6 @@ kable(sg_conch_dens %&gt;% select(site, dens_mean, dens_se))</code></pre>
 </tbody>
 </table>
 </div>
-<div id="sea-cucumber-density" class="section level4">
-<h4>Sea cucumber density</h4>
-<ul>
-<li>Only one sea cucumber was observed during all of our transects (at
-Maiden Island N, so probably not worth graphing and maybe mention in the
-text?)</li>
-</ul>
-<pre class="r"><code># expand data frame to include sites/transects where no conch were present
-sg_seacucumber &lt;- sg_quads %&gt;% # need to use the quads data to expand, because not all sites/transects are in invert data
-  expand(nesting(site, transect)) %&gt;%
-  left_join(sg_inverts %&gt;%
-              filter(organism == &quot;donkey dung sea cucumber&quot;) %&gt;%
-              select(site, transect, count)) %&gt;%
-  mutate(count = if_else(is.na(count), 0, count))
-
-# calculate densities
-sg_seacucumber_dens &lt;- sg_seacucumber %&gt;%
-  group_by(site, transect) %&gt;%
-  summarize(dens_t = sum(count)/20) %&gt;% # indv/m2 (10m * 2m transects) 
-  group_by(site) %&gt;%
-  summarize(dens_mean = mean(dens_t),
-            dens_se = sd(dens_t)/sqrt(n()))
-
-# graph
-ggplot(sg_seacucumber_dens, aes(x = site, y = dens_mean)) +
-  geom_col(fill = &quot;coral&quot;, color = &quot;black&quot;, alpha = 0.9) +
-  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
-                 position = position_dodge(.9)) +
-  labs(y = &quot;Cushion star density (indv./m2)&quot;, x = &quot;Phase&quot;) +
-  theme_bw()
-
-kable(sg_seacucumber %&gt;% select( dens_mean, dens_se))</code></pre>
-<pre class="r"><code>#### Cushion star density by site
-# expand data frame to include sites/transects where no conch were present
-sg_cushstar &lt;- sg_quads %&gt;% # need to use the quads data to expand, because not all sites/transects are in invert data
-  expand(nesting(site, transect)) %&gt;%
-  left_join(sg_inverts %&gt;%
-              filter(organism == &quot;cushion star&quot;) %&gt;%
-              select(site, transect, count)) %&gt;%
-  mutate(count = if_else(is.na(count), 0, count))
-
-# calculate densities
-sg_cushstar_dens &lt;- sg_cushstar %&gt;%
-  group_by(site, transect) %&gt;%
-  summarize(dens_t = sum(count)/20) %&gt;% # indv/m2 (10m * 2m transects) 
-  group_by(site) %&gt;%
-  summarize(dens_mean = mean(dens_t),
-            dens_se = sd(dens_t)/sqrt(n()))
-
-# graph
-ggplot(sg_cushstar_dens, aes(x = site, y = dens_mean)) +
-  geom_col(fill = &quot;coral&quot;, color = &quot;black&quot;, alpha = 0.9) +
-  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
-                 position = position_dodge(.9)) +
-  labs(y = &quot;Cushion star density (indv./m2)&quot;, x = &quot;Phase&quot;) +
-  theme_bw()
-
-kable(sg_conch_dens %&gt;% select(phase, dens_mean, dens_se))</code></pre>
-</div>
 </div>
 </div>
 
