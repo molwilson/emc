@@ -95,20 +95,6 @@ kable(sg_pc_cat %>% select(category, pc_mean, pc_se))
 
 
 #### Mean percent cover at each site
-```{r, eval = F}
-cat_palette <- c("darkolivegreen3", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3")
-
-ggplot(sg_pc_cat_site,
-       aes(x = category, y = pc_mean, fill = category)) +
-  geom_col(color = "black", alpha = 0.9) +
-  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
-                 position = position_dodge(.9)) +
-    scale_fill_manual(values = cat_palette) +
-  facet_wrap(vars(site), nrow = 2) +
-  labs(y = "Mean percent cover", x = "Category", fill = "") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, h = 1, face = "italic"))
-```
 
 ```{r}
 cat_palette <- c("darkolivegreen3", "wheat", "palevioletred4", "red", "darkseagreen4", "slategray3")
@@ -126,6 +112,7 @@ ggplot(sg_pc_cat_site,
 ggsave(here("mma", "figs", "seagrass_benthic_pc.png"))
 
 kable(sg_pc_cat_site %>% select(site, category, pc_mean, pc_se))
+ggsave(here("mma", "figs", "sg_benthic_pc.png"))
 ```
 
 ### Percent cover by species

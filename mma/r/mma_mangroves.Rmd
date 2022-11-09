@@ -15,6 +15,7 @@ library(readxl)
 library(janitor)
 library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
 library(knitr)
+library(ggrepel)
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
@@ -28,10 +29,17 @@ mg_invert <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "inve
   unite(site_tran, site, transect, sep = "_", remove = FALSE) %>%
   mutate(type = str_to_title(type)) %>% # would prefer first cap, rest lower - maybe fix in data?
   filter(!is.na(site)) # remove any incomplete rows at the end of the data
+
+n_transects <- mg_invert %>%
+  select(site, transect) %>%
+  distinct() %>%
+  group_by(site) %>%
+  summarize(n = n())
+
+belt_area <- 30*1 # 30m x 1m belt transects
 ```
 
 ### Density by type
-* Need to consolidate into smaller number of "type" / create "other" category
 ```{r}
 # calculate total abundance by transect -> mean density by site
 mg_invert_cat_site <- mg_invert %>%
@@ -42,8 +50,8 @@ mg_invert_cat_site <- mg_invert %>%
   group_by(site, transect, type) %>%
   summarize(abundance = sum(number)) %>% 
   group_by(site, type) %>%
-  summarize(dens_mean = mean(abundance/30), # density as indv./m2 on 30m^2 transect
-            dens_se = sd(abundance/30)/sqrt(n()))
+  summarize(dens_mean = mean(abundance/belt_area), # density as indv./m2 on 30m^2 transect
+            dens_se = sd(abundance/belt_area)/sqrt(n()))
 
 # testing above code
 test1 <- mg_invert %>% filter(site == "Islet" & type == "Sponge")
@@ -58,8 +66,8 @@ test3 <- test2 %>%
   summarize(abundance = sum(number)) %>%
   filter(site == "Islet" & type == "Sponge")
 test4 <- test3 %>% group_by(site, type) %>%
-  summarize(dens_mean = mean(abundance/30), # density as indv./m2 on 30m^2 transect
-            dens_se = sd(abundance/30)/sqrt(n())) %>%
+  summarize(dens_mean = mean(abundance/belt_area), # density as indv./m2 on 30m^2 transect
+            dens_se = sd(abundance/belt_area)/sqrt(n())) %>%
   filter(site == "Islet" & type == "Sponge")
 
 mg_invert_cat <- mg_invert_cat_site %>%
@@ -67,15 +75,10 @@ mg_invert_cat <- mg_invert_cat_site %>%
   summarize(dens = mean(dens_mean),
             dens_se = sd(dens_mean)/sqrt(n())) %>%
   rename(dens_mean = dens)
-  
-ggplot(mg_invert_cat, aes(x = reorder(type, -dens_mean), y = dens_mean)) +
-  geom_col(position = "dodge", fill = "darkgoldenrod1", color = "black", alpha = 0.9) +
-  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
-                 position = position_dodge(.9)) +
-  labs(x = "", y = "Mean density (indv./m2)") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
+
+```{r, fig.width = 4, fig.height = 3}
 # graph
 ggplot(mg_invert_cat_site %>%
          filter(dens_mean > 0), 
@@ -84,15 +87,62 @@ ggplot(mg_invert_cat_site %>%
   geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
                  position = position_dodge(.9)) +
   facet_wrap(. ~ site, ncol = 3) +
-  labs(x = "Site", y = "Mean density (indv./m2)") +
+  labs(x = "Category", y = "Mean density (indv./m2)") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, h = 1))
 
 kable(mg_invert_cat_site %>% select(site, type, dens_mean, dens_se))
+ggsave(here("mma", "figs", "mgr_invert_site.png"))
 ```
 
+### Density by fucntional group
+```{r, fig.width = 4, fig.height = 3}
+# calculate total abundance by transect -> mean density by site
+mg_invert_fg_site <- mg_invert %>%
+  expand(nesting(site, transect), functional_group) %>%
+  left_join(mg_invert %>%
+              select(site, transect, functional_group, number)) %>%
+  mutate(number = if_else(is.na(number), 0, number)) %>%
+  group_by(site, transect, functional_group) %>%
+  summarize(abundance = sum(number)) %>% 
+  group_by(site, functional_group) %>%
+  summarize(dens_mean = mean(abundance/belt_area), # density as indv./m2 on 30m^2 transect
+            dens_se = sd(abundance/belt_area)/sqrt(n()))
+
+# graph
+ggplot(mg_invert_fg_site %>%
+         filter(dens_mean > 0), 
+       aes(x = functional_group, y = dens_mean)) +
+  geom_col(position = "dodge", fill = "darkgoldenrod1", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_wrap(. ~ site, ncol = 3) +
+  labs(x = "Functional group", y = "Mean density (indv./m2)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, h = 1))
+
+kable(mg_invert_fg_site %>% select(site, functional_group, dens_mean, dens_se))
+ggsave(here("mma", "figs", "mgr_invert_fg_site.png"))
+```
+
+#### Filter feeders only
+```{r, fig.height = 2, fig.width = 3}
+ggplot(mg_invert_fg_site %>%
+         filter(dens_mean > 0 & functional_group == "Filter & suspension feeders") , 
+       aes(x = reorder(site, dens_mean), y = dens_mean)) +
+  geom_col(position = "dodge", fill = "darkgoldenrod1", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Density~of~filter~"&"~suspension~feeders~(indv.~m^-2))) +
+  coord_flip() +
+  theme_bw()
+
+ggsave(here("mma", "figs", "mgr_filter_site.png"))
+```
+
+
 ### Density by species
-```{r}
+```{r, fig.height = 4, fig.width = 3}
 mg_invert_spp <- mg_invert %>%
   expand(nesting(site, transect), species) %>%
   left_join(mg_invert %>%
@@ -101,8 +151,8 @@ mg_invert_spp <- mg_invert %>%
   group_by(site, transect, species) %>%
   summarize(abundance = sum(number)) %>%
   group_by(site, species) %>%
-  summarize(dens_mean = mean(abundance/30), # indv./m2
-            dens_se = sd(abundance/30)/sqrt(n())) %>% 
+  summarize(dens_mean = mean(abundance/belt_area), # indv./m2
+            dens_se = sd(abundance/belt_area)/sqrt(n())) %>% 
   group_by(species) %>%
   summarize(dens = mean(dens_mean),
             dens_se = sd(dens_mean)/sqrt(n())) %>%
@@ -114,11 +164,12 @@ ggplot(mg_invert_spp, aes(x = reorder(species, dens_mean), y = dens_mean)) +
   geom_errorbar(aes(ymin = dens_mean - dens_se, ymax = dens_mean + dens_se), width = .2,
                  position = position_dodge(.9)) +
   coord_flip() +
-  labs(x = "", y = "Mean abundance (indv./m2)") +
+  labs(x = "", y = expression(Density~(indv.~m^-2))) +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
 kable(mg_invert_spp %>% select(species, dens_mean, dens_se))
+ggsave(here("mma", "figs", "mgr_invert_spp.png"))
 ```
 
 ## Fish
@@ -139,30 +190,61 @@ mg_fish <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "fish")
          family_c = if_else(family %in% c("Atherinidae", "Clupeidae", "Scaridae", "Haemulidae", "Lutjanidae", "Sphyraenidae"), family, "Other")) # consolidating the number of families
 ```
 
-### Total biomass by site
-```{r}
+### Total biomass and juvenile density by site
+```{r, fig.height = 2, fig.width = 3}
 # calculating total biomass in each transect (sum) -> mean at each site
 mg_fish_site <- mg_fish %>% 
   group_by(site, transect) %>%
-  summarize(bm_tot = sum(biomass)/1000/30*10000) %>% # kg/ha, 30m^2 transects
+  summarize(bm_tot = sum(biomass)/1000/belt_area*10000) %>% # kg/ha, 30m^2 transects
   group_by(site) %>%
   summarize(bm_mean = mean(bm_tot),
             bm_se = sd(bm_tot)/sqrt(n()))
 
-# graph
-ggplot(mg_fish_site, aes(x = site, y = bm_mean)) +
+# calculating density of juveniles from 4 primary families in each transect (count) -> mean at each site
+mg_fish_site_jv <- mg_fish %>% 
+  filter(family %in% c("Lutjanidae", "Haemulidae", "Scaridae", "Sphyraenidae") & length <= 8) %>%
+  group_by(site, transect) %>%
+  summarize(dens_jv_t = n()/belt_area) %>% #indv/m2 %>%
+  group_by(site) %>%
+  summarize(dens_jv_mean = mean(dens_jv_t),
+            dens_jv_se = sd(dens_jv_t)/sqrt(n()))
+
+mg_fish_site <- mg_fish_site %>%
+  left_join(mg_fish_site_jv, by = "site")
+  
+# graphs
+
+ggplot(mg_fish_site, aes(x = bm_mean, y = dens_jv_mean, group = site, label = site)) +
+  geom_point() +
+  geom_text_repel() +
+  labs(x = expression(Total~fish~biomass~(kg~ha^-1)), y = expression(Juvenile~fish~density~(indv~m^-2))) +
+  theme_bw()
+ggsave(here("mma", "figs", "mgr_fish_scatter.png"))
+
+ggplot(mg_fish_site, aes(x = site, bm_mean, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
-  labs(x = "Site", y = "Biomass (kg/ha)") +
+  labs(x = "", y = expression(Total~fish~biomass~(kg~ha^-1))) +
   theme_bw()
 
 kable(mg_fish_site %>% select(site, bm_mean, bm_se))
+ggsave(here("mma", "figs", "mgr_fish_bm_site.png"))
+
+ggplot(mg_fish_site, aes(x = site, y = dens_jv_mean)) +
+  geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = dens_jv_mean - dens_jv_se, ymax = dens_jv_mean + dens_jv_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = Juvenile~fish~density~(indv~m^-2)) +
+  theme_bw()
+ggsave(here("mma", "figs", "mgr_fish_dens_jv_site.png"))
 ```
 
 
 ### Biomass and fish length by family and site
 ```{r}
+belt_area <- 30*1 # 30m x 1m belt transects
+
 # calculating total biomass and mean length per family at each transect -> mean at each site
 mg_fish_fam_site <- mg_fish %>% 
   expand(nesting(site, transect), family_c) %>%
@@ -170,7 +252,7 @@ mg_fish_fam_site <- mg_fish %>%
       select(site, transect, family_c, length, biomass)) %>% # can't use distinct() here because count >1 will replicate on multiple lines, so will check below to make sure rows haven't been duplicated with the left_join()
   mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>% # transects with none of a given family have 0 biomass, but length would still be NA
   group_by(site, transect, family_c) %>%
-  summarize(bm_tot = sum(biomass)/1000/30*10000, # kg/ha
+  summarize(bm_tot = sum(biomass)/1000/belt_area*10000, # kg/ha
             length = mean(length)) %>%
   group_by(site, family_c) %>%
   summarize(bm_mean = mean(bm_tot),
@@ -267,38 +349,55 @@ mg_fish_spp <- mg_fish_spp_site %>%
             length_se = sd(length_mean)/sqrt(n())) %>%
   rename(bm_mean = biomass,
          length_mean = length)
-
-# graph
-
+```
+```{r, fig.width = 3, fig.height = 4}
 ggplot(mg_fish_spp, aes(x = reorder(species_name, bm_mean), y = bm_mean)) +
   geom_col(color = "black", fill = "cadetblue3", color = "black", alpha = 0.9, stat = "identity",
            position = position_dodge()) +
   geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
                  position = position_dodge(.9)) +
   coord_flip() +
-  labs(x = "", y = "Mean biomass (kg/ha)") +
+  labs(x = "", y = expression(Biomass~(kg~ha^-1))) +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 
 kable(mg_fish_spp %>% select(species_name, bm_mean, bm_se))
+ggsave(here("mma", "figs", "mgr_fish_spp.png"))
 ```
 
-### Distribution of fish lengths (or relative abundance of juveniles?)
-* Issue here is that we have more transects for some sites than others... is there a way to scale them?
-* Need to add common names for families
-```{r}
-ggplot(mg_fish, aes(x = site, y = length)) +
-  geom_violin() +
-  theme_bw()
 
-# Density plots of lengths by family across all sites/transects?
+
+### Distribution of fish lengths (or relative abundance of juveniles?)
+* Can't use violin plots because we have substantially more transects for some sites than others... 
+* Going to separate juvenile fish (all fish under 8cm, exclude damselfish and silversides)
+```{r}
+mg_fish_jv <- mg_fish %>% 
+  filter(family %in% c("Lutjanidae", "Haemulidae", "Scaridae", "Sphyraenidae") & length <= 8) %>%
+  group_by(site, transect) %>%
+  summarize(dens_t = n()/belt_area) %>% #indv/m2 %>%
+  group_by(site) %>%
+  summarize(dens_mean = mean(dens_t),
+            dens_se = sd(dens_t)/sqrt(n()))
+  
+
+ggplot(mg_fish_jv, aes(x = site, y = dens_mean)) +
+  geom_col()
+
+```
+
+```{r, fig.width = 2.5, fig.height = 2}
+# Density plots of lengths by family across all sites to show general abundance of juveniles
 ggplot(mg_fish %>% 
-         filter(family %in% c("Acanthuridae", "Scaridae", "Haemulidae", "Lutjanidae")),
-       aes(x = length, fill = family)) +
-  geom_density(alpha = 0.4) +
-  facet_grid(rows = vars(family)) +
+         filter(family %in% c("Acanthuridae", "Scaridae", "Haemulidae", "Lutjanidae")) %>%
+         mutate(family_com = case_when(family == "Acanthuridae" ~ "Surgeonfish",
+                                      family == "Scaridae" ~ "Parrotfish",
+                                      family == "Haemulidae" ~ "Grunts",
+                                      family == "Lutjanidae" ~ "Snappers")),
+       aes(x = length)) +
+  geom_density(alpha = 0.4, fill = "paleturquoise3") +
+  facet_grid(rows = vars(family_com)) +
   labs(y = "Abundance", x = "Fish length (cm)", fill = "Family") +
   theme_bw()
-## don't really need fill colors by family...
+ggsave(here("mma", "figs", "mgr_fish_lengths.png"))
 ```
 
