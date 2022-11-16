@@ -188,6 +188,8 @@ mg_fish <- read_excel(here("mma", "data", "mma_mangroves.xlsx"), sheet = "fish")
                            phase == "i" ~ "Initial",
                            phase == "t" ~ "Terminal"),
          family_c = if_else(family %in% c("Atherinidae", "Clupeidae", "Scaridae", "Haemulidae", "Lutjanidae", "Sphyraenidae"), family, "Other")) # consolidating the number of families
+
+belt_area <- 30*1
 ```
 
 ### Total biomass and juvenile density by site
@@ -202,7 +204,7 @@ mg_fish_site <- mg_fish %>%
 
 # calculating density of juveniles from 4 primary families in each transect (count) -> mean at each site
 mg_fish_site_jv <- mg_fish %>% 
-  filter(family %in% c("Lutjanidae", "Haemulidae", "Scaridae", "Sphyraenidae") & length <= 8) %>%
+  filter(family %in% c("Lutjanidae", "Haemulidae", "Scaridae", "Sphyraenidae", "Acanthuridae") & length <= 8) %>%
   group_by(site, transect) %>%
   summarize(dens_jv_t = n()/belt_area) %>% #indv/m2 %>%
   group_by(site) %>%
@@ -211,15 +213,15 @@ mg_fish_site_jv <- mg_fish %>%
 
 mg_fish_site <- mg_fish_site %>%
   left_join(mg_fish_site_jv, by = "site")
-  
+```
+```{r}
 # graphs
-
 ggplot(mg_fish_site, aes(x = bm_mean, y = dens_jv_mean, group = site, label = site)) +
-  geom_point() +
-  geom_text_repel() +
+  geom_point(size = 2, color = "cadetblue") +
+  geom_text_repel(box.padding = .5, min.segment.length = "Inf") +
   labs(x = expression(Total~fish~biomass~(kg~ha^-1)), y = expression(Juvenile~fish~density~(indv~m^-2))) +
   theme_bw()
-ggsave(here("mma", "figs", "mgr_fish_scatter.png"))
+ggsave(here("mma", "figs", "mgr_fish_scatter.png"), height = 4.5, width = 4.5)
 
 ggplot(mg_fish_site, aes(x = site, bm_mean, y = bm_mean)) +
   geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
@@ -239,12 +241,30 @@ ggplot(mg_fish_site, aes(x = site, y = dens_jv_mean)) +
   theme_bw()
 ggsave(here("mma", "figs", "mgr_fish_dens_jv_site.png"))
 ```
+```{r}
+# baitfish biomass by site
+mg_baitfish_site <- mg_fish %>% 
+  filter(family == "Atherinidae") %>%
+  group_by(site, transect) %>%
+  summarize(bm_tot = sum(biomass)/1000/belt_area*10000) %>% # kg/ha, 30m^2 transects
+  right_join(temp <- mg_fish %>% select(site, transect) %>% distinct()) %>%
+  mutate(bm_tot = if_else(is.na(bm_tot), 0, bm_tot)) %>%
+  group_by(site) %>%
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()))
+
+ggplot(mg_baitfish_site, aes(x = site, bm_mean, y = bm_mean)) +
+  geom_col(fill = "cadetblue3", color = "black", alpha = 0.9) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Baitfish~biomass~(kg~ha^-1))) +
+  theme_bw()
+ggsave(here("mma", "figs", "mgr_baitfish.png"))
+```
 
 
 ### Biomass and fish length by family and site
 ```{r}
-belt_area <- 30*1 # 30m x 1m belt transects
-
 # calculating total biomass and mean length per family at each transect -> mean at each site
 mg_fish_fam_site <- mg_fish %>% 
   expand(nesting(site, transect), family_c) %>%
@@ -293,9 +313,9 @@ mg_fish_fam <- mg_fish_fam_site %>%
             length_se = sd(length_mean)/sqrt(n())) %>%
   rename(bm_mean = biomass,
          length_mean = length)
-
+```
+```{r}
 # graphs
-
 ggplot(mg_fish_fam %>% 
          filter(bm_mean > 0), 
        aes(x = reorder(family_c, -bm_mean), y = bm_mean)) +
@@ -351,6 +371,7 @@ mg_fish_spp <- mg_fish_spp_site %>%
          length_mean = length)
 ```
 ```{r, fig.width = 3, fig.height = 4}
+#graphs
 ggplot(mg_fish_spp, aes(x = reorder(species_name, bm_mean), y = bm_mean)) +
   geom_col(color = "black", fill = "cadetblue3", color = "black", alpha = 0.9, stat = "identity",
            position = position_dodge()) +
