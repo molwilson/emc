@@ -47,6 +47,12 @@ rf_benthic <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = 
          av_sub_yn = if_else(category_code %in% c("SAND", "HOLE", "SG", "PAVE"), "no", "yes")
          ) %>%
     filter(!is.na(cat_c) & !is.na(species)) # need GRB to fix some data errors, but using this for now
+
+n_transects <- rf_benthic %>%
+  select(site, transect) %>%
+  distinct() %>%
+  group_by(site) %>%
+  summarize(n = n())
 ```
 
 ### Percent cover by site and category
@@ -107,6 +113,10 @@ ggplot(rf_pc_cat_site,
         panel.spacing = unit(1, "lines"))
 
 kable(rf_pc_cat_site %>% select(site, category = cat_c, pc_mean, pc_se))
+kable(rf_pc_cat_site %>% 
+        group_by(cat_c) %>% 
+        summarize(pc = mean(pc_mean),
+                  se = sd(pc_mean)/sqrt(n())))
 ggsave(here("mma", "figs", "reef_benthic_pc.png"))
 ```
 
@@ -278,7 +288,7 @@ ma_index_dict <- rf_pc_spp_site %>%
 
 ggplot(ma_index_dict, aes(x = site, y = index)) +
   geom_col(fill = "darkolivegreen", color = "black", alpha = 0.9) +
-  labs(x = "", y = "Macroalgal index (Dictyota spp.)") +
+  labs(x = "", y = expression(paste("Macroalgal index (", italic("Dictyota")," spp.)"))) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("mma", "figs", "ma_index_dict.png"))
@@ -423,7 +433,7 @@ diadema_sum <- diadema %>%
   summarize(dens_mean = mean(density))
   
 diadema_mean <- tibble(dens_mean = mean(diadema_sum$dens_mean),
-                       dens_se = sd(diadema_sum$dens_mean)/sqrt(4))
+                       dens_se = sd(diadema_sum$dens_mean)/sqrt(8))
 kable(diadema_mean)
 ```
 
@@ -525,7 +535,16 @@ rf_fish_fam <- rf_fish %>%
   group_by(family_com) %>%
   summarize(bm_mean = mean(bm_site),
             bm_se = sd(bm_site)/sqrt(n())) %>%
-  mutate(family_com = factor(family_com, levels = c("Damselfish", "Grouper", "Grunts", "Parrotfish", "Snapper", "Surgeonfish", "Triggerfish", "Other")))
+  mutate(family_com = factor(family_com, levels = c("Grouper", "Snapper", "Grunts", "Parrotfish", "Surgeonfish", "Triggerfish", "Damselfish", "Other")))
+
+ggplot(rf_fish_fam, aes(x = family_com, y = bm_mean)) +
+  geom_col(fill = "cadetblue3", color = "black", alpha = 0.8) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Biomass~(kg~ha^-1))) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("mma", "figs", "reef_fish_fam.png"))
 ```
 
 
