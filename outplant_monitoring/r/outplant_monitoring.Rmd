@@ -25,31 +25,84 @@ Sys.setenv(TZ="America/Guadeloupe")
 monitoring <- read_excel(here("outplant_monitoring", "data", "Outplant data.xlsx"), sheet = "monitoring") %>%
   separate(id, into = c("species", NA), sep = 4, remove = F) %>%
   separate(id, into = c("genotype", NA), sep = 6, remove = F) %>%
+  filter(!is.na(p_survival)) %>%
+  mutate(p_survival = as.numeric(p_survival)) %>%
   mutate(species = case_when(species == "ACER" ~ "A. cervicornis",
                              species == "APRO" ~ "A. prolifera",
                              species == "APAL" ~ "A. palmata"))
 ```
 
 ```{r}
-ggplot(monitoring %>% filter(date == as.Date("2022-09-05")),
-       aes(x = id, y = p_survival*100, fill = species)) +
+# Dec. 2022 evaluations
+
+monitoring_22.12 <- monitoring %>% 
+  filter(date == as.Date("2022-12-07") | date == as.Date("2022-12-12")) %>%
+  filter(!id %in% c("APAL19", "ACER03.2", "APRO12.1", "APRO04.2", "APAL28.1", "APAL27.1", "APAL26.1", "APAL23.3")) # no data
+
+monitoring_22.12_site <- monitoring_22.12 %>%
+         mutate(site = case_when(site == "York Island" ~ "York",
+                             site == "Ten Pound Bay" ~ "Ten Pound",
+                             site == "Rickett's" ~ "Rickett's")) %>%
+         group_by(site, species) %>%
+         summarize(survival_mean = mean(p_survival*100),
+                   survival_se = sd(p_survival*100/sqrt(n())))
+
+monitoring_22.12_sum <- monitoring_22.12 %>%
+         mutate(site = case_when(site == "York Island" ~ "York",
+                             site == "Ten Pound Bay" ~ "Ten Pound",
+                             site == "Rickett's" ~ "Rickett's")) %>%
+         group_by(species) %>%
+         summarize(survival_mean = mean(p_survival*100),
+                   survival_se = sd(p_survival*100/sqrt(n())))
+
+# plots
+ggplot(monitoring_22.12, aes(x = id, y = p_survival*100, fill = species)) +
   geom_col(position = "dodge", alpha = 0.9, color = "black") +
-  labs(y = "Percent survival at 2 mo.", x = "Outplant ID", fill = "Species") +
+  labs(y = "Percent survival", x = "Outplant ID", fill = "Species") +
   scale_fill_manual(values = c("coral2", "steelblue1", "aquamarine3")) +
   lims(y = c(0,100)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.text = element_text(face = "italic"))
-ggsave(here("outplant_monitoring", "figs", "2022_sep.png"), width = 6, height = 4)
+ggsave(here("outplant_monitoring", "figs", "22.12_genotypes.png"), width = 6, height = 4)
 
-# comparing TBP vs. York
-ggplot(monitoring %>% filter(genotype %in% c("APAL13", "APAL14", "APRO04") & date == as.Date("2022-09-05")),
+ggplot(monitoring_22.12_site, aes(x = site, y = survival_mean)) +
+  geom_col(color = "black", fill = "slategray", alpha = 0.9) +
+  facet_grid(. ~ species) +
+  geom_errorbar(aes(ymin = survival_mean - survival_se, ymax = survival_mean + survival_se), width = .2,
+                 position = position_dodge(.9)) +
+  lims(y = c(0,100)) +
+  labs(y = "Percent survival", x = "") +
+  theme_bw() +
+  theme(strip.text = element_text(face = "italic"))
+ggsave(here("outplant_monitoring", "figs", "22.12_sites.png"), width = 6, height = 4)
+
+# investigating replicate genotypes
+
+replicates <- monitoring_22.12 %>%
+  group_by(genotype, site) %>%
+  summarize(count = n()) %>%
+  group_by(genotype) %>%
+  summarize(count = n()) %>%
+  filter(count == 3)
+monitoring_reps <- monitoring_22.12 %>% filter(genotype %in% c(replicates$genotype))
+
+ggplot(monitoring_reps, aes(x = genotype, y = p_survival*100, color = site)) +
+  geom_point(alpha = 0.9) +
+  scale_color_manual(values = c("skyblue3", "aquamarine3", "midnightblue")) +
+  lims(y = c(0,100)) +
+  labs(y = "Percent survival", x = "", color = "Restoration site") +
+  theme_bw()
+ggsave(here("outplant_monitoring", "figs", "22.12_reps.png"), width = 6, height = 4)
+
+
+# OG code - comparing TBP vs. York
+ggplot(monitoring_22.12 %>% filter(genotype %in% c("APAL13", "APAL14", "APRO04")),
        aes(x = genotype, y = p_survival*100)) +
   geom_col(aes(fill = site), position = "dodge", alpha = 0.9, color = "black") +
-  scale_fill_manual(values = c("steelblue1", "aquamarine3")) +
-  labs(x = "Genotype", y = "Percent survival at 2 mo.", fill = "Outplant site") +
+  scale_fill_manual(values = c("steelblue1", "aquamarine3", "gray")) +
+  labs(x = "Genotype", y = "Percent survival", fill = "Outplant site") +
   lims(y = c(0,100)) +
   theme_bw()
-ggsave(here("outplant_monitoring", "figs", "2022_sep_sites.png"), width = 6, height = 4)
 
 ```
 
