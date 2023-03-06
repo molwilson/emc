@@ -1,0 +1,285 @@
+---
+title: "Restoration site comparisons"
+author: "Molly Wilson"
+date: "2022-12-18"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+### Benthic
+
+```{r}
+# import and clean data
+
+rf_benthic <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = "benthic") %>% 
+  clean_names() %>%
+  rbind(read_excel(here("restoration_monitoring", "data", "restoration_monitoring.xlsx"), sheet = "benthic") %>%
+          clean_names() %>%
+          mutate(site = if_else(site == "Ten Pound Bay", "Ten Pound West", site)) %>%
+          select(-time)) %>%
+  filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
+  # separate(species_code, c("species_code", "indicator")) %>% # separating variables with an underscore into two columns
+  mutate(species = to_any_case(species, case = "sentence"), # this makes sure species names are correctly capitalized
+         site = to_any_case(site, case = "title"),
+         # consolidating categories here for graphs:
+         cat_c = case_when(category_code %in% c("LC", "SLC") ~ "Hard corals",
+                                  category_code %in% c("MA") ~ "Macroalgae",
+                                  category_code %in% c("TA") ~ "Turf algae",
+                                  category_code %in% c("CCA", "CCA_ND") ~ "CCA",
+                                  category_code %in% c("OINV", "SPON", "AINV", "CYAN", "PEY") ~ "Other competitors",
+                                  category_code %in% c("SAND", "HOLE", "SG", "PAVE") ~ "Other substratum"
+                                    ),
+         # adding algal type for graphs about palatability:
+         algal_type = case_when(type_code %in% c("BFMA", "GFMA", "RFMA") ~ "Fleshy macroalgae",
+                                type_code %in% c("GCMA", "RCMA") ~ "Calcareous macroalgae",
+                                type_code %in% c("TA", "TAS", "STA") ~ "Turf algae"),
+         # certain substrates are not suitable for coral or algal growth, so should not detract from percent cover
+         av_sub_yn = if_else(category_code %in% c("SAND", "HOLE", "SG", "PAVE"), "no", "yes")
+         ) %>%
+    filter(!is.na(cat_c) & !is.na(species)) # need GRB to fix some data errors, but using this for now
+
+n_transects <- rf_benthic %>%
+  select(site, transect) %>%
+  distinct() %>%
+  group_by(site) %>%
+  summarize(n = n())
+```
+
+### Percent cover by site and category
+
+```{r}
+rf_pc_cat_m <- rf_benthic %>%
+  filter(av_sub_yn == "yes") %>% # percent cover is relative to available substrate
+  expand(nesting(site, transect, meter), cat_c) %>%
+  # this is where we add in our actual data to this expanded template:
+  left_join(rf_benthic %>% 
+              filter(av_sub_yn == "yes") %>% # only looking at what is considered available substrate (no sand, etc.)
+              group_by(site, transect, meter) %>%
+              mutate(n_pts = n()) %>% # showing total number of points per meter that are considered available substrate
+              ungroup() %>%
+              group_by(site, transect, meter, n_pts, cat_c) %>%
+              summarize(pc_m = 100*n()/n_pts) %>% # n() counts the number of entries within a given group
+              ungroup() %>%
+              distinct() %>%
+              select(-n_pts), 
+            by = c("site", "transect", "meter", "cat_c")) %>%
+  mutate(pc_m = if_else(is.na(pc_m), 0, pc_m))
+
+# average these meter-level results within transect, then within sites
+rf_pc_cat_site <- rf_pc_cat_m %>%
+  group_by(site, transect, cat_c) %>%
+  summarize(pc_t = mean(pc_m)) %>%
+  ungroup() %>%
+  group_by(site, cat_c) %>%
+  summarize(n_test = n(),
+            pc_mean = mean(pc_t),
+            pc_se = sd(pc_t)/sqrt(n())
+            ) %>%
+  filter(cat_c != "Other substratum") %>% 
+  mutate(cat_c = factor(cat_c, levels = c("Hard corals", "CCA", "Macroalgae", "Turf algae", "Other competitors")))
+
+# average across non-restoration sites
+rf_pc_cat_sum <- rf_pc_cat_site %>%
+  filter(!site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
+  group_by(cat_c) %>%
+  rename(pc_site = pc_mean) %>%
+  summarize(pc_mean = mean(pc_site),
+            pc_se = sd(pc_site)/sqrt(n())
+            ) %>%
+  filter(cat_c != "Other substratum") %>% 
+  mutate(cat_c = factor(cat_c, levels = c("Hard corals", "CCA", "Macroalgae", "Turf algae", "Other competitors")))
+
+# create new dataset with restoration sites compared to overall means
+site_comp_benthic <- rf_pc_cat_site %>%
+  filter(site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
+  rbind(rf_pc_cat_sum %>%
+          mutate(site = "Other")) %>%
+  mutate(site = factor(site, levels = c("Ten Pound West", "Ricketts Reef", "York Island", "Other")))
+
+```
+
+```{r}
+cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
+ggplot(site_comp_benthic, 
+       aes(x = "cat_c", y = pc_mean, fill = cat_c)) + 
+  geom_bar(width = 1, stat = "identity", color = "black") +
+  coord_polar("y", start=0) +
+  scale_fill_manual(values = cat_palette) +
+  facet_wrap(vars(site), nrow = 1) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        panel.spacing = unit(1, "lines"))
+ggsave(here("restoration_monitoring", "figs", "selection_benthic_pc.png"))
+```
+
+### Diadema
+```{r}
+diadema <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = "inverts") %>% 
+  clean_names() %>%
+  rbind(read_excel(here("restoration_monitoring", "data", "restoration_monitoring.xlsx"), sheet = "inverts") %>%
+          clean_names() %>%
+          mutate(site = if_else(site == "Ten Pound Bay", "Ten Pound West", site))) %>%
+  select(site, transect, diadema_adult, diadema_juvenile) %>%
+  pivot_longer(cols = starts_with("diadema"),
+               names_to = "phase",
+               names_pattern = "diadema_(.*)",
+               values_to = "count")
+
+# average within sites
+diadema_site <- diadema %>%
+  group_by(site) %>%
+  summarize(density_mean = mean(count/10), # 1x10m belt
+            density_se = sd(count/10)/sqrt(n())) 
+
+# average across non-restoration sites
+diadema_sum <- diadema_site %>%
+  filter(!site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
+  rename(density_site = density_mean) %>%
+  summarize(density_mean = mean(density_site),
+            density_se = sd(density_site)/sqrt(n())
+            )
+
+# create new dataset with restoration sites compared to overall means
+site_comp_diadema <- diadema_site %>%
+  filter(site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
+  rbind(diadema_sum %>%
+          mutate(site = "Other")) %>%
+  mutate(site = factor(site, levels = c("Ten Pound West", "Ricketts Reef", "York Island", "Other")))
+
+ggplot(site_comp_diadema, aes(x = site, y = density_mean)) +
+  geom_col(fill = "black", position = "dodge") +
+  scale_fill_manual(values = c("gray10", "gray90"), name = "Phase", labels = c("Adult", "Juvenile")) +
+  geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Density~(indv.~m^-2))) +
+  theme_bw()
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("restoration_monitoring", "figs", "selection_diadema.png"), height = 4, width = 5)
+```
+
+### Fish
+
+```{r}
+# import and clean data
+
+rf_fish <- read_excel(here("mma", "data", "mma_coral_fish.xlsx"), sheet = "fish") %>% 
+  clean_names() %>%
+  rbind(read_excel(here("restoration_monitoring", "data", "restoration_monitoring.xlsx"), sheet = "fish") %>%
+          clean_names() %>%
+          mutate(site = if_else(site == "Ten Pound Bay", "Ten Pound West", site))) %>%
+  filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
+  mutate(number = if_else(is.na(number), 1, number)) %>% # all entries with no number specified were single observations
+  uncount(number) %>% # expand to replicate rows if multiple fish were recorded to look at length distributions
+  mutate(biomass = as.numeric(biomass),
+         phase_code = tolower(phase))
+
+n_transects <- rf_fish %>%
+  select(site, transect) %>%
+  distinct() %>%
+  group_by(site) %>%
+  summarize(n = n())
+
+belt_area <- 30*2 # 30m x 2m belt transects
+```
+
+#### Total biomass by site
+* Regional averages are taken from Karr et al. 2015
+* Antigua averages are taken from Camacho et al. 2020 (5921 g/m2)
+```{r}
+
+# calculating total biomass in each transect (sum) -> mean at each site
+rf_fish_site <- rf_fish %>% 
+  group_by(site, transect) %>%
+  summarize(bm_tot = sum(biomass)/1000/belt_area*10000) %>% #kg/ha
+  group_by(site) %>%
+  summarize(bm_mean = mean(bm_tot),
+            bm_se = sd(bm_tot)/sqrt(n()))
+
+# average across non-restoration sites
+rf_fish_sum <- rf_fish_site %>%
+  filter(!site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
+  rename(bm_site = bm_mean) %>%
+  summarize(bm_mean = mean(bm_site),
+            bm_se = sd(bm_site)/sqrt(n())
+            )
+
+# create new dataset with restoration sites compared to overall means
+site_comp_fish <- rf_fish_site %>%
+  filter(site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
+  rbind(rf_fish_sum %>%
+          mutate(site = "Other"))
+
+# graph
+ggplot(site_comp_fish, aes(x = site, y = bm_mean)) +
+  geom_col(fill = "cadetblue3", color = "black", alpha = 0.8) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2,
+                 position = position_dodge(.9)) +
+  geom_hline(yintercept = 1300, linetype = "dashed", color = "black") +
+  annotate("text", x = 4.5, y = 1350, size = 3, hjust = 1, label=c('Caribbean mean unfished biomass')) +
+  geom_hline(yintercept = 591, linetype = "dashed", color = "black") +
+  annotate("text", x = 4.5, y = 640, size = 3, hjust = 1, label=c('Antigua mean biomass')) +
+  labs(x = "", y = expression(Total~fish~biomass~(kg~ha^-1))) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("restoration_monitoring", "figs", "selection_fish_bm.png"), width = 3, height = 2)
+```
+
+#### Herbivore biomasses
+* Combining scarid and acanthurids
+* Antigua scarid biomass (1,189 g/100 m2) and acanthurid biomass (1,369 g/100 m2) _> sum = 2558 g/100 m2 taken from Camacho et al. 2020
+```{r}
+rf_herb_site <- rf_fish %>% 
+  filter(family %in% c("Scaridae", "Acanthuridae")) %>%
+  mutate(biomass = if_else(is.na(biomass), 0, biomass)) %>%
+  group_by(site, transect) %>%
+  summarize(bm_t = sum(biomass)/1000/belt_area*10000) %>% #kg/ha
+  group_by(site) %>%
+  summarize(bm_mean = mean(bm_t),
+            bm_se = sd(bm_t)/sqrt(n()))
+
+# average across non-restoration sites
+rf_herb_sum <- rf_herb_site %>%
+  filter(!site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
+  rename(bm_site = bm_mean) %>%
+  summarize(bm_mean = mean(bm_site),
+            bm_se = sd(bm_site)/sqrt(n())
+            )
+
+# create new dataset with restoration sites compared to overall means
+site_comp_herb <- rf_herb_site %>%
+  filter(site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
+  rbind(rf_herb_sum %>%
+          mutate(site = "Other"))
+
+ggplot(site_comp_herb, aes(x = site, y = bm_mean)) +
+  geom_col(color = "black", fill = "cadetblue3", alpha = 0.8, stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2, color = "gray40",
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Herbivore~biomass~(kg~ha^-1))) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("restoration_monitoring", "figs", "reef_herb_bm.png"), width = 3, height = 2)
+
+ggplot(rf_herb_site, aes(x = site, y = bm_mean)) +
+  geom_col(color = "black", fill = "cadetblue3", alpha = 0.8, stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = bm_mean - bm_se, ymax = bm_mean + bm_se), width = .2, color = "gray40",
+                 position = position_dodge(.9)) +
+  labs(x = "", y = expression(Herbivore~biomass~(kg~ha^-1))) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```

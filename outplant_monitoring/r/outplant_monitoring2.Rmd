@@ -1,0 +1,107 @@
+---
+title: "Outplant monitoring"
+author: "Molly Wilson"
+date: "2023-02-19"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
+library(stringr)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+## Outplant statistics
+```{r}
+outplants <- read_excel(here("restoration_monitoring", "data", "Genotype monitoring master"), sheet = "outplants") %>% 
+  clean_names() %>%
+  filter(!is.na(genotype)) %>%
+  select(date, site, genotype, id, n_frags, n_colonies) %>%
+  mutate(species = substr(genotype, 1, 4))
+
+```
+
+## Survivorship (Feb. 2023)
+```{r}
+outplant_monitoring <- read_excel(here("restoration_monitoring", "data", "genotype monitoring master.xlsx"), sheet = "Outplant monitoring") %>% 
+  clean_names() %>%
+  filter(!is.na(colonies_live)) %>% # filtering out any genotypes with missing data
+  filter(id != "APAL29.2") %>% # removing mysterious APAL29.2
+  mutate(colonies_planted = as.numeric(colonies_planted))
+
+survivorship_id <- outplant_monitoring %>%
+  pivot_longer(
+     cols = starts_with("live_c"),
+     names_to = "colony",
+     names_prefix = "live_c",
+     values_to = "survivorship",
+     values_drop_na = TRUE #  drops all colonies planted as indv (APALs and some APROs)
+  ) %>%
+  group_by(date, id) %>%
+  summarise(survivorship_col = mean(survivorship)) %>%
+  right_join(outplant_monitoring %>%
+               select(date, site, id, colonies_planted, colonies_live), by = c("date", "id")) %>%
+  mutate(survivorship_col = if_else(is.na(survivorship_col), 100, survivorship_col),
+         survivorship_pop = survivorship_col * colonies_live / colonies_planted) %>%
+  relocate(survivorship_col, .before = survivorship_pop) %>%
+  mutate(genotype = substr(id, 1, 6),
+         species = case_when(substr(id, 1, 4) == "ACER" ~ "A. cervicornis",
+                             substr(id, 1, 4) == "APRO" ~ "A. prolifera",
+                             substr(id, 1, 4) == "APAL" ~ "A. palmata"),
+         site = case_when(site == "York Island" ~ "York",
+                             site == "Ten Pound Bay" ~ "Ten Pound",
+                             site == "Ricketts" ~ "Ricketts"))
+
+# code from wide option
+# survivorship <- outplants %>%
+#   rowwise() %>% 
+#   mutate(m_withincolonies = mean(c_across(live_c1:live_c18), na.rm = TRUE))
+```
+
+### Survivorship by genotype
+```{r}
+survivorship_genotype <- survivorship_id %>%
+  group_by(genotype) %>%
+  summarise(survivorship = mean(survivorship_pop),
+            se = sd(survivorship_pop)/sqrt(n()),
+            replicates = n())
+```
+
+### Survivorship by species
+```{r}
+survivorship_spp <- survivorship_id %>%
+  group_by(species) %>%
+  summarise(survivorship = mean(survivorship_pop),
+            se = sd(survivorship_pop)/sqrt(n()),
+            replicates = n())
+
+survivorship_spp_site <- survivorship_id %>%
+  group_by(species, site) %>%
+  summarise(survivorship = mean(survivorship_pop),
+            se = sd(survivorship_pop)/sqrt(n()),
+            replicates = n())
+
+```
+
+```{r}
+ggplot(survivorship_spp_site, aes(x = site, y = survivorship)) +
+  geom_col(color = "black", fill = "slategray", alpha = 0.9) +
+  facet_grid(. ~ species) +
+  geom_errorbar(aes(ymin = survivorship - se, ymax = survivorship + se), width = .2,
+                 position = position_dodge(.9)) +
+  lims(y = c(0,100)) +
+  labs(y = "Percent survival", x = "") +
+  theme_bw() +
+  theme(strip.text = element_text(face = "italic"))
+```
+
+
+
