@@ -21,13 +21,33 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 
 ## Outplant statistics
 ```{r}
-outplants <- read_excel(here("restoration_monitoring", "data", "Genotype monitoring master"), sheet = "outplants") %>% 
+outplants <- read_excel(here("restoration_monitoring", "data", "Genotype monitoring master.xlsx"), sheet = "Outplants") %>% 
   clean_names() %>%
-  filter(!is.na(genotype)) %>%
-  select(date, site, genotype, id, n_frags, n_colonies) %>%
-  mutate(species = substr(genotype, 1, 4))
+  mutate(genotype = substr(id, 1, 6),
+         species = case_when(substr(id, 1, 4) == "ACER" ~ "A. cervicornis",
+                             substr(id, 1, 4) == "APRO" ~ "A. prolifera",
+                             substr(id, 1, 4) == "APAL" ~ "A. palmata")) %>%
+  filter(!is.na(date)) %>%
+  select(date, site, species, genotype, id, n_frags, n_colonies)
 
+frags_tot <- sum(outplants$n_frags)
+colonies_tot <- sum(outplants$n_colonies)
+genotypes_tot <- count(outplants %>%
+  distinct(genotype))
+genotypes_spp_site <- outplants %>%
+  group_by(species, site) %>%
+  distinct(genotype) %>%
+  count()
 ```
+
+Total number of fragments planted: **`r frags_tot`**
+
+Total number of colonies planted: **`r colonies_tot`**
+
+Total number of genotypes planted: **`r genotypes_tot`**
+
+Genotypes planted by species and site:
+`r kable(genotypes_spp_site)`
 
 ## Survivorship (Feb. 2023)
 ```{r}
@@ -59,20 +79,42 @@ survivorship_id <- outplant_monitoring %>%
          site = case_when(site == "York Island" ~ "York",
                              site == "Ten Pound Bay" ~ "Ten Pound",
                              site == "Ricketts" ~ "Ricketts"))
-
-# code from wide option
-# survivorship <- outplants %>%
-#   rowwise() %>% 
-#   mutate(m_withincolonies = mean(c_across(live_c1:live_c18), na.rm = TRUE))
 ```
 
 ### Survivorship by genotype
 ```{r}
 survivorship_genotype <- survivorship_id %>%
-  group_by(genotype) %>%
+  group_by(species, genotype) %>%
   summarise(survivorship = mean(survivorship_pop),
             se = sd(survivorship_pop)/sqrt(n()),
             replicates = n())
+
+ggplot(survivorship_genotype %>% filter(species == "A. palmata"), aes(x = reorder(genotype, -survivorship), y = survivorship)) +
+  geom_col(color = "black", fill = "slategray", alpha = 0.9) +
+  geom_errorbar(aes(ymin = survivorship - se, ymax = survivorship + se), width = .2,
+                 position = position_dodge(.9)) +
+  lims(y = c(0,100)) +
+  labs(y = "Percent survival", x = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(survivorship_genotype %>% filter(species == "A. prolifera"), aes(x = reorder(genotype, -survivorship), y = survivorship)) +
+  geom_col(color = "black", fill = "slategray", alpha = 0.9) +
+  geom_errorbar(aes(ymin = survivorship - se, ymax = survivorship + se), width = .2,
+                 position = position_dodge(.9)) +
+  lims(y = c(0,100)) +
+  labs(y = "Percent survival", x = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(survivorship_genotype %>% filter(species == "A. cervicornis"), aes(x = reorder(genotype, -survivorship), y = survivorship)) +
+  geom_col(color = "black", fill = "slategray", alpha = 0.9) +
+  geom_errorbar(aes(ymin = survivorship - se, ymax = survivorship + se), width = .2,
+                 position = position_dodge(.9)) +
+  lims(y = c(0,100)) +
+  labs(y = "Percent survival", x = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 ### Survivorship by species
@@ -83,15 +125,21 @@ survivorship_spp <- survivorship_id %>%
             se = sd(survivorship_pop)/sqrt(n()),
             replicates = n())
 
+ggplot(survivorship_spp, aes(x = species, y = survivorship)) +
+  geom_col(color = "black", fill = "slategray", alpha = 0.9) +
+  geom_errorbar(aes(ymin = survivorship - se, ymax = survivorship + se), width = .2,
+                 position = position_dodge(.9)) +
+  lims(y = c(0,100)) +
+  labs(y = "Percent survival", x = "") +
+  theme_bw() +
+  theme(strip.text = element_text(face = "italic"))
+
 survivorship_spp_site <- survivorship_id %>%
   group_by(species, site) %>%
   summarise(survivorship = mean(survivorship_pop),
             se = sd(survivorship_pop)/sqrt(n()),
             replicates = n())
 
-```
-
-```{r}
 ggplot(survivorship_spp_site, aes(x = site, y = survivorship)) +
   geom_col(color = "black", fill = "slategray", alpha = 0.9) +
   facet_grid(. ~ species) +
