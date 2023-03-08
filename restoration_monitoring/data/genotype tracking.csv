@@ -1,0 +1,64 @@
+"genotype","collection_site","york_locations","tpb_locations","n_trees","n_ropes","outplant_colonies","york_colonies","tpb_colonies","ricketts_colonies","survivorship","se"
+"ACER01","Exchange Bay","F4","",0,1,17,7,7,3,96.19,3.12
+"ACER02","Cervi Heaven","E6","B3, A4",0,3,39,13,17,9,81.65,9.3
+"ACER03","Little Bird Channel","A1, A2","",0,2,20,6,5,9,96.21,2.09
+"ACER04","Little Bird Channel","F3","",0,1,0,3,0,0,90,NA
+"ACER05","Little Bird Channel","C2","A8",0,2,19,5,8,6,83.08,7.9
+"ACER06","Great Bird","F3","",0,1,6,1,3,2,83.33,14.24
+"ACER07","Hells Gate","F5","",0,1,0,12,3,0,76.67,16.78
+"ACER08","Man of War","C1, D3","",0,2,19,10,4,5,94.08,2.43
+"ACER09","Hells Gate","B1, B2, A3","A6",0,4,19,7,7,5,94,3.69
+"ACER11","Hells Gate","","A10",0,1,0,0,8,0,41.25,NA
+"APAL01","Friar's Head","F6","",0,1,0,0,3,8,40.83,25.83
+"APAL02","North Green","","",0,0,0,11,0,0,91.67,NA
+"APAL03","North Green","A6","",0,1,0,0,5,5,37.5,12.5
+"APAL04","North Green","","",0,0,0,0,0,0,NA,NA
+"APAL05","North Green","B7","",1,0,0,0,0,0,NA,NA
+"APAL06","North Green","E7","",1,0,0,0,0,15,100,NA
+"APAL07","North Green","","",0,0,0,10,0,0,90.91,NA
+"APAL08","Little Bird Channel","","",0,0,0,0,0,0,NA,NA
+"APAL09","Little Bird Channel","B7","",1,0,0,0,5,0,83.33,NA
+"APAL10","Great Bird","C7","",1,0,0,0,15,14,85.42,2.08
+"APAL11","Hells Gate","D7","",1,0,0,15,0,10,77.45,10.78
+"APAL12","Hells Gate","A8","",1,0,0,17,0,14,91.4,1.93
+"APAL13","Man of War","B5, F7","A1",2,1,30,11,10,9,46.75,4.89
+"APAL14","Man of War","B8","",1,0,42,20,8,14,51.92,14.45
+"APAL15","York Island","C8","",1,0,61,20,30,11,72.83,9.48
+"APAL16","York Island","D7","",1,0,0,13,0,14,93.75,6.25
+"APAL17","Hells Gate","D9","",1,0,0,8,0,8,100,0
+"APAL18","Hells Gate","D9","",1,0,43,14,18,11,89.32,2.54
+"APAL19","Hells Gate","","",0,0,0,5,0,0,100,NA
+"APAL20","Hells Gate","C8","",1,0,0,0,0,0,NA,NA
+"APAL21","Great Bird","","",0,0,0,16,0,0,100,NA
+"APAL22","Great Bird","","",0,0,0,7,0,0,77.78,NA
+"APAL23","Great Bird","C5","",0,1,34,15,14,5,81.55,16.16
+"APAL24","Hells Gate","","A1",1,0,0,0,3,0,42.86,NA
+"APAL26","Man of War","A7","",1,0,0,32,0,10,69.23,30.77
+"APAL28","South Hells gate","","",0,0,0,0,14,0,73.68,NA
+"APRO01","North Green","F2, C4","",0,2,0,0,4,2,81.25,11.25
+"APRO02","Little Bird Channel","","",0,0,0,0,0,0,NA,NA
+"APRO03","Hells Gate","D8","",1,0,0,0,4,0,92.5,NA
+"APRO04","Hells Gate","E2, B4, C6","",0,3,70,22,33,15,77.28,8.55
+"APRO05","Man of War","C4","B9",0,2,0,13,0,5,97.37,1.09
+"APRO06","Hells Gate","D8","B5, B7",1,2,43,29,9,5,83.97,7.5
+"APRO07","Great Bird","D4","",0,1,0,4,0,14,95.36,4.64
+"APRO11","South Hells gate","","",0,0,0,0,16,0,46.71,16.86
+"APRO13","North Green","","",0,0,0,0,0,0,NA,NA
+"CNAT01","North Green","","",0,0,0,0,0,0,NA,NA
+"CNAT02","Ten Pound Bay","","",0,0,0,0,0,0,NA,NA
+"DCYL01","Maiden Island","","",0,0,0,0,0,0,NA,NA
+"DLAB01","North Green","","",0,0,0,0,0,0,NA,NA
+"DLAB02","Ten Pound Bay","","",0,0,0,0,0,0,NA,NA
+"MCAV01","Ten Pound Bay","","",0,0,0,0,0,0,NA,NA
+"OANN01","North Green","","",0,0,0,0,0,0,NA,NA
+"OANN02","Ten Pound Bay","","",0,0,0,0,0,0,NA,NA
+"OFAV01","North Green","","",0,0,0,0,0,0,NA,NA
+"OFAV02","Ten Pound Bay","","",0,0,0,0,0,0,NA,NA
+"PCLI01","Maiden Island","","",0,0,0,0,0,0,NA,NA
+"PCLI02","Long Island","","",0,0,0,0,0,0,NA,NA
+"PFUR01","Ten Pound Bay","","",0,0,0,0,0,0,NA,NA
+"PFUR02","Ten Pound Bay","","",0,0,0,0,0,0,NA,NA
+"PFUR03","North Green","","",0,0,0,0,0,0,NA,NA
+"PSTR01","North Green","","",0,0,0,0,0,0,NA,NA
+"PSTR02","Ten Pound Bay","","",0,0,0,0,0,0,NA,NA
+"PSTR03","Long Island","","",0,0,0,0,0,0,NA,NA
