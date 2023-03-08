@@ -15,13 +15,14 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferen
 
 ```{r}
 letter_names <- function(nms) LETTERS[seq_along(nms)]
-york <- read_excel(here("nursery_monitoring", "data", "nursery map.xlsx"), 
+york <- read_excel(here("nursery_monitoring", "data", "Nursery map.xlsx"), 
                   sheet = "York_Feb 2023", 
+                  range = "A1:F9",
                   col_names = FALSE, 
                   .name_repair = letter_names)
-tpb <- read_excel(here("nursery_monitoring", "data", "nursery map.xlsx"), 
+tpb <- read_excel(here("nursery_monitoring", "data", "Nursery map.xlsx"), 
                   sheet = "TPB_Feb 2023", 
-                  n_max = 10,
+                  range = "A1:B10",
                   col_names = FALSE, 
                   .name_repair = letter_names)
 
@@ -35,15 +36,15 @@ locations <- york %>% mutate(row=row_number()) %>%
   ) %>%
   mutate(nursery = "York",
          structure = case_when(str_detect(genotype, "GB") ~ "Tree",
-                               row <= 5 ~ "Rope",
-                               row > 5 ~ "Tree")
+                               row <= 6 ~ "Rope",
+                               row > 6 ~ "Tree")
            ) %>%
   rbind(tpb %>% mutate(row=row_number()) %>%
           pivot_longer(
-          cols = -row,
-          names_to = "col",
-          values_to = "genotype",
-          values_drop_na = TRUE
+              cols = -row,
+              names_to = "col",
+              values_to = "genotype",
+              values_drop_na = TRUE
       ) %>%
   mutate(nursery = "Ten Pound",
          structure = case_when(row <= 2 ~ "Tree",
@@ -52,7 +53,10 @@ locations <- york %>% mutate(row=row_number()) %>%
   unite(location, col, row, sep = "", remove = TRUE) %>%
   mutate(genotype = strsplit(as.character(genotype), " / ")) %>% 
   unnest(genotype) %>%
-  select(genotype, nursery, location, structure)
+  select(genotype, nursery, location, structure) %>%
+  filter(!str_detect(genotype, 'Empty'),
+         genotype != "Patch Reef",
+         genotype != "R")
   
-write.csv(locations, here("nursery_monitoring", "data", "genotype_locations.csv"))
+write.csv(locations, here("nursery_monitoring", "data", "genotype locations.csv"), row.names=FALSE)
 ```

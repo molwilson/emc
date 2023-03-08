@@ -1,0 +1,104 @@
+---
+title: "Genotype master"
+author: "Molly Wilson"
+date: "2023-03-08"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
+library(stringr)
+library(lubridate)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r}
+# import various datasets to merge
+collection <- read_excel(here("restoration_monitoring", "data", "Genotype monitoring master.xlsx"), sheet = "collection") %>% 
+  clean_names() %>%
+  rename(collection_site = site)
+
+nursery <- read.csv(here("nursery_monitoring", "data", "genotype locations.csv"))
+
+outplants <- read_excel(here("restoration_monitoring", "data", "Genotype monitoring master.xlsx"), sheet = "outplants") %>% 
+  clean_names() %>%
+  mutate(genotype = substr(id, 1, 6),
+         species = case_when(substr(id, 1, 4) == "ACER" ~ "A. cervicornis",
+                             substr(id, 1, 4) == "APRO" ~ "A. prolifera",
+                             substr(id, 1, 4) == "APAL" ~ "A. palmata"),
+         date = ymd(date)) %>%
+  filter(!is.na(date)) %>%
+  select(date, site, species, genotype, id, n_frags, n_colonies)
+
+outplant_monitoring <- read_excel(here("restoration_monitoring", "data", "genotype monitoring master.xlsx"), sheet = "outplant monitoring") %>% 
+  clean_names() %>%
+  filter(!is.na(colonies_live)) %>% # filtering out any genotypes with missing data
+  filter(id != "APAL29.2") %>% # removing mysterious APAL29.2
+  mutate(genotype = substr(id, 1, 6),
+         colonies_planted = as.numeric(colonies_planted),
+         date = ymd(date),
+         date_planted = ymd(date_planted))
+```
+
+```{r}
+# merging into one with all information per genotype
+
+genotype_tracking <- collection %>%
+  select(genotype, collection_site) %>%
+  left_join(nursery %>%
+              select(genotype, nursery, location) %>%
+              group_by(genotype, nursery) %>%
+              summarise(location = paste(location, collapse=", ")) %>%
+              pivot_wider(names_from = nursery, values_from = location) %>%
+              rename(york_locations = York,
+                     tpb_locations = "Ten Pound")) %>%
+  left_join(nursery %>%
+              group_by(genotype, structure) %>%
+              summarise(n = n()) %>%
+              pivot_wider(names_from = structure, values_from = n) %>%
+              rename(n_trees = Tree,
+                     n_ropes = Rope)) %>%
+  left_join(outplant_monitoring %>%
+              group_by(genotype, site) %>%
+              summarise(colonies_live = sum(colonies_live)) %>%
+              mutate(site = case_when(site == "York Island" ~ "york_colonies",
+                                      site == "Ten Pound Bay" ~ "tpb_colonies",
+                                      site == "Ricketts" ~ "ricketts_colonies")) %>%
+              pivot_wider(names_from = site, values_from = colonies_live) %>%
+              mutate(outplant_colonies = ricketts_colonies + tpb_colonies + york_colonies) %>% # live colonies
+              select(genotype, outplant_colonies, york_colonies, tpb_colonies, ricketts_colonies)) %>%
+  left_join(outplant_monitoring %>%
+              pivot_longer(
+                 cols = starts_with("live_c"),
+                 names_to = "colony",
+                 names_prefix = "live_c",
+                 values_to = "survivorship",
+                 values_drop_na = TRUE #  drops all colonies planted as indv (APALs and some APROs)
+              ) %>%
+              group_by(genotype, id) %>%
+              summarise(survivorship_col = mean(survivorship)) %>%
+              right_join(outplant_monitoring %>%
+                           select(date, site, genotype, id, date_planted, colonies_planted, colonies_live),
+                         by = c("genotype", "id")) %>%
+              mutate(survivorship_col = if_else(is.na(survivorship_col), 100, survivorship_col),
+                     survivorship_pop = survivorship_col * colonies_live / colonies_planted) %>%
+              relocate(survivorship_col, .before = survivorship_pop) %>%
+              group_by(genotype) %>%
+              summarise(survivorship = round(mean(survivorship_pop), 2),
+                        se = round(sd(survivorship_pop)/sqrt(n()), 2))) %>%
+  mutate_at(c('york_locations','tpb_locations'), ~replace_na(.,"")) %>%
+  mutate_at(c(5:10), ~replace_na(.,0)) %>%
+  arrange(genotype)
+
+write.csv(genotype_tracking, here("restoration_monitoring", "data", "genotype tracking.csv"), row.names=FALSE)
+```
+
+
