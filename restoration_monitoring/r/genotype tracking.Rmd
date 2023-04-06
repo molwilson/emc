@@ -22,13 +22,15 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 
 ```{r}
 # import various datasets to merge
-collection <- read_excel(here("restoration_monitoring", "data", "Genotype monitoring master.xlsx"), sheet = "collection") %>% 
+collection <- read_excel(here("restoration_monitoring", "data", "Genotype tracking.xlsx"), sheet = "collection") %>%
   clean_names() %>%
-  rename(collection_site = site)
+  rename(collection_site = site,
+         collection_lat = lat,
+         collection_lon = lon)
 
-nursery <- read.csv(here("nursery_monitoring", "data", "genotype locations.csv"))
+nursery <- read.csv(here("restoration_monitoring", "csvs", "nursery locations.csv"))
 
-outplants <- read_excel(here("restoration_monitoring", "data", "Genotype monitoring master.xlsx"), sheet = "outplants") %>% 
+outplants <- read_excel(here("restoration_monitoring", "data", "Genotype tracking.xlsx"), sheet = "outplants") %>% 
   clean_names() %>%
   mutate(genotype = substr(id, 1, 6),
          species = case_when(substr(id, 1, 4) == "ACER" ~ "A. cervicornis",
@@ -38,7 +40,7 @@ outplants <- read_excel(here("restoration_monitoring", "data", "Genotype monitor
   filter(!is.na(date)) %>%
   select(date, site, species, genotype, id, n_frags, n_colonies)
 
-outplant_monitoring <- read_excel(here("restoration_monitoring", "data", "genotype monitoring master.xlsx"), sheet = "outplant monitoring") %>% 
+outplant_monitoring <- read_excel(here("restoration_monitoring", "data", "genotype tracking.xlsx"), sheet = "outplant monitoring") %>% 
   clean_names() %>%
   filter(!is.na(colonies_live)) %>% # filtering out any genotypes with missing data
   filter(id != "APAL29.2") %>% # removing mysterious APAL29.2
@@ -52,7 +54,7 @@ outplant_monitoring <- read_excel(here("restoration_monitoring", "data", "genoty
 # merging into one with all information per genotype
 
 genotype_tracking <- collection %>%
-  select(genotype, collection_site) %>%
+  select(genotype, collection_site, collection_lat, collection_lon) %>%
   left_join(nursery %>%
               select(genotype, nursery, location) %>%
               group_by(genotype, nursery) %>%
@@ -95,10 +97,10 @@ genotype_tracking <- collection %>%
               summarise(survivorship = round(mean(survivorship_pop), 2),
                         se = round(sd(survivorship_pop)/sqrt(n()), 2))) %>%
   mutate_at(c('york_locations','tpb_locations'), ~replace_na(.,"")) %>%
-  mutate_at(c(5:10), ~replace_na(.,0)) %>%
+  mutate_at(c(7:12), ~replace_na(.,0)) %>%
   arrange(genotype)
 
-write.csv(genotype_tracking, here("restoration_monitoring", "data", "genotype tracking.csv"), row.names=FALSE)
+write.csv(genotype_tracking, here("restoration_monitoring", "csvs", "genotype tracking.csv"), row.names=FALSE)
 ```
 
 
