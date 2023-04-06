@@ -15,12 +15,12 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferen
 
 ```{r}
 letter_names <- function(nms) LETTERS[seq_along(nms)]
-york <- read_excel(here("nursery_monitoring", "data", "Nursery map.xlsx"), 
+york <- read_excel(here("restoration_monitoring", "data", "Nursery map.xlsx"), 
                   sheet = "York_Feb 2023", 
                   range = "A1:F9",
                   col_names = FALSE, 
                   .name_repair = letter_names)
-tpb <- read_excel(here("nursery_monitoring", "data", "Nursery map.xlsx"), 
+tpb <- read_excel(here("restoration_monitoring", "data", "Nursery map.xlsx"), 
                   sheet = "TPB_Feb 2023", 
                   range = "A1:B10",
                   col_names = FALSE, 
@@ -58,5 +58,5 @@ locations <- york %>% mutate(row=row_number()) %>%
          genotype != "Patch Reef",
          genotype != "R")
   
-write.csv(locations, here("nursery_monitoring", "data", "genotype locations.csv"), row.names=FALSE)
+write.csv(locations, here("restoration_monitoring", "data", "nursery locations.csv"), row.names=FALSE)
 ```
