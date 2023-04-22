@@ -31,6 +31,9 @@ outplants <- read_excel(here("restoration_monitoring", "data", "Genotype trackin
          species = case_when(substr(id, 1, 4) == "ACER" ~ "A. cervicornis",
                              substr(id, 1, 4) == "APRO" ~ "A. prolifera",
                              substr(id, 1, 4) == "APAL" ~ "A. palmata"),
+         species_com = case_when(substr(id, 1, 4) == "ACER" ~ "Staghorn",
+                             substr(id, 1, 4) == "APRO" ~ "Fused staghorn",
+                             substr(id, 1, 4) == "APAL" ~ "Elkhorn"),
          date = ymd(date)) %>%
   filter(!is.na(date)) %>%
   select(date, site, species, genotype, id, n_frags, n_colonies)
@@ -100,6 +103,9 @@ survivorship_id <- outplant_monitoring %>%
          species = case_when(substr(id, 1, 4) == "ACER" ~ "A. cervicornis",
                              substr(id, 1, 4) == "APRO" ~ "A. prolifera",
                              substr(id, 1, 4) == "APAL" ~ "A. palmata"),
+         species_com = case_when(substr(id, 1, 4) == "ACER" ~ "Staghorn",
+                             substr(id, 1, 4) == "APRO" ~ "Fused staghorn",
+                             substr(id, 1, 4) == "APAL" ~ "Elkhorn"),
          site = case_when(site == "York Island" ~ "York",
                              site == "Ten Pound Bay" ~ "Ten Pound",
                              site == "Ricketts" ~ "Ricketts"))
@@ -123,22 +129,22 @@ ggsave(here("restoration_monitoring", "figs", "survivorship_dens.png"))
 ## ~ species
 ```{r}
 survivorship_spp <- survivorship_id %>%
-  group_by(species) %>%
+  group_by(species, species_com) %>%
   summarise(survivorship = mean(survivorship_pop),
             se = sd(survivorship_pop)/sqrt(n()),
             replicates = n())
 
 kable(survivorship_spp)
 
-ggplot(survivorship_spp, aes(x = species, y = survivorship)) +
+ggplot(survivorship_spp, aes(x = species_com, y = survivorship)) +
   geom_col(color = "black", fill = "paleturquoise3", alpha = 0.7) +
   geom_errorbar(aes(ymin = survivorship - se, ymax = survivorship + se), width = .2,
                  position = position_dodge(.9)) +
   lims(y = c(0,100)) +
-  labs(y = "Survivorship", x = "Species") +
+  labs(y = "Outplant survivorship (%)", x = "") +
   theme_bw() +
-  theme(axis.text.x = element_text(face = "italic"))
-ggsave(here("restoration_monitoring", "figs", "survivorship_spp_col.png"))
+  theme(axis.text = element_text(size = 14), axis.title = element_text(size = 14))
+ggsave(here("restoration_monitoring", "figs", "survivorship_spp_col.png"), width = 6.5, height = 5)
 
 ggplot(survivorship_id, aes(x = survivorship_pop))+
   geom_density(alpha = 0.7, fill = "paleturquoise3") +

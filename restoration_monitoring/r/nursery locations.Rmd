@@ -16,12 +16,12 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferen
 ```{r}
 letter_names <- function(nms) LETTERS[seq_along(nms)]
 york <- read_excel(here("restoration_monitoring", "data", "Nursery map.xlsx"), 
-                  sheet = "York_Feb 2023", 
+                  sheet = "York", 
                   range = "A1:F9",
                   col_names = FALSE, 
                   .name_repair = letter_names)
 tpb <- read_excel(here("restoration_monitoring", "data", "Nursery map.xlsx"), 
-                  sheet = "TPB_Feb 2023", 
+                  sheet = "TPB", 
                   range = "A1:B10",
                   col_names = FALSE, 
                   .name_repair = letter_names)
