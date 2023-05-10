@@ -15,19 +15,22 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferen
 
 ```{r}
 letter_names <- function(nms) LETTERS[seq_along(nms)]
-york <- read_excel(here("restoration_monitoring", "data", "Nursery map.xlsx"), 
+york <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
                   sheet = "York", 
                   range = "A1:F9",
                   col_names = FALSE, 
                   .name_repair = letter_names)
-tpb <- read_excel(here("restoration_monitoring", "data", "Nursery map.xlsx"), 
+tpb <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
                   sheet = "TPB", 
                   range = "A1:B10",
                   col_names = FALSE, 
                   .name_repair = letter_names)
+genebank <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
+                  sheet = "Gene bank", 
+                  range = "A1:D25",
+                  col_names = TRUE)
 
-
-locations <- york %>% mutate(row=row_number()) %>%
+structures <- york %>% mutate(row=row_number()) %>%
   pivot_longer(
     cols = -row,
     names_to = "col",
@@ -55,8 +58,32 @@ locations <- york %>% mutate(row=row_number()) %>%
   unnest(genotype) %>%
   select(genotype, nursery, location, structure) %>%
   filter(!str_detect(genotype, 'Empty'),
+         !str_detect(genotype, 'GB'),
          genotype != "Patch Reef",
          genotype != "R")
+
+nursery_locations <- structures %>%
+              select(genotype, nursery, location) %>%
+              group_by(genotype, nursery) %>%
+              summarise(location = paste(location, collapse=", ")) %>%
+              pivot_wider(names_from = nursery, values_from = location) %>%
+              rename(york_locations = York,
+                     tpb_locations = "Ten Pound") %>%
+  left_join(structures %>%
+              group_by(genotype, structure) %>%
+              summarise(n = n()) %>%
+              pivot_wider(names_from = structure, values_from = n) %>%
+              rename(n_trees = Tree,
+                     n_ropes = Rope)) %>%
+  left_join(genebank %>%
+              pivot_longer(
+                cols = everything(),
+                names_to = "gb_location",
+                values_to = "genotype",
+                values_drop_na = TRUE
+              )) %>%
+  select(genotype, york_locations, tpb_locations, gb_location, n_ropes, n_trees)
   
-write.csv(locations, here("restoration_monitoring", "data", "nursery locations.csv"), row.names=FALSE)
+  
+write.csv(nursery_locations, here("restoration_monitoring", "data_outputs", "nursery locations.csv"), row.names=FALSE)
 ```

@@ -1,0 +1,367 @@
+---
+title: "WQ5"
+author: "Molly Wilson"
+date: '2023-04-26'
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) # for accessing files with directory
+library(readxl) # for reading indv. sheets within excel files
+library(janitor) # for cleaning variable names so they have consistent capitalization etc.
+library(lubridate) # for converting date formats
+library(zoo) # for converting date formats
+library(knitr) # for including tables
+library(ggpubr) # for printing multiple plots together
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferences for each code chunk so that errors/messages/warnings don't get displayed in the knit rmarkdown
+```
+
+```{r}
+samples <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "raw_data") %>%  
+  clean_names() %>%
+  filter(id != c("E1", "E2")) %>%
+  select(-nitrate_raw, -phosphate_raw) %>%
+  mutate(date = as.character(date),
+         month = month(ymd(date), label = TRUE),
+         year = year(ymd(date)),
+         date_label = paste(as.character(month), as.character(year)),
+         salinity = salinity/1000, # ppm -> ppt
+         tds = tds/1000, # ppm -> ppt
+         enterococci = as.numeric(replace(enterococci, enterococci == "ND", 0)),
+         temperature = as.numeric(temperature),
+         row = row_number()) %>%
+  left_join(read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sites") %>%
+  clean_names(), by = "id") %>%
+  unite(id_site, id, site, sep = " (", remove = F) %>%
+  mutate(id_site = paste0(id_site, ")"),
+         date_cat = case_when(date == "2023-04-13" ~ "April 2023",
+                              date %in% c("2021-08-11", "2022-09-06") ~ "Summer/fall samples",
+                              date %in% c("2021-04-06", "2022-04-07") ~ "Winter/spring samples"),
+         date_cat2 = if_else(date == "2023-04-13", "April 2023", "Previous samples"))
+```
+
+```{r}
+# Target ranges
+rect_dat_ph = data.frame(xmin = -Inf, xmax = Inf, ymin = 7.7, ymax = 8.5) # 7.7 and 8.5 units  (EPMA, 2019)
+rect_dat_sal = data.frame(xmin = -Inf, xmax = Inf, ymin = 32, ymax = 42) # 32,000 to 42,000 ppm (NOAA)
+rect_dat_do = data.frame(xmin = -Inf, xmax = Inf, ymin = 6, ymax = Inf) # Must be greater than 6.0 ppm  (EPMA, 2019)
+rect_dat_temp = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6) # 23°–29.6°Celsius (NOAA)
+rect_dat_ent = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 33) # (below 33, EPMA)
+
+c_range <- "slategray1" # setting color for target range in graphs
+```
+
+
+WQ1-WQ5 trends
+```{r}
+shapes_dates <- c(16, 1, 2)
+colors_dates <- c("blue", "black", "black")
+alphas_dates <- c(1, 0.3, 0.3)
+theme <- theme_bw() +
+  theme(axis.title.x = element_blank(),
+        legend.text = element_text(size = 9), 
+        legend.title = element_text(size = 10))
+
+# pH: 7.7 and 8.5 units  (EPMA, 2019)
+ph <- ggplot() +
+  geom_rect(data = rect_dat_ph, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.4) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = ph, alpha = date_cat, shape = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = "pH") +
+  ylim(5, 9) +
+  theme
+
+# TDS
+tds <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = tds, shape = date_cat, alpha = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = "TDS (ppm)") +
+  ylim(10, 60) +
+  theme
+ggsave(here("water_quality", "figs", "WQ5", "tds.png"), width = 6, height = 4)
+
+# Salinity: 32,000 to 42,000 ppm (NOAA)
+salinity <- ggplot() +
+  geom_rect(data = rect_dat_sal, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.4) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = salinity, shape = date_cat, alpha = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = "Salinity (ppt)") +
+  ylim(25, 50) +
+  theme
+ggsave(here("water_quality", "figs", "WQ5", "salinity.png"), width = 6, height = 4)
+
+# Turbidity (no reference)
+turbidity <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = turbidity, shape = date_cat, alpha = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = "Turbidity (NTU)") +
+  ylim(0, 5) +
+  theme
+ggsave(here("water_quality", "figs", "WQ5", "turbidity.png"), width = 6, height = 4)
+
+
+# DO: Must be greater than 6.0 ppm  (EPMA, 2019)
+do <- ggplot() +
+  geom_rect(data = rect_dat_do, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.4) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = do, shape = date_cat, alpha = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = "Dissolved oxygen (ppm)") +
+  ylim(0, 12) +
+  theme
+ggsave(here("water_quality", "figs", "WQ5", "do.png"), width = 6, height = 4)
+
+# Nitrates (no reference)
+nitrates <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = nitrate, shape = date_cat, alpha = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = "Nitrate (ppm)") +
+  ylim(0, 0.2) +
+  theme
+ggsave(here("water_quality", "figs", "WQ5", "nitrates.png"), width = 6, height = 4)
+
+# Phosphates (no reference)
+phosphates <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = phosphate, shape = date_cat, alpha = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = "Phosphate (ppm)") +
+  ylim(0, 0.6) +
+  theme
+ggsave(here("water_quality", "figs", "WQ5", "phosphate.png"), width = 6, height = 4)
+
+# Temperature: 23°–29.6°Celsius (NOAA)
+temperature <- ggplot() +
+  geom_rect(data = rect_dat_temp, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.4) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = temperature, shape = date_cat, alpha = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = expression("Temperature ("*~degree*C*")")) +
+  ylim(18, 32) +
+  theme
+ggsave(here("water_quality", "figs", "WQ5", "temperature.png"), width = 6, height = 4)
+
+# Conductivity (no reference)
+conductivity <- ggplot() +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = conductivity, shape = date_cat, alpha = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = expression("Conductivity ("*mu*S*" "*cm^-1*")")) +
+  ylim(10000, 60000) +
+  theme
+ggsave(here("water_quality", "figs", "WQ5", "conductivity.png"), width = 6, height = 4)
+
+# Enterococci (below 33, EPMA)
+enterococci <- ggplot() +
+  geom_rect(data = rect_dat_ent, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.4) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_point(data = filter(samples, !str_detect(id, "^S")), aes(x = id, y = enterococci, shape = date_cat, alpha = date_cat, color = date_cat)) +
+  scale_shape_manual(name = "", values = shapes_dates) +
+  scale_color_manual(name = "", values = colors_dates) +
+  scale_alpha_manual(name = "", values = alphas_dates) +
+  labs(x = "", y = expression("Enterococci (cfu 100"*ml^-1*")")) +
+  ylim(0, 35) +
+  theme
+ggsave(here("water_quality", "figs", "WQ5", "enterococci.png"), width = 6, height = 4)
+```
+
+```{r}
+ggarrange(ph, do, tds, turbidity, nitrates, phosphates, temperature, enterococci, salinity, conductivity, 
+          ncol = 2, nrow = 5, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "summary_sites.png"),  width = 6, height = 10)
+```
+
+Means and SE
+```{r}
+summary <- samples %>%
+  filter(!str_detect(id, "^S")) %>%
+  select(-c(id, type, site, month, year, row, date_label, date_cat, date_cat2)) %>%
+  mutate(enterococci = as.numeric(enterococci)) %>%
+  pivot_longer(-c(id_site, date), names_to = "metric", values_to = "value") %>%
+  group_by(metric, date) %>%
+  summarise(n = n(),
+            mean = mean(value),
+            sd = sd(value),
+            se = sd/sqrt(n))
+
+kable(summary)
+write.csv(summary, here("water_quality", "figs", "WQ5", "summary_table.csv"))
+```
+
+Summary figure
+```{r}
+theme <- theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 8))
+
+# pH: 7.7 and 8.5 units  (EPMA, 2019)
+ph_box <- ggplot() +
+  geom_rect(data = rect_dat_ph, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_boxplot(data = samples, aes(middle = mean(ph), x = reorder(date_label, row), y = ph), alpha = 0) +
+  labs(x = "", y = "pH") +
+  ylim(5, 9) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# TDS
+tds_box <- ggplot() +
+  geom_boxplot(data = samples, aes(x = reorder(date_label, row), y = tds, middle = mean(tds)), alpha = 0) +
+  labs(x = "", y = "TDS (ppm)") +
+  ylim(10, 60) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Salinity: 32,000 to 42,000 ppm (NOAA)
+salinity_box <- ggplot() +
+  geom_rect(data = rect_dat_sal, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_boxplot(data = samples, aes(x = reorder(date_label, row), y = salinity, middle = mean(salinity)), alpha = 0) +
+  labs(x = "", y = "Salinity (ppt)") +
+  ylim(25, 50) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Turbidity (no reference)
+turbidity_box <- ggplot() +
+  geom_boxplot(data = samples, aes(x = reorder(date_label, row), y = turbidity, middle = mean(turbidity)), alpha = 0) +
+  labs(x = "", y = "Turbidity (NTU)") +
+  ylim(0, 5) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# DO: Must be greater than 6.0 ppm  (EPMA, 2019)
+do_box <- ggplot() +
+  geom_rect(data = rect_dat_do, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_boxplot(data = samples, aes(x = reorder(date_label, row), y = do, middle = mean(do)), alpha = 0) +
+  labs(x = "", y = "Dissolved oxygen (ppm)") +
+  ylim(0, 12) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Nitrates (no reference)
+nitrates_box <- ggplot() +
+  geom_boxplot(data = samples, aes(x = reorder(date_label, row), y = nitrate), alpha = 0) +
+  labs(x = "", y = "Nitrate (ppm)") +
+  ylim(0, 0.2) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Phosphates (no reference)
+phosphates_box <- ggplot() +
+  geom_boxplot(data = samples, aes(x = reorder(date_label, row), y = phosphate, middle = mean(phosphate)), alpha = 0) +
+  labs(x = "", y = "Phosphate (ppm)") +
+  ylim(0, 0.6) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Temperature: 23°–29.6°Celsius (NOAA)
+temperature_box <- ggplot() +
+  geom_rect(data = rect_dat_temp, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_boxplot(data = samples, aes(x = reorder(date_label, row), y = temperature, middle = mean(temperature)), alpha = 0) +
+  labs(x = "", y = expression("Temperature ("*~degree*C*")")) +
+  ylim(18, 32) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Conductivity (no reference)
+conductivity_box <- ggplot() +
+  geom_boxplot(data = samples, aes(x = reorder(date_label, row), y = conductivity, middle = mean(conductivity)), alpha = 0) +
+  labs(x = "", y = expression("Conductivity ("*mu*S*" "*cm^-1*")")) +
+  ylim(10000, 60000) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Enterococci (below 33, EPMA)
+enterococci_box <- ggplot() +
+  geom_rect(data = rect_dat_ent, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = 0.3) +
+  scale_fill_manual(values = c_range, guide = "none") +
+  geom_boxplot(data = samples, aes(x = reorder(date_label, row), y = enterococci, middle = mean(enterococci)), alpha = 0) +
+  labs(x = "", y = expression("Enterococci (cfu 100"*ml^-1*")")) +
+  ylim(0, 35) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggarrange(ph_box, do_box, tds_box, turbidity_box, nitrates_box, phosphates_box, temperature_box, enterococci_box, salinity_box, conductivity_box, 
+          ncol = 2, nrow = 5)
+ggsave(here("water_quality", "figs", "WQ5", "summary_time.png"), width = 6, height = 10)
+```
+
+```{r}
+# Panel plots by metric
+ggarrange(ph, ph_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "pH.png"), width = 5.5, height = 3)
+
+ggarrange(do, do_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "do.png"), width = 5.5, height = 3)
+
+ggarrange(tds, tds_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "tds.png"), width = 5.5, height = 3)
+
+ggarrange(turbidity, turbidity_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "turbidity.png"), width = 5.5, height = 3)
+
+ggarrange(temperature, temperature_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "temperature.png"), width = 5.5, height = 3)
+
+ggarrange(nitrates, nitrates_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "nitrates.png"), width = 5.5, height = 3)
+
+ggarrange(phosphates, phosphates_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "phosphates.png"), width = 5.5, height = 3)
+
+ggarrange(salinity, salinity_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "salinity.png"), width = 5.5, height = 3)
+
+ggarrange(conductivity, conductivity_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "conductivity.png"), width = 5.5, height = 3)
+
+ggarrange(enterococci, enterococci_box + labs(y = ""), ncol = 2, common.legend = TRUE, legend = "bottom")
+ggsave(here("water_quality", "figs", "WQ5", "enterococci.png"), width = 5.5, height = 3)
+```

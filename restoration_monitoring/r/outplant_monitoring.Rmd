@@ -25,7 +25,7 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 
 ### Outplant statistics
 ```{r}
-outplants <- read_excel(here("restoration_monitoring", "data", "Genotype tracking.xlsx"), sheet = "outplants") %>% 
+outplants <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "outplants") %>% 
   clean_names() %>%
   mutate(genotype = substr(id, 1, 6),
          species = case_when(substr(id, 1, 4) == "ACER" ~ "A. cervicornis",
