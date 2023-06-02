@@ -75,15 +75,17 @@ outplant_activity <- outplants %>%
 
 ### Survivorship 
 ```{r}
-outplant_monitoring <- read_excel(here("restoration_monitoring", "data", "genotype tracking.xlsx"), sheet = "outplant monitoring") %>% 
+outplant_monitoring <- read_excel(here("restoration_monitoring", "data_raw", "genotype tracking.xlsx"), sheet = "outplant monitoring") %>% 
   clean_names() %>%
   filter(!is.na(colonies_live)) %>% # filtering out any genotypes with missing data
-  filter(id != "APAL29.2") %>% # removing mysterious APAL29.2
   mutate(colonies_planted = as.numeric(colonies_planted),
-         date = ymd(date),
+         date_monitored = ymd(date_monitored),
+         # if year/month is needed: format_ISO8601(ymd(date_monitored), precision = "ym"),
          date_planted = ymd(date_planted))
+test <- outplant_monitoring %>% filter(colonies_live > colonies_planted) # check data for extra colonies
 
 survivorship_id <- outplant_monitoring %>%
+  filter(date_monitored == max(outplant_monitoring$date_monitored)) %>%
   pivot_longer(
      cols = starts_with("live_c"),
      names_to = "colony",
@@ -91,11 +93,14 @@ survivorship_id <- outplant_monitoring %>%
      values_to = "survivorship",
      values_drop_na = TRUE #  drops all colonies planted as indv (APALs and some APROs)
   ) %>%
-  group_by(date, id) %>%
+  group_by(date_monitored, id) %>%
   summarise(survivorship_col = mean(survivorship)) %>%
+  # pivot_wider(names_from = date_monitored, 
+  #             values_from = survivorship_col) %>% # was using this when trying to look across different dates
   right_join(outplant_monitoring %>%
-               select(date, site, id, date_planted, colonies_planted, colonies_live), by = c("date", "id")) %>%
-  mutate(age = (date_planted %--% date) / months(1),
+               filter(date_monitored == max(outplant_monitoring$date_monitored)) %>%
+               select(date_monitored, site, id, date_planted, colonies_planted, colonies_live), by = c("date_monitored", "id")) %>%
+  mutate(age = (date_planted %--% date_monitored) / months(1),
          survivorship_col = if_else(is.na(survivorship_col), 100, survivorship_col),
          survivorship_pop = survivorship_col * colonies_live / colonies_planted) %>%
   relocate(survivorship_col, .before = survivorship_pop) %>%
