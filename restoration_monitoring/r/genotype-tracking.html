@@ -452,7 +452,7 @@ collection &lt;- read_excel(here(&quot;restoration_monitoring&quot;, &quot;data_
          collection_lat = lat,
          collection_lon = lon)
 
-nursery &lt;- read.csv(here(&quot;restoration_monitoring&quot;, &quot;data_outputs&quot;, &quot;nursery locations.csv&quot;))
+nursery_locations &lt;- read.csv(here(&quot;restoration_monitoring&quot;, &quot;data_outputs&quot;, &quot;nursery locations.csv&quot;))
 
 outplants &lt;- read_excel(here(&quot;restoration_monitoring&quot;, &quot;data_raw&quot;, &quot;Genotype tracking.xlsx&quot;), sheet = &quot;outplants&quot;) %&gt;% 
   clean_names() %&gt;%
@@ -476,19 +476,7 @@ outplant_monitoring &lt;- read_excel(here(&quot;restoration_monitoring&quot;, &q
 
 genotype_tracking &lt;- collection %&gt;%
   select(genotype, collection_site, collection_lat, collection_lon) %&gt;%
-  left_join(nursery %&gt;%
-              select(genotype, nursery, location) %&gt;%
-              group_by(genotype, nursery) %&gt;%
-              summarise(location = paste(location, collapse=&quot;, &quot;)) %&gt;%
-              pivot_wider(names_from = nursery, values_from = location) %&gt;%
-              rename(york_locations = York,
-                     tpb_locations = &quot;Ten Pound&quot;)) %&gt;%
-  left_join(nursery %&gt;%
-              group_by(genotype, structure) %&gt;%
-              summarise(n = n()) %&gt;%
-              pivot_wider(names_from = structure, values_from = n) %&gt;%
-              rename(n_trees = Tree,
-                     n_ropes = Rope)) %&gt;%
+  left_join(nursery_locations) %&gt;%
   left_join(outplant_monitoring %&gt;%
               group_by(genotype, site) %&gt;%
               summarise(colonies_live = sum(colonies_live)) %&gt;%
@@ -517,8 +505,8 @@ genotype_tracking &lt;- collection %&gt;%
               group_by(genotype) %&gt;%
               summarise(survivorship = round(mean(survivorship_pop), 2),
                         se = round(sd(survivorship_pop)/sqrt(n()), 2))) %&gt;%
-  mutate_at(c(&#39;york_locations&#39;,&#39;tpb_locations&#39;), ~replace_na(.,&quot;&quot;)) %&gt;%
-  mutate_at(c(7:12), ~replace_na(.,0)) %&gt;%
+  mutate_at(c(&#39;york_locations&#39;, &#39;tpb_locations&#39;, &#39;gb_location&#39;), ~replace_na(.,&quot;&quot;)) %&gt;%
+  mutate_at(c(&#39;n_ropes&#39;, &#39;n_trees&#39;, &#39;outplant_colonies&#39;, &#39;york_colonies&#39;, &#39;tpb_colonies&#39;, &#39;ricketts_colonies&#39;), ~replace_na(.,0)) %&gt;%
   arrange(genotype)
 
 write.csv(genotype_tracking, here(&quot;restoration_monitoring&quot;, &quot;data_outputs&quot;, &quot;genotype tracking.csv&quot;), row.names=FALSE)</code></pre>

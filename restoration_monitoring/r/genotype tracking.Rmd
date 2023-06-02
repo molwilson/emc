@@ -54,7 +54,7 @@ outplant_monitoring <- read_excel(here("restoration_monitoring", "data_raw", "ge
 # merging into one with all information per genotype
 
 genotype_tracking <- collection %>%
-  select(genotype, collection_site, collection_lat, collection_lon) %>%
+  select(genotype, collection_date = date, collection_site, collection_lat, collection_lon) %>%
   left_join(nursery_locations) %>%
   left_join(outplant_monitoring %>%
               group_by(genotype, site) %>%

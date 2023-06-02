@@ -83,6 +83,14 @@ nursery_locations <- structures %>%
                 values_drop_na = TRUE
               )) %>%
   select(genotype, york_locations, tpb_locations, gb_location, n_ropes, n_trees)
+
+temp <- genebank %>%
+              pivot_longer(
+                cols = everything(),
+                names_to = "gb_location",
+                values_to = "genotype",
+                values_drop_na = TRUE
+              )
   
   
 write.csv(nursery_locations, here("restoration_monitoring", "data_outputs", "nursery locations.csv"), row.names=FALSE)

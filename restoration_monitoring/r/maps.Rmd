@@ -22,18 +22,16 @@ library(ggnewscale) # for multiple color scales on map (with pie charts)
 
 ```
 
-1. Find base layer for Antigua
-
 ```{r}
 # Antigua shapefile (only looks ok when relatively zoomed out)
-atg <- st_read(here("restoration_monitoring", "data", "spatial", "atg_adm_2019_shp", "atg_admbnda_adm0_2019.shp")) %>%
+atg <- st_read(here("restoration_monitoring", "data_raw", "spatial", "atg_adm_2019_shp", "atg_admbnda_adm0_2019.shp")) %>%
   st_union() %>%
   st_sf() 
 
 # set lat/lon for Antigua range
 lons = c(-61.92, -61.65)
 lats = c(16.95, 17.2)
-# set lat/lon for subset range
+# set lat/lon for east subset range
 lons_east = c(-61.81, -61.65)
 lats_east = c(16.98, 17.18)
 # set lat/lon for subset range - north sound
@@ -44,20 +42,54 @@ lons_gi = c(-61.72, -61.64)
 lats_gi = c(17.03, 17.10)
 
 # collection locations
-collection <- read_excel(here("restoration_monitoring", "data", "Genotype tracking.xlsx"), sheet = "collection") %>% 
+collection <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "collection") %>% 
   clean_names() %>%
-  select(genotype, lat, lon) %>%
-  mutate(species = case_when(substr(genotype, 1, 4) == "ACER" ~ "A. cervicornis",
-                             substr(genotype, 1, 4) == "APRO" ~ "A. prolifera",
-                             substr(genotype, 1, 4) == "APAL" ~ "A. palmata")) %>%
+  select(genotype, lat, lon, date) %>%
+  mutate(species_code = substr(genotype, 1, 4),
+         species = case_when(species_code == "ACER" ~ "A. cervicornis",
+                             species_code == "APRO" ~ "A. prolifera",
+                             species_code == "APAL" ~ "A. palmata",
+                             species_code == "PFUR" ~ "P. furcata",
+                             species_code == "CNAT" ~ "C. natans",
+                             species_code == "DLAB" ~ "D. labyrinthiformis",
+                             species_code == "DCYL" ~ "D. cylindrus",
+                             species_code == "OANN" ~ "O. annularis",
+                             species_code == "OFAV" ~ "O. faveolata",
+                             species_code == "MCAV" ~ "M. cavernosa",
+                             species_code == "PSTR" ~ "P. strigosa",
+                             species_code == "PCLI" ~ "P. clivosa"),
+         month = month(date),
+         year = year(date),
+         period = case_when(year == 2021 ~ "2021-2022",
+                            year == 2022 & month <=6 ~ "2021-2022",
+                            year == 2022 & month >6 ~ "2022-2023",
+                            year == 2023 ~ "2022-2023")) %>%
   filter(!is.na(species))
 
-colors3 <- c("coral", "deepskyblue4", "goldenrod")
+colors2 <- c("cadetblue3", "goldenrod1")
+colors3 <- c("red4", "deepskyblue4", "goldenrod")
 ```
+
 ```{r}
 ggplot() +
   geom_sf(data = atg, fill = "gray80", color = "gray80") +
   geom_point(data = collection, aes(x = lon, y = lat, color = species), size = 1, alpha = 0.7, position = position_jitter(width = 0.002, height = 0.002)) +
+  #scale_color_manual(values = c(colors3)) +
+  coord_sf(xlim = lons_east, ylim = lats_east) + # setting map limits
+  annotation_scale(location = "bl", width_hint = 0.25) + # scale
+  annotation_north_arrow(location = "br", height = unit(1, "cm"), width = unit(0.5, "cm")) +
+  labs(color = "Species") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.title = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(.1, .1, .1, 0), "cm"))
+
+# acroporids only
+ggplot() +
+  geom_sf(data = atg, fill = "gray80", color = "gray80") +
+  geom_point(data = collection %>% filter(species_code %in% c("APAL", "APRO", "ACER")), aes(x = lon, y = lat, color = species), size = 1, alpha = 0.7, position = position_jitter(width = 0.002, height = 0.002)) +
   scale_color_manual(values = c(colors3)) +
   coord_sf(xlim = lons_east, ylim = lats_east) + # setting map limits
   annotation_scale(location = "bl", width_hint = 0.25) + # scale
@@ -70,6 +102,28 @@ ggplot() +
         axis.ticks = element_blank(),
         plot.margin = unit(c(.1, .1, .1, 0), "cm"))
 
+# sorted by date collected
+ggplot() +
+  geom_sf(data = atg, fill = "gray80", color = "gray80") +
+  geom_point(data = collection, aes(x = lon, y = lat, color = factor(period)), size = 1, alpha = 0.7, position = position_jitter(width = 0.002, height = 0.002)) +
+  scale_color_manual(values = c(colors2)) +
+  coord_sf(xlim = lons_east, ylim = lats_east) + # setting map limits
+  annotation_scale(location = "bl", width_hint = 0.25) + # scale
+  annotation_north_arrow(location = "br", height = unit(1, "cm"), width = unit(0.5, "cm")) +
+  labs(color = "") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.title = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.margin = unit(c(.1, .1, .1, 0), "cm"),
+        legend.position = "bottom")
+ggsave(here("restoration_monitoring", "figs", "map1.png"), width = 4, height = 4)
+```
+
+
+```{r}
+# by survivorship
 ggplot() +
   geom_sf(data = atg, fill = "gray80", color = "gray80") +
   geom_point(data = genotype_tracking %>% 
@@ -80,7 +134,7 @@ ggplot() +
              aes(x = collection_lon, y = collection_lat, color = survivorship), 
              size = 1, alpha = 0.7, position = "jitter") +
   scale_color_viridis(discrete = FALSE, direction = -1) +
-  coord_sf(xlim = lons_sub, ylim = lats_sub) + # setting map limits
+  coord_sf(xlim = lons_east, ylim = lats_east) + # setting map limits
   annotation_scale(location = "bl", width_hint = 0.25) + # scale
   annotation_north_arrow(location = "br", height = unit(1, "cm"), width = unit(0.5, "cm")) +
   labs(color = "Survivorship") +
@@ -90,8 +144,4 @@ ggplot() +
         axis.text = element_blank(),
         axis.ticks = element_blank(),
         plot.margin = unit(c(.1, .1, .1, 0), "cm"))
-ggsave(here("restoration_monitoring", "figs", "map1.png"), width = 5, height = 5)
 ```
-
-
-2. Import coordinates of frag collections
