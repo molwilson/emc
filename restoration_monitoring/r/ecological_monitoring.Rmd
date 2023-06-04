@@ -14,6 +14,8 @@ library(readxl)
 library(janitor)
 library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
 library(knitr) # for including tables
+library(lubridate)
+library(forcats) # for fct_relevel
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
@@ -23,15 +25,19 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```{r}
 # import and clean data
 
-rf_benthic <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = "benthic") %>% 
+rf_benthic <- read_excel(here("restoration_monitoring", "data_raw", "ecological monitoring.xlsx"), sheet = "benthic") %>% 
   clean_names() %>%
-  rbind(read_excel(here("restoration_monitoring", "data", "restoration_monitoring.xlsx"), sheet = "benthic") %>%
-          clean_names() %>%
-          mutate(site = if_else(site == "Ten Pound Bay", "Ten Pound West", site)) %>%
-          select(-time)) %>%
+  # which transects from OG TPB do we want to include? currently includes all, but could be 1-2
+  rename(transect_og = transect) %>%
+  unite(transect, date, transect_og, sep = "_", remove = FALSE) %>% # making sure transects don't get combined if they were surveyed on different dates (for combining TPB baseline with MMA data)
+  select(-time) %>%
   filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
   # separate(species_code, c("species_code", "indicator")) %>% # separating variables with an underscore into two columns
-  mutate(species = to_any_case(species, case = "sentence"), # this makes sure species names are correctly capitalized
+  mutate(date = ymd(date),
+         # date_mon = format_ISO8601(ymd(date), precision = "ym"),
+         monitoring = case_when(year(date) <= 2022 ~ "baseline",
+                                date %within% interval(ymd("2023-01-01"), ymd("2023-06-01")) ~ "6month"),
+         species = to_any_case(species, case = "sentence"), # this makes sure species names are correctly capitalized
          site = to_any_case(site, case = "title"),
          # consolidating categories here for graphs:
          cat_c = case_when(category_code %in% c("LC", "SLC") ~ "Hard corals",
@@ -51,9 +57,9 @@ rf_benthic <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = 
     filter(!is.na(cat_c) & !is.na(species)) # need GRB to fix some data errors, but using this for now
 
 n_transects <- rf_benthic %>%
-  select(site, transect) %>%
+  select(monitoring, site, transect) %>%
   distinct() %>%
-  group_by(site) %>%
+  group_by(monitoring, site) %>%
   summarize(n = n())
 ```
 
@@ -62,34 +68,62 @@ n_transects <- rf_benthic %>%
 ```{r}
 rf_pc_cat_m <- rf_benthic %>%
   filter(av_sub_yn == "yes") %>% # percent cover is relative to available substrate
-  expand(nesting(site, transect, meter), cat_c) %>%
+  expand(nesting(monitoring, site, transect, meter), cat_c) %>%
   # this is where we add in our actual data to this expanded template:
   left_join(rf_benthic %>% 
               filter(av_sub_yn == "yes") %>% # only looking at what is considered available substrate (no sand, etc.)
-              group_by(site, transect, meter) %>%
+              group_by(monitoring, site, transect, meter) %>%
               mutate(n_pts = n()) %>% # showing total number of points per meter that are considered available substrate
               ungroup() %>%
-              group_by(site, transect, meter, n_pts, cat_c) %>%
+              group_by(monitoring, site, transect, meter, n_pts, cat_c) %>%
               summarize(pc_m = 100*n()/n_pts) %>% # n() counts the number of entries within a given group
               ungroup() %>%
               distinct() %>%
               select(-n_pts), 
-            by = c("site", "transect", "meter", "cat_c")) %>%
+            by = c("monitoring", "site", "transect", "meter", "cat_c")) %>%
   mutate(pc_m = if_else(is.na(pc_m), 0, pc_m))
 
 # average these meter-level results within transect, then within sites
 rf_pc_cat_site <- rf_pc_cat_m %>%
-  group_by(site, transect, cat_c) %>%
+  group_by(monitoring, site, transect, cat_c) %>%
   summarize(pc_t = mean(pc_m)) %>%
   ungroup() %>%
-  group_by(site, cat_c) %>%
-  summarize(n_test = n(),
+  group_by(monitoring, site, cat_c) %>%
+  summarize(n_test = n(), # should add up to n transects
             pc_mean = mean(pc_t),
             pc_se = sd(pc_t)/sqrt(n())
             ) %>%
   filter(cat_c != "Other substratum") %>% 
   mutate(cat_c = factor(cat_c, levels = c("Hard corals", "CCA", "Macroalgae", "Turf algae", "Other competitors")))
+```
 
+```{r}
+cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
+ggplot(rf_pc_cat_site, 
+       aes(x = "cat_c", y = pc_mean, fill = cat_c)) + 
+  geom_bar(width = 1, stat = "identity", color = "black") +
+  coord_polar("y", start=0) +
+  scale_fill_manual(values = cat_palette) +
+  facet_wrap(vars(monitoring, site), nrow = 2) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        panel.spacing = unit(1, "lines"))
+# ggsave(here("restoration_monitoring", "figs", "selection_benthic_pc.png"))
+```
+
+```{r}
+# looking at changes in hard corals
+ggplot(rf_pc_cat_site, aes(x = monitoring, y = pc_mean, group = site, fill = site)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = pc_mean - pc_se, ymax = pc_mean + pc_se), width = .2,
+                 position = position_dodge(.9)) +
+  facet_grid(site ~ cat_c) +
+  theme_bw()
+```
+
+```{r, eval = F}
+# Leftover code from comparing restoration and non-restoration sites
 # average across non-restoration sites
 rf_pc_cat_sum <- rf_pc_cat_site %>%
   filter(!site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
@@ -108,9 +142,6 @@ site_comp_benthic <- rf_pc_cat_site %>%
           mutate(site = "Other")) %>%
   mutate(site = factor(site, levels = c("Ten Pound West", "Ricketts Reef", "York Island", "Other")))
 
-```
-
-```{r}
 cat_palette <- c("coral2", "pink", "darkolivegreen", "darkkhaki", "slategray3")
 ggplot(site_comp_benthic, 
        aes(x = "cat_c", y = pc_mean, fill = cat_c)) + 
@@ -127,12 +158,15 @@ ggsave(here("restoration_monitoring", "figs", "selection_benthic_pc.png"))
 
 ### Diadema
 ```{r}
-diadema <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = "inverts") %>% 
+diadema <- read_excel(here("restoration_monitoring", "data_raw", "ecological monitoring.xlsx"), sheet = "inverts") %>%
   clean_names() %>%
-  rbind(read_excel(here("restoration_monitoring", "data", "restoration_monitoring.xlsx"), sheet = "inverts") %>%
-          clean_names() %>%
-          mutate(site = if_else(site == "Ten Pound Bay", "Ten Pound West", site))) %>%
-  select(site, transect, diadema_adult, diadema_juvenile) %>%
+  rename(transect_og = transect) %>%
+  unite(transect, date, transect_og, sep = "_", remove = FALSE) %>% # making sure transects don't get combined if they were surveyed on different dates (for combining TPB baseline with MMA data)
+  mutate(date = ymd(date),
+         # date_mon = format_ISO8601(ymd(date), precision = "ym"),
+         monitoring = case_when(year(date) <= 2022 ~ "baseline",
+                                date %within% interval(ymd("2023-01-01"), ymd("2023-06-01")) ~ "6month")) %>%
+  select(monitoring, site, transect, diadema_adult, diadema_juvenile) %>%
   pivot_longer(cols = starts_with("diadema"),
                names_to = "phase",
                names_pattern = "diadema_(.*)",
@@ -140,35 +174,25 @@ diadema <- read_excel(here("mma", "data", "mma_coral_benthic.xlsx"), sheet = "in
 
 # average within sites
 diadema_site <- diadema %>%
-  group_by(site) %>%
+  group_by(monitoring, site) %>%
   summarize(density_mean = mean(count/10), # 1x10m belt
             density_se = sd(count/10)/sqrt(n())) 
 
-# average across non-restoration sites
-diadema_sum <- diadema_site %>%
-  filter(!site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
-  rename(density_site = density_mean) %>%
-  summarize(density_mean = mean(density_site),
-            density_se = sd(density_site)/sqrt(n())
-            )
-
-# create new dataset with restoration sites compared to overall means
-site_comp_diadema <- diadema_site %>%
-  filter(site %in% c("Ten Pound West", "Ricketts Reef", "York Island")) %>%
-  rbind(diadema_sum %>%
-          mutate(site = "Other")) %>%
-  mutate(site = factor(site, levels = c("Ten Pound West", "Ricketts Reef", "York Island", "Other")))
-
-ggplot(site_comp_diadema, aes(x = site, y = density_mean)) +
+ggplot(diadema_site 
+       # %>%
+       #   fct_relevel(monitoring, levels = c("basline", "6month"))
+       , 
+       aes(x = monitoring, y = density_mean)) +
   geom_col(fill = "black", position = "dodge") +
   scale_fill_manual(values = c("gray10", "gray90"), name = "Phase", labels = c("Adult", "Juvenile")) +
   geom_errorbar(aes(ymin = density_mean - density_se, ymax = density_mean + density_se), width = .2,
                  position = position_dodge(.9)) +
+  facet_wrap(. ~ site) +
   labs(x = "", y = expression(Density~(indv.~m^-2))) +
   theme_bw()
   #theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-ggsave(here("restoration_monitoring", "figs", "selection_diadema.png"), height = 4, width = 5)
+# ggsave(here("restoration_monitoring", "figs", "selection_diadema.png"), height = 4, width = 5)
 ```
 
 ### Fish
@@ -178,7 +202,7 @@ ggsave(here("restoration_monitoring", "figs", "selection_diadema.png"), height =
 
 rf_fish <- read_excel(here("mma", "data", "mma_coral_fish.xlsx"), sheet = "fish") %>% 
   clean_names() %>%
-  rbind(read_excel(here("restoration_monitoring", "data", "restoration_monitoring.xlsx"), sheet = "fish") %>%
+  rbind(read_excel(here("restoration_monitoring", "data", "ecological_monitoring.xlsx"), sheet = "fish") %>%
           clean_names() %>%
           mutate(site = if_else(site == "Ten Pound Bay", "Ten Pound West", site))) %>%
   filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data

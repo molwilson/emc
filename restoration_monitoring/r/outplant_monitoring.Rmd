@@ -179,17 +179,15 @@ Not really worth looking at now, as we have a small range in terms of outplant a
 ```{r}
 survivorship_genotype <- survivorship_id %>%
   group_by(species, genotype) %>%
-  summarise(survivorship = mean(survivorship_pop),
+  summarise(survivorship_mean = mean(survivorship_pop),
             se = sd(survivorship_pop)/sqrt(n()),
             replicates = n()) %>% 
-  arrange(-survivorship)
+  arrange(-survivorship_mean)
 
 kable(survivorship_genotype)
 ```
 
 ## ~ site
-
-Comparing all genotypes across sites makes Ten Pound look the worst, but when we look only at genotypes that we've replicated across all three sites, the trends are less obvious.
 
 ```{r}
 survivorship_spp_site <- survivorship_id %>%
