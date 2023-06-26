@@ -149,7 +149,7 @@ ggplot(survivorship_spp, aes(x = species_com, y = survivorship)) +
   labs(y = "Outplant survivorship (%)", x = "") +
   theme_bw() +
   theme(axis.text = element_text(size = 14), axis.title = element_text(size = 14))
-ggsave(here("restoration_monitoring", "figs", "survivorship_spp_col.png"), width = 6.5, height = 5)
+ggsave(here("restoration_monitoring", "figs", "survivorship_spp_col.png"), width = 6, height = 3.5)
 
 ggplot(survivorship_id, aes(x = survivorship_pop))+
   geom_density(alpha = 0.7, fill = "paleturquoise3") +
