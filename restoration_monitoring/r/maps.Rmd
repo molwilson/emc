@@ -7,6 +7,8 @@ output: html_document
 
 ```{r}
 library(tidyverse)
+library(janitor)
+library(readxl)
 library(here)
 library(sf)
 library(ggmap)

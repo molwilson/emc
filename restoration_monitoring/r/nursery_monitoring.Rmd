@@ -1,0 +1,89 @@
+---
+title: "Nursery monitoring"
+author: "Molly Wilson"
+date: "2023-09-02"
+output: html_document
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
+library(stringr)
+library(lubridate)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r}
+nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
+  clean_names() %>%
+  mutate(date = ymd(date),
+         species = case_when(substr(genotype, 1, 4) == "ACER" ~ "A. cervicornis",
+                             substr(genotype, 1, 4) == "APRO" ~ "A. prolifera",
+                             substr(genotype, 1, 4) == "APAL" ~ "A. palmata",
+                             substr(genotype, 1, 4) == "PFUR" ~ "P. furcata",
+                             substr(genotype, 1, 4) == "OANN" ~ "O. annularis"),
+         )
+  filter(!is.na(date)) %>%
+  filter(!str_detect(genotype, "/")) %>% # remove if genotype was not specified
+  select(date, nursery, genotype, structure_location, condition, level_affected)
+
+nursery_structures <- read.csv(here("restoration_monitoring", "data_outputs", "nursery locations.csv")) %>%
+  mutate_at(c('n_trees', 'n_ropes'), ~replace_na(.,0)) %>%
+  mutate(n_structures = n_trees + n_ropes,
+         species = case_when(substr(genotype, 1, 4) == "ACER" ~ "A. cervicornis",
+                             substr(genotype, 1, 4) == "APRO" ~ "A. prolifera",
+                             substr(genotype, 1, 4) == "APAL" ~ "A. palmata",
+                             substr(genotype, 1, 4) == "PFUR" ~ "P. furcata",
+                             substr(genotype, 1, 4) == "OANN" ~ "O. annularis")) %>%
+  select(genotype, species, n_structures)
+```
+
+Graphs could be...
+- number of high/low incidences (relative to number of structures) by genotype
+
+```{r}
+disease_genotype <- nursery_mon %>%
+  filter(!str_detect(structure_location, "^ST|^DT|^Cotton|^Deep") & condition == "disease" & level_affected == "high (>50%)") %>%
+  filter(!str_detect(genotype, "/")) %>%
+  left_join(nursery_structures, by = "genotype") %>%
+  filter(!is.na(level_affected)) %>%
+  group_by(genotype, n_structures) %>% # can add level_affected here
+  summarize(outbreaks = n()) %>%
+  mutate(outbreaks_per_structure = outbreaks/n_structures) %>%
+  filter(!is.na(outbreaks_per_structure)) %>%
+  right_join(nursery_structures, by = c("genotype", "n_structures")) %>%
+  mutate_at('outbreaks_per_structure', ~replace_na(.,0)) %>%
+  mutate(species = case_when(substr(genotype, 1, 4) == "ACER" ~ "A. cervicornis",
+                             substr(genotype, 1, 4) == "APRO" ~ "A. prolifera",
+                             substr(genotype, 1, 4) == "APAL" ~ "A. palmata",
+                             substr(genotype, 1, 4) == "PFUR" ~ "P. furcata",
+                             substr(genotype, 1, 4) == "OANN" ~ "O. annularis"),
+         )
+
+disease_spp <- nursery_mon %>%
+  filter(!str_detect(structure_location, "^ST|^DT|^Cotton|^Deep") & condition == "disease" & level_affected == "high (>50%)") %>%
+  group_by(species) %>%
+  summarize(outbreaks = n()) %>%
+  left_join(nursery_structures %>%
+              group_by(species) %>%
+              summarize(tot_structures = sum(n_structures))) %>%
+  mutate(outbreaks_per_structure = outbreaks/tot_structures) %>%
+  filter(!is.na(outbreaks_per_structure))
+
+
+ggplot(data = disease_spp, 
+       aes(x = species, y = outbreaks_per_structure)) +
+  geom_col(color = "black", fill = "goldenrod", alpha = 0.8) +
+  labs(y = "Outbreaks per nursery structure", x = "") +
+  theme_bw() +
+  theme(axis.text.x = element_text(face = "italic"))
+ggsave(here("restoration_monitoring", "figs", "RTL_2023.png"), width = 5.5, height = 3)
+  
+```
+
+
