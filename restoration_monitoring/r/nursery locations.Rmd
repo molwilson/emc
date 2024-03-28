@@ -26,9 +26,12 @@ tpb <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx")
                   col_names = FALSE, 
                   .name_repair = letter_names)
 genebank <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
-                  sheet = "Gene bank", 
-                  range = "A1:D25",
+                  sheet = "Gene banks",
                   col_names = TRUE)
+plugs_tiles <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
+                  sheet = "Plugs and tiles", 
+                  col_names = TRUE) %>%
+  select(genotype, nursery, location, structure)
 
 structures <- york %>% mutate(row=row_number()) %>%
   pivot_longer(
@@ -39,8 +42,8 @@ structures <- york %>% mutate(row=row_number()) %>%
   ) %>%
   mutate(nursery = "York",
          structure = case_when(str_detect(genotype, "GB") ~ "Tree",
-                               row <= 6 ~ "Rope",
-                               row > 6 ~ "Tree")
+                               row <= 3 ~ "Rope",
+                               row > 3 ~ "Tree")
            ) %>%
   rbind(tpb %>% mutate(row=row_number()) %>%
           pivot_longer(
@@ -49,9 +52,9 @@ structures <- york %>% mutate(row=row_number()) %>%
               values_to = "genotype",
               values_drop_na = TRUE
       ) %>%
-  mutate(nursery = "Ten Pound",
-         structure = case_when(row <= 2 ~ "Tree",
-                               row > 2 ~ "Rope")
+  mutate(nursery = "TPB",
+         structure = case_when(row <= 4 ~ "Tree",
+                               row > 4 ~ "Rope")
            )) %>%
   unite(location, col, row, sep = "", remove = TRUE) %>%
   mutate(genotype = strsplit(as.character(genotype), " / ")) %>% 
@@ -59,8 +62,11 @@ structures <- york %>% mutate(row=row_number()) %>%
   select(genotype, nursery, location, structure) %>%
   filter(!str_detect(genotype, 'Empty'),
          !str_detect(genotype, 'GB'),
-         genotype != "Patch Reef",
-         genotype != "R")
+         !str_detect(genotype, 'BC'),
+         genotype != "T",
+         genotype != "R") %>%
+  rbind(plugs_tiles) %>%
+  filter(!is.na(genotype))
 
 nursery_locations <- structures %>%
               select(genotype, nursery, location) %>%
@@ -68,30 +74,20 @@ nursery_locations <- structures %>%
               summarise(location = paste(location, collapse=", ")) %>%
               pivot_wider(names_from = nursery, values_from = location) %>%
               rename(york_locations = York,
-                     tpb_locations = "Ten Pound") %>%
+                     tpb_locations = "TPB") %>%
   left_join(structures %>%
               group_by(genotype, structure) %>%
               summarise(n = n()) %>%
               pivot_wider(names_from = structure, values_from = n) %>%
               rename(n_trees = Tree,
-                     n_ropes = Rope)) %>%
-  left_join(genebank %>%
-              pivot_longer(
-                cols = everything(),
-                names_to = "gb_location",
-                values_to = "genotype",
-                values_drop_na = TRUE
-              )) %>%
-  select(genotype, york_locations, tpb_locations, gb_location, n_ropes, n_trees)
-
-temp <- genebank %>%
-              pivot_longer(
-                cols = everything(),
-                names_to = "gb_location",
-                values_to = "genotype",
-                values_drop_na = TRUE
-              )
-  
+                     n_ropes = Rope)
+            ) %>%
+  full_join(genebank %>%
+              unite("gb_location", nursery:location)
+              ) %>%
+  select(genotype, york_locations, tpb_locations, gb_location, n_ropes, n_trees) %>%
+  mutate_at(c('york_locations', 'tpb_locations', 'gb_location'), ~replace_na(.,"")) %>%
+  mutate_at(c('n_ropes', 'n_trees'), ~replace_na(.,0))
   
 write.csv(nursery_locations, here("restoration_monitoring", "data_outputs", "nursery locations.csv"), row.names=FALSE)
 ```
