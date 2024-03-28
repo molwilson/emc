@@ -33,6 +33,9 @@ nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype t
   
 ```
 
+Summarizing results from the 2024 bleaching event
+- survorship
+- something indicating bleaching susceptibility?
 ```{r}
 n_tot <- nursery_mon %>% # total number of fragments on 09/25
   filter(date == "2023-09-25") %>%

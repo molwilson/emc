@@ -46,7 +46,7 @@ outplant_monitoring <- read_excel(here("restoration_monitoring", "data_raw", "ge
   filter(id != "APAL29.2") %>% # removing mysterious APAL29.2
   mutate(genotype = substr(id, 1, 6),
          colonies_planted = as.numeric(colonies_planted),
-         date = ymd(date),
+         date_monitored = ymd(date_monitored),
          date_planted = ymd(date_planted))
 ```
 
@@ -76,7 +76,7 @@ genotype_tracking <- collection %>%
               group_by(genotype, id) %>%
               summarise(survivorship_col = mean(survivorship)) %>%
               right_join(outplant_monitoring %>%
-                           select(date, site, genotype, id, date_planted, colonies_planted, colonies_live),
+                           select(date_monitored, site, genotype, id, date_planted, colonies_planted, colonies_live),
                          by = c("genotype", "id")) %>%
               mutate(survivorship_col = if_else(is.na(survivorship_col), 100, survivorship_col),
                      survivorship_pop = survivorship_col * colonies_live / colonies_planted) %>%
@@ -86,7 +86,10 @@ genotype_tracking <- collection %>%
                         se = round(sd(survivorship_pop)/sqrt(n()), 2))) %>%
   mutate_at(c('york_locations', 'tpb_locations', 'gb_location'), ~replace_na(.,"")) %>%
   mutate_at(c('n_ropes', 'n_trees', 'outplant_colonies', 'york_colonies', 'tpb_colonies', 'ricketts_colonies'), ~replace_na(.,0)) %>%
-  arrange(genotype)
+  arrange(genotype) %>%
+  mutate(active = case_when((york_locations == "") & (tpb_locations == "") & (gb_location == "") ~ "N",
+         .default = "Y")) %>%
+  select(genotype, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, gb_location, active) # removing outplant results for now until we start outplanting again
 
 write.csv(genotype_tracking, here("restoration_monitoring", "data_outputs", "genotype tracking.csv"), row.names=FALSE)
 ```
