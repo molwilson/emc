@@ -128,6 +128,13 @@ outplant_monitoring <- read_excel(here("restoration_monitoring", "data_raw", "ge
          date_monitored = ymd(date_monitored),
          date_planted = ymd(date_planted))
 ```
+Nursery monitoring data
+
+```{r}
+
+thermtol_2023 <- read.csv(here("restoration_monitoring", "data_outputs", "thermtol_2023.csv"))
+```
+
 Integrating information by genotype
 
 ```{r}
@@ -136,6 +143,7 @@ Integrating information by genotype
 genotype_tracking <- collection %>%
   select(genotype, collection_date = date, collection_site, collection_lat, collection_lon) %>%
   left_join(nursery_locations) %>%
+  left_join(thermtol_2023) %>%
   left_join(outplant_monitoring %>%
               group_by(genotype, site) %>%
               summarise(colonies_live = sum(colonies_live)) %>%
@@ -169,7 +177,7 @@ genotype_tracking <- collection %>%
   arrange(genotype) %>%
   mutate(active = case_when((york_locations == "") & (tpb_locations == "") & (gb_location == "") ~ "N",
          .default = "Y")) %>%
-  select(genotype, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, gb_location, active) # removing outplant results for now until we start outplanting again
+  select(genotype, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, gb_location, survivorship_bl2023 = survivorship, min_thermtol_bl2023 = min_thermtolerance, active) # removing outplant results for now until we start outplanting again
 
 write.csv(genotype_tracking, here("restoration_monitoring", "data_outputs", "genotype tracking.csv"), row.names=FALSE)
 ```
