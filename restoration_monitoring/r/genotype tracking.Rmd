@@ -1,7 +1,7 @@
 ---
 title: "Genotype master"
 author: "Molly Wilson"
-date: "2023-03-08"
+date: "2024-03-28"
 output: 
   html_document:
     code_folding: hide
@@ -20,6 +20,87 @@ library(lubridate)
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
+Nursery locations
+```{r}
+letter_names <- function(nms) LETTERS[seq_along(nms)]
+york <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
+                  sheet = "York", 
+                  range = "A1:F9",
+                  col_names = FALSE, 
+                  .name_repair = letter_names)
+tpb <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
+                  sheet = "TPB", 
+                  range = "A1:B10",
+                  col_names = FALSE, 
+                  .name_repair = letter_names)
+genebank <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
+                  sheet = "Gene banks",
+                  col_names = TRUE)
+plugs_tiles <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
+                  sheet = "Plugs and tiles", 
+                  col_names = TRUE) %>%
+  select(genotype, nursery, location, structure)
+
+structures <- york %>% mutate(row=row_number()) %>%
+  pivot_longer(
+    cols = -row,
+    names_to = "col",
+    values_to = "genotype",
+    values_drop_na = TRUE
+  ) %>%
+  mutate(nursery = "York",
+         structure = case_when(str_detect(genotype, "GB") ~ "Tree",
+                               row <= 3 ~ "Rope",
+                               row > 3 ~ "Tree")
+           ) %>%
+  rbind(tpb %>% mutate(row=row_number()) %>%
+          pivot_longer(
+              cols = -row,
+              names_to = "col",
+              values_to = "genotype",
+              values_drop_na = TRUE
+      ) %>%
+  mutate(nursery = "TPB",
+         structure = case_when(row <= 4 ~ "Tree",
+                               row > 4 ~ "Rope")
+           )) %>%
+  unite(location, col, row, sep = "", remove = TRUE) %>%
+  mutate(genotype = strsplit(as.character(genotype), " / ")) %>% 
+  unnest(genotype) %>%
+  select(genotype, nursery, location, structure) %>%
+  filter(!str_detect(genotype, 'Empty'),
+         !str_detect(genotype, 'GB'),
+         !str_detect(genotype, 'BC'),
+         genotype != "T",
+         genotype != "R") %>%
+  rbind(plugs_tiles) %>%
+  filter(!is.na(genotype))
+
+nursery_locations <- structures %>%
+              select(genotype, nursery, location) %>%
+              group_by(genotype, nursery) %>%
+              summarise(location = paste(location, collapse=", ")) %>%
+              pivot_wider(names_from = nursery, values_from = location) %>%
+              rename(york_locations = York,
+                     tpb_locations = "TPB") %>%
+  left_join(structures %>%
+              group_by(genotype, structure) %>%
+              summarise(n = n()) %>%
+              pivot_wider(names_from = structure, values_from = n) %>%
+              rename(n_trees = Tree,
+                     n_ropes = Rope)
+            ) %>%
+  full_join(genebank %>%
+              unite("gb_location", nursery:location)
+              ) %>%
+  select(genotype, york_locations, tpb_locations, gb_location, n_ropes, n_trees) %>%
+  mutate_at(c('york_locations', 'tpb_locations', 'gb_location'), ~replace_na(.,"")) %>%
+  mutate_at(c('n_ropes', 'n_trees'), ~replace_na(.,0))
+  
+write.csv(nursery_locations, here("restoration_monitoring", "data_outputs", "nursery locations.csv"), row.names=FALSE)
+```
+
+Collection and outplant data
 ```{r}
 # import various datasets to merge
 collection <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "collection") %>%
@@ -27,8 +108,6 @@ collection <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tr
   rename(collection_site = site,
          collection_lat = lat,
          collection_lon = lon)
-
-nursery_locations <- read.csv(here("restoration_monitoring", "data_outputs", "nursery locations.csv"))
 
 outplants <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "outplants") %>% 
   clean_names() %>%
@@ -49,6 +128,7 @@ outplant_monitoring <- read_excel(here("restoration_monitoring", "data_raw", "ge
          date_monitored = ymd(date_monitored),
          date_planted = ymd(date_planted))
 ```
+Integrating information by genotype
 
 ```{r}
 # merging into one with all information per genotype

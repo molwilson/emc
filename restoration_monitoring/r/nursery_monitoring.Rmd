@@ -16,9 +16,8 @@ library(stringr)
 library(lubridate)
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
-```
 
-```{r}
+
 nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
   clean_names() %>%
   mutate(date = ymd(date),
@@ -30,12 +29,9 @@ nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype t
          ) %>%
   filter(!is.na(date)) %>%
   mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased'), ~replace_na(.,0))
-  
 ```
 
 Summarizing results from the 2024 bleaching event
-- survorship
-- something indicating bleaching susceptibility?
 ```{r}
 n_tot <- nursery_mon %>% # total number of fragments on 09/25
   filter(date == "2023-09-25") %>%
@@ -67,19 +63,32 @@ ggplot(therm_stress_time,
   labs(y = "Percent of fragments", x = "Date", fill = "Condition") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-# ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_04.12.23.png"), width = 12, height = 5)
-
-
-
 ```
 
+Genotype-specific results of the 2024 bleaching event
+- survivorship
+- % therm tolerant (no bleaching or paling) out of living fragments
 ```{r}
+int_bleaching_2023 <- interval(ymd("2023-09-01"), ymd("2023-12-10")) # date range for investigation of 2023 bleaching
+
+temp2 <- nursery_mon %>%
+  filter(date == "2023-09-25") %>%
+  group_by(genotype) %>%
+  summarize(n_og = sum(n_healthy + n_dead + n_bleached + n_pale + n_diseased + n_other)) %>%
+  right_join(nursery_mon %>%
+               filter(date %within% int_bleaching_2023) %>%
+               group_by(genotype, date) %>%
+               summarize(n_healthy = sum(n_healthy), n_bleached = sum(n_bleached), n_pale = sum(n_pale),  n_dead = sum(n_dead), n_diseased = sum(n_diseased))) %>%
+  mutate(p_thermtolerant = n_healthy / n_og) %>% # should this include diseased/other?
+  group_by(genotype) %>%
+  summarize(min_thermtolerance = min(p_thermtolerant))
+
 therm_stress_geno <- nursery_mon %>%
-  filter(date == "2023-09-25" & !location %in% c("C1", "D1", "E1", "F1")) %>%
+  filter(date == "2023-09-25" & !location %in% c("C1", "D1", "E1", "F1")) %>% # excluding genebanks
   mutate(n_og = n_healthy + n_dead + n_bleached + n_pale + n_diseased) %>%
   select(nursery, location, genotype, n_og) %>%
   left_join(nursery_mon %>%
-              filter(date == "2023-12-04") %>% # comparing to most December 2023 data collection
+              filter(date == "2023-12-04") %>% # comparing to December 2023 data collection
               select(nursery, location, genotype, n_healthy, n_bleached, n_pale, n_diseased), 
             by = c("nursery", "location", "genotype")) %>%
   mutate_at(c('n_healthy', 'n_bleached', 'n_pale', 'n_diseased'), ~replace_na(.,0)) %>%
