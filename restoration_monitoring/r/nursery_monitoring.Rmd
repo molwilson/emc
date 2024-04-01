@@ -28,7 +28,7 @@ nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype t
                              substr(genotype, 1, 4) == "OANN" ~ "O. annularis"),
          ) %>%
   filter(!is.na(date)) %>%
-  mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased'), ~replace_na(.,0))
+  mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased', 'n_other'), ~replace_na(.,0))
 ```
 
 Summarizing results from the 2024 bleaching event
@@ -68,10 +68,17 @@ ggplot(therm_stress_time,
 Genotype-specific results of the 2024 bleaching event
 - survivorship
 - % therm tolerant (no bleaching or paling) out of living fragments
+
+Notes for future improvement:
+- currently doesn't distinguish between heat-related death vs. disease, etc.
+- more checks and balances to ensure that no data collected doesn't equate to 0 corals
+- how to account for times when structures are fluffled, etc. (i.e., number of fragments increase)
+- disease monitoring can be ongoing - and relative to actual number of fragments, while bleaching monitoring would only occur in the fall (when structures are not refragged etc?)
+
 ```{r}
 int_bleaching_2023 <- interval(ymd("2023-09-01"), ymd("2023-12-10")) # date range for investigation of 2023 bleaching
 
-temp2 <- nursery_mon %>%
+thermtol_geno_date <- nursery_mon %>%
   filter(date == "2023-09-25") %>%
   group_by(genotype) %>%
   summarize(n_og = sum(n_healthy + n_dead + n_bleached + n_pale + n_diseased + n_other)) %>%
@@ -79,10 +86,33 @@ temp2 <- nursery_mon %>%
                filter(date %within% int_bleaching_2023) %>%
                group_by(genotype, date) %>%
                summarize(n_healthy = sum(n_healthy), n_bleached = sum(n_bleached), n_pale = sum(n_pale),  n_dead = sum(n_dead), n_diseased = sum(n_diseased))) %>%
-  mutate(p_thermtolerant = n_healthy / n_og) %>% # should this include diseased/other?
-  group_by(genotype) %>%
-  summarize(min_thermtolerance = min(p_thermtolerant))
+  mutate(p_thermtolerant = n_healthy / n_og) 
 
+thermtol_geno <- thermtol_geno_date %>%
+  group_by(genotype) %>%
+  summarize(min_thermtolerance = min(p_thermtolerant)) %>% # need to figure out PCLI01 issue
+  left_join(thermtol_geno_date %>%
+              filter(date == "2023-12-04") %>%
+              mutate(survivorship = n_healthy / n_og) %>%
+              select(genotype, survivorship)
+            ) %>%
+  mutate(survivorship = replace_na(survivorship, 0))
+write.csv(thermtol_geno, here("restoration_monitoring", "data_outputs", "thermtol_2023.csv"), row.names=FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+# archive...
 therm_stress_geno <- nursery_mon %>%
   filter(date == "2023-09-25" & !location %in% c("C1", "D1", "E1", "F1")) %>% # excluding genebanks
   mutate(n_og = n_healthy + n_dead + n_bleached + n_pale + n_diseased) %>%
