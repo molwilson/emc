@@ -131,7 +131,19 @@ outplant_monitoring <- read_excel(here("restoration_monitoring", "data_raw", "ge
 Nursery monitoring data
 
 ```{r}
+nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
+  clean_names() %>%
+  mutate(date = ymd(date),
+         species = case_when(substr(genotype, 1, 4) == "ACER" ~ "A. cervicornis",
+                             substr(genotype, 1, 4) == "APRO" ~ "A. prolifera",
+                             substr(genotype, 1, 4) == "APAL" ~ "A. palmata",
+                             substr(genotype, 1, 4) == "PFUR" ~ "P. furcata",
+                             substr(genotype, 1, 4) == "OANN" ~ "O. annularis"),
+         ) %>%
+  filter(!is.na(date)) %>%
+  mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased', 'n_other'), ~replace_na(.,0))
 
+disease <- read.csv(here("restoration_monitoring", "data_outputs", "disease.csv"))
 thermtol_2023 <- read.csv(here("restoration_monitoring", "data_outputs", "thermtol_2023.csv"))
 ```
 
@@ -144,6 +156,7 @@ genotype_tracking <- collection %>%
   select(genotype, collection_date = date, collection_site, collection_lat, collection_lon) %>%
   left_join(nursery_locations) %>%
   left_join(thermtol_2023) %>%
+  left_join(disease) %>%
   left_join(outplant_monitoring %>%
               group_by(genotype, site) %>%
               summarise(colonies_live = sum(colonies_live)) %>%
@@ -177,9 +190,45 @@ genotype_tracking <- collection %>%
   arrange(genotype) %>%
   mutate(active = case_when((york_locations == "") & (tpb_locations == "") & (gb_location == "") ~ "N",
          .default = "Y")) %>%
-  select(genotype, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, gb_location, survivorship_bl2023 = survivorship, min_thermtol_bl2023 = min_thermtolerance, active) # removing outplant results for now until we start outplanting again
+  select(genotype, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, gb_location, mean_infection, survivorship_bl2023 = survivorship, min_thermtol_bl2023 = min_thermtolerance, active) # removing outplant results for now until we start outplanting again
 
 write.csv(genotype_tracking, here("restoration_monitoring", "data_outputs", "genotype tracking.csv"), row.names=FALSE)
 ```
+
+Summary data
+```{r, eval = F}
+summary <- cbind(genotype_tracking %>%
+                             filter(active == "Y") %>%
+                             summarize(n_genotypes = n()), 
+                 genotype_tracking %>%
+                           filter(active == "Y") %>%
+                           mutate(species = substr(genotype, 1, 4)) %>%
+                           distinct(species) %>%
+                           summarize(n_species = n()), 
+                 nursery_mon %>% 
+                   filter(date == last(date)) %>% # most recent date
+                   select(n_healthy, n_diseased, n_bleached, n_pale, n_other) %>%
+                   pivot_longer(cols = n_healthy:n_diseased, 
+                                names_to = "condition", values_to = "n_frags") %>%
+                   summarize(n_frags = sum(n_frags))
+                 )
+
+write.csv(summary, here("restoration_monitoring", "data_outputs", "summary.csv"), row.names=FALSE)
+
+# interval summaries
+# q3 <- interval(ymd("2024-01-01"), ymd("2024-03-31"))
+# n_genotypes_active_q3 <- collection %>%
+#   filter(date %within% q3) %>%
+#   select(genotype) %>%
+#   left_join(nursery_mon %>% 
+#               filter(date == "2024-03-25") %>%
+#               mutate(n_tot = n_healthy + n_diseased + n_bleached + n_pale) %>%
+#               select(genotype, n_tot)) # last monitoring date in Q3
+# 
+# q3_genotypes <- q3_additions %>% 
+#   select(genotype) %>%
+#   distinct()
+```
+
 
 
