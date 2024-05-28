@@ -7,7 +7,7 @@ output:
     code_folding: hide
 ---
 
-Notes - removed conductivy data because there was no data on these from the lab
+Notes - removed conductivity data because there was no data on these from the lab
 
 
 ```{r, message = F, warning = F, echo = F}

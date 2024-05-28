@@ -97,7 +97,7 @@ nursery_locations <- structures %>%
   mutate_at(c('york_locations', 'tpb_locations', 'gb_location'), ~replace_na(.,"")) %>%
   mutate_at(c('n_ropes', 'n_trees'), ~replace_na(.,0))
   
-write.csv(nursery_locations, here("restoration_monitoring", "data_outputs", "nursery locations.csv"), row.names=FALSE)
+write.csv(nursery_locations, here("restoration_monitoring", "data_outputs", "nursery_locations.csv"), row.names=FALSE)
 ```
 
 Collection and outplant data
@@ -192,10 +192,11 @@ genotype_tracking <- collection %>%
          .default = "Y")) %>%
   select(genotype, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, gb_location, mean_infection, survivorship_bl2023 = survivorship, min_thermtol_bl2023 = min_thermtolerance, active) # removing outplant results for now until we start outplanting again
 
-write.csv(genotype_tracking, here("restoration_monitoring", "data_outputs", "genotype tracking.csv"), row.names=FALSE)
+write.csv(genotype_tracking, here("restoration_monitoring", "data_outputs", "genotype_tracking.csv"), row.names=FALSE)
 ```
 
 Summary data
+
 ```{r, eval = F}
 summary <- cbind(genotype_tracking %>%
                              filter(active == "Y") %>%
@@ -213,7 +214,28 @@ summary <- cbind(genotype_tracking %>%
                    summarize(n_frags = sum(n_frags))
                  )
 
+summary_spp <- nursery_mon %>% 
+  filter(date == last(date)) %>% # most recent date
+  mutate(species = substr(genotype, 1, 4)) %>%
+  select(species, n_healthy, n_diseased, n_bleached, n_pale, n_other) %>%
+  pivot_longer(cols = n_healthy:n_diseased, 
+               names_to = "condition", values_to = "n_frags") %>%
+  group_by(species) %>%
+  summarize(n_frags = sum(n_frags))
+
 write.csv(summary, here("restoration_monitoring", "data_outputs", "summary.csv"), row.names=FALSE)
+
+genotypes_acroporid <- genotype_tracking %>%
+  mutate(species = substr(genotype, 1, 4)) %>%
+  filter(active == "Y" & species %in% c("APAL", "ACER", "APRO")) %>%
+  group_by(species) %>%
+  summarize(n_genotypes = n())
+
+genotypes_boulder <- genotype_tracking %>%
+  mutate(species = substr(genotype, 1, 4)) %>%
+  filter(active == "Y" & !species %in% c("APAL", "ACER", "APRO", "PFUR", "PDIV")) %>%
+  group_by(species) %>%
+  summarize(n_genotypes = n())
 
 # interval summaries
 # q3 <- interval(ymd("2024-01-01"), ymd("2024-03-31"))
