@@ -14,23 +14,36 @@ library(lubridate) # for converting date formats
 library(zoo) # for converting date formats
 library(knitr) # for including tables
 library(ggpubr) # for printing multiple plots together
+library(sf)
+library(ggmap)
+library(ggspatial)
+library(fuzzyjoin)
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferences for each code chunk so that errors/messages/warnings don't get displayed in the knit rmarkdown
 ```
 
 ```{r}
-
+# import data
 sites <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sites") %>% 
-  clean_names()
-precip <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "precipitation") %>% 
-  clean_names()
-entero <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "enterococcus") %>% 
   clean_names()
 ysi <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi") %>% 
   rename_with(tolower) %>% # prevents clean_names() from adding extra underscores before caps
   clean_names() %>%
+  mutate(site_code = if_else(site_code == "Corington", "COV",
+                             if_else(site_code == "greenhEB", "GEB",
+                                     site_code
+                               ))) %>%
   rename(site_code_depth = site_code) %>%
-  filter(as.character(date) != "2023-10-05") # incomplete/aborted day
+  filter(as.character(date) != "2023-10-05") # removing incomplete/aborted day
+entero <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "enterococcus") %>% 
+  clean_names()
+boats <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "boat activity") %>% 
+  clean_names() %>%
+  mutate(site_code = if_else(site_code == "GIA/LBI", "GIA", site_code)) # coding merged GIA/LBI sites as GIA for now
+precip <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "precipitation") %>% 
+  clean_names() %>%
+  right_join(data.frame(date = seq(ymd('2023-10-10'), as.Date(today()), by='day'))) %>%
+  mutate(precipitation_in = replace_na(precipitation_in, 0))
 
 wq_data <- ysi %>%
   select(date, site_code_depth, temperature_c = temperature_c_24, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu) %>%
@@ -42,26 +55,30 @@ wq_data <- ysi %>%
   mutate(site_code = str_replace(site_code_depth, "[:digit:]", ""),
          depth_m = parse_number(site_code_depth),
          depth_m = replace_na(depth_m, 1)) %>% # surface-only sites are assumed to be approx 1m
-           # str_sub(site_code_depth, start = -1L, end = -1L)) %>%
   left_join(sites, by = c("site_code")) %>%
   left_join(entero, by = c("date", "site_code")) %>%
+  left_join(boats, by = c("date", "site_code")) %>%
   mutate(n_colonies = replace_na(n_colonies, 0),
-         date = as.character(date),
+         entero_yn = if_else(n_colonies == 0, "Absent",
+                             if_else(n_colonies > 0, "Present", "NA")),
+         n_boats = replace_na(n_boats, 0),
          month = month(ymd(date), label = TRUE),
          year = year(ymd(date)),
          date_label = paste(as.character(month), as.character(year)),
-         date_cat = if_else(month %in% c("Dec", "Jan", "Feb", "Mar", "Apr", "May"), "High season", "Low season"),
+         date_cat = if_else(month %in% c("Dec", "Jan", "Feb", "Mar", "Apr"), "High season", "Low season"),
          site_cat = if_else(site_code %in% c("YIE", "GIE"), "Control", "Treatment")
          ) %>%
-  select(date, date_label, date_cat, site_code_depth, site_code, depth_m, site_name, site_cat, temperature_c, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu, turbidity_fnu, n_colonies) 
+  mutate(date_label = if_else(as.character(date) == "2024-04-29", "May 2024", date_label)) %>%
+  select(date, date_label, date_cat, site_code_depth, site_code, depth_m, site_name, site_cat, latitude, longitude, n_boats, temperature_c, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu, turbidity_fnu, n_colonies) %>%
+  distinct()
 
+# streamlining data for graphs to include only regularly monitored sites and 1m depth
+data_mon <- wq_data %>%
+  filter(site_code %in% c("NBRB", "NBRM", "EC", "NBA", "LBI", "GIA", "ML", "RBA", "GOE", "TPBN", "GIE", "YIE", "DB", "MRCH", "COV", "GEB", "FHB", "YIN", "BDB", "LDB", "MRYC") & depth_m == 1)
+# GEB currently combined as Exchange Bay - Club Hotel, also omitting EBB/EBBW, YRS, RRS
+### need to organize dates from north-south
 ```
-Need to create metrics for precipitation
-- amount of rain in 24hrs / 48 hrs prior
-- ratio of rain 1 week prior vs. month prior?
-```{r}
 
-```
 
 
 ```{r}
@@ -75,14 +92,6 @@ line_dat_temp_bleaching = 30.63 # 30.63C bleaching threshold (NOAA)
 rect_dat_ent = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 7) # below 7/100mL (EPA)
 
 c_range <- "slategray1" # setting color for target range in graphs
-  
-# shapes_dates <- c(16, 1, 2)
-# colors_dates <- c("blue", "black", "black", "black")
-# alphas_dates <- c(1, 0.3, 0.3, 0.3)
-theme <- theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, h = 1),
-        legend.text = element_text(size = 9), 
-        legend.title = element_text(size = 10))
 ```
 
 Plot wish list:
@@ -91,55 +100,174 @@ Plot wish list:
 - x = site, y = metric, color = date
 - plot results on a map???
 - x = time, y = metric, multiple lines per site
+- map with enterococcus by season?
 
 ```{r}
-# creating list of regularly monitored sites (keep GEB?) 
-# still need to clean a few site names etc. (e.g., sites from Amy's visits), but omitting those here
-# should we remove boom sites to have less going on in exchange bay, or combine/compile?
-# almost want to separate sites relevant to MRC/human impacts, and sites relevant to restoration to keep things streamlined
-sites_monitoring <- c("NBRB", "NBRM", "EC", "NBA", "LBI", "GIA", "ML", "RBA", "RRS", "GOE", "TPBN", "GIE", "YIE", "DB", "MRCH", "EBBW", "COV", "GEB", "EBB", "FHB", "YIN", "YRS", "BDB", "LDB", "MRYC")
+# writing formulas for standard graphs
+flipped_point <- function(data, y, ylab) { # parameters with no reference boxes
+  ggplot(data, 
+             aes(site_name, {{y}}, color = date_cat)) +
+  geom_point(alpha = 0.6) +
+  labs(x = "", y = ylab, color = "Season") +
+  theme_bw() +
+  coord_flip()
+}
 
-# color dates by season?
-# classify control sites?
-
-ggplot() +
-  geom_rect(data = rect_dat_ph, 
+flipped_point_ref <- function(data1, data2, y, ylab) {
+  ggplot() +
+  geom_rect(data = data1, 
               aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
               alpha = 0.4) +
   scale_fill_manual(values = c_range, guide = "none") +
-  geom_point(data = filter(wq_data, 
-                           site_code %in% c(sites_monitoring) & depth_m == 1), 
-             aes(x = site_name, y = ph)) +
-  labs(x = "", y = "pH") +
-  ylim(7.5, 9) +
-  theme +
+  geom_point(data = data2, 
+             aes(site_name, {{y}}, color = date_cat),
+             alpha = 0.6) +
+  labs(x = "", y = ylab, color = "Season") +
+  theme_bw() +
   coord_flip()
+}
 
-# flipped point plot play
-ggplot() +
-  geom_point(data = filter(wq_data, 
-                           site_code %in% c(sites_monitoring)), 
-             aes(x = site_name, y = chlorophyll_rfu, color = date_cat)) +
-  labs(x = "", y = "Chlorophyll a") +
-  theme +
-  coord_flip()
+flipped_point_ref(rect_dat_ph, data_mon, ph, "pH")
+flipped_point_ref(rect_dat_turb, data_mon, turbidity_fnu, "Turbidity (FNU)")
+flipped_point_ref(rect_dat_do, data_mon, do_mg_l, expression("Dissolved oxygen (mg "*L^-1*")"))
+flipped_point_ref(rect_dat_ent, data_mon, n_colonies, expression("Enterococcus (colonies "*mL^-1*")"))
+flipped_point(data_mon, chlorophyll_rfu, "Chlorophyll a (RFU)")
+flipped_point(data_mon, phycoerythrin_rfu, "Phycoerythrin (RFU)")
+```
 
-ggplot() +
-  geom_point(data = filter(wq_data, 
-                           site_code %in% c(sites_monitoring)), 
-             aes(x = site_name, y = n_colonies, color = date_cat),
-             alpha = 0.3) +
-  labs(x = "", y = "Enterococcus colonies") +
-  theme +
-  coord_flip()
 
+```{r, eval = F}
 # line plot play
+
+point_date <- function(data, y, ylab) {
+  ggplot(data, 
+         aes(as.Date(date), {{y}}, color = site_cat)) +
+    geom_point(alpha = 0.5) +
+    labs(x = "", y = ylab, color = "") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+point_date(data_mon, n_colonies, expression("Enterococcus (colonies "*mL^-1*")"))
+# add line for average of control vs treatment...? coastal/anchorage/control?
+```
+
+
+```{r}
+# dual y attempts
+
+scale = .01 # relates y axis 1 with y axis 2
+
+point_precip <- function(data, y, ylab, scale) {
+  ggplot() +
+    geom_point(data = data, 
+               aes(x = date, y = {{y}}),
+               color = "salmon") +
+    geom_line(data = precip,
+               aes(x = date, y = precipitation_in/scale),
+              color = "black") +
+    scale_y_continuous(
+      name = ylab,
+      sec.axis = sec_axis(~.*scale, name = "Precipitation (in/day)")
+  ) +
+    labs(x = "") +
+    theme_bw()
+}
+
+point_precip(data_mon, n_colonies, expression("Enterococcus (colonies "*mL^-1*")"), 0.01)
+point_precip(data_mon, turbidity_fnu, "Turbidity (FNU)", .1)
+```
+
+Boat play
+```{r}
+ggplot(data_mon %>% filter(site_code %in% c("GIA", "RBA", "NBA", "GOE")), 
+       aes(x = n_boats, y = n_colonies)) +
+  geom_point(color = "slategray", alpha = 0.8) +
+  labs(x = "Number of boats in anchorage", y = expression("Enterococcus (colonies "*mL^-1*")"), 0.01) +
+  theme_bw()
+```
+
+
+Precipitation play
+
+```{r}
 ggplot() +
-  geom_line(data = filter(wq_data, 
-                           site_code %in% c(sites_monitoring) & depth_m == 1), 
-             aes(x = date, y = ph, group = site_name, color = site_cat)) +
-  labs(x = "", y = "ph") +
-  theme
+  geom_line(data = precip, 
+             aes(x = date, y = precipitation_in)) +
+  labs(x = "", y = "Precipitation (inches)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# trying to calculate the amount of rainfall preceding a testing day
+ysi_dates <- ysi %>%
+  select(date) %>%
+  distinct() # need to clarify which dates were actual monitoring days
+
+precip_wk <- ysi %>%
+  select(end_date = date) %>%
+  distinct() %>%
+  mutate(start_date = end_date - days(7)) %>%
+  mutate(period = interval(ymd(start_date), ymd(end_date))) %>% # find a way to label this
+  fuzzy_left_join(precip, by = c("start_date" = "date", "end_date" = "date"),
+                          match_fun = list(`<=`, `>=`)) %>%
+  group_by(period) %>%
+  summarize(precip_wkprior = sum(precipitation_in))
+
+precip_48hr <- ysi %>%
+  select(end_date = date) %>%
+  distinct() %>%
+  mutate(start_date = end_date - days(2)) %>%
+  mutate(period = interval(ymd(start_date), ymd(end_date))) %>% # find a way to label this
+  fuzzy_left_join(precip, by = c("start_date" = "date", "end_date" = "date"),
+                          match_fun = list(`<=`, `>=`)) %>%
+  group_by(period) %>%
+  summarize(precip_wkprior = sum(precipitation_in))
+  
+```
+
+
+Map play
+```{r}
+# Antigua shapefile
+atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
+  st_union() %>%
+  st_sf()
+
+# set lat/lon for target range
+lons = c(-61.72, -61.65)
+lats = c(17.04, 17.10)
+
+# enterococcus data formatting
+enterococcus <- wq_data %>%
+  filter(site_code %in% c(sites_mon) & depth_m == 1) %>%
+  select(date, date_label, site_code, n_colonies) %>% # need to switch months with two tests
+  distinct() %>%
+  mutate(entero_yn = if_else(n_colonies == 0, "Absent",
+                             if_else(n_colonies > 0, "Present", "NA")))
+
+ggplot() +
+  geom_sf(data = atg, fill = "slategray", color = "slategray") + # ATG basemap
+  coord_sf(xlim = lons, ylim = lats, expand = FALSE) + # setting map limits
+  geom_point(data_mon %>%
+               left_join(sites, by = "site_code"), 
+             mapping = aes(x = longitude, y = latitude, color = entero_yn, size = n_colonies), 
+             alpha = 1) + # add sites
+  scale_color_manual(values = c("turquoise", "tomato")) +
+  # facet_wrap(. ~ fct_reorder(date_label, .x = date)) +
+  facet_wrap(. ~ factor(date_label, levels = c("Oct 2023", "Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024"))) +
+  labs(size = expression("Colonies "*mL^-1),
+       color = "Enterococcus detection") +
+  theme_bw() +
+  theme(axis.title = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+ggsave(here("water_quality", "figs", "2023-2024", "entero_map.png"), width = 10, height = 8)
+```
+
+Sargassum play
+```{r}
 
 ```
+
+
 
