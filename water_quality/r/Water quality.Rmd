@@ -134,22 +134,50 @@ flipped_point_ref(rect_dat_ent, data_mon, n_colonies, expression("Enterococcus (
 flipped_point(data_mon, chlorophyll_rfu, "Chlorophyll a (RFU)")
 flipped_point(data_mon, phycoerythrin_rfu, "Phycoerythrin (RFU)")
 ```
+```{r}
+# basic graphs over time by site
 
-
-```{r, eval = F}
-# line plot play
-
-point_date <- function(data, y, ylab) {
-  ggplot(data, 
+point_time <- function(y, ylab) {
+  ggplot(data_mon, 
          aes(as.Date(date), {{y}}, color = site_cat)) +
     geom_point(alpha = 0.5) +
     labs(x = "", y = ylab, color = "") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 }
-point_date(data_mon, n_colonies, expression("Enterococcus (colonies "*mL^-1*")"))
+point_time(data_mon, n_colonies, expression("Enterococcus (colonies "*mL^-1*")"))
 # add line for average of control vs treatment...? coastal/anchorage/control?
+
+line_time <- function(y, ylab) {
+  ggplot() +
+   geom_line(data = data_mon,
+            aes(x = date, y = {{y}}, group = site_code)) +
+   scale_x_datetime(date_breaks = "1 month",
+                   date_labels = "%b") +
+   labs(x = "", y = ylab) +
+   theme_bw()
+}
+line_time(ph, "pH") # need to remove GEB?
 ```
+
+
+```{r}
+# temperature
+
+ggplot() +
+  # geom_rect(data = rect_dat_temp,
+  #             aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+  #             alpha = 0.4) +
+  geom_hline(yintercept = line_dat_temp_bleaching, color = "salmon", linetype = "dashed") +
+  # scale_fill_manual(values = c_range, guide = "none") +
+  geom_line(data = data_mon,
+            aes(x = date, y = temperature_c, group = site_code)) +
+  scale_x_datetime(date_breaks = "1 month",
+                   date_labels = "%b") +
+  labs(x = "", y = expression("Temperature ("*~degree*C*")")) +
+  theme_bw()
+```
+
 
 
 ```{r}
@@ -266,6 +294,18 @@ ggsave(here("water_quality", "figs", "2023-2024", "entero_map.png"), width = 10,
 
 Sargassum play
 ```{r}
+sites_sarg <- c("EBB", "EBBW", "YIE", "GIE")
+sarg <- function(y, ylab) {
+  ggplot(wq_data %>% filter(site_code %in% sites_sarg),
+       aes(x = date, y = {{y}})) +
+    geom_point(aes(color = as.character(depth_m))) +
+    facet_grid(. ~ site_cat) +
+    theme_bw()
+}
+
+sarg(ph, "pH")
+sarg(do_mg_l, "DO")
+sarg(turbidity_fnu, "Turbidity (FNU)")
 
 ```
 
