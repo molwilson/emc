@@ -2,10 +2,16 @@
 title: "Water quality testing"
 author: "Molly Wilson"
 date: "2024-05-10"
-output:
+output: 
   html_document:
+    toc: true
     code_folding: hide
+    number_sections: false
+    theme: cerulean
+    highlight: haddock
 ---
+
+### Set-up code
 
 ```{r setup, include=FALSE}
 library(tidyverse)
@@ -16,6 +22,7 @@ library(lubridate) # for converting date formats
 library(zoo) # for converting date formats
 library(knitr) # for including tables
 library(ggpubr) # for printing multiple plots together
+library(gginnards) # for reordering layers within ggplots
 library(sf)
 library(ggmap)
 library(ggspatial)
@@ -24,10 +31,13 @@ library(fuzzyjoin)
 knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferences for each code chunk so that errors/messages/warnings don't get displayed in the knit rmarkdown
 ```
 
+#### Importing, cleaning, and merging datasets
+
 ```{r}
 # import data
 sites <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sites") %>% 
   clean_names()
+
 ysi <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi") %>% 
   rename_with(tolower) %>% # prevents clean_names() from adding extra underscores before caps
   clean_names() %>%
@@ -36,17 +46,22 @@ ysi <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), 
                                      site_code
                                ))) %>%
   rename(site_code_depth = site_code) %>%
-  filter(as.character(date) != "2023-10-05") # removing incomplete/aborted day
+  filter(as.character(date) != "2023-10-05" # removing incomplete/aborted day 
+          & as.character(time) != 	c("1899-12-31 11:38:13", 	"1899-12-31 14:45:28", "1899-12-31 09:41:43", "1899-12-31 09:29:43")) # removing duplicate samples
+
 entero <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "enterococcus") %>% 
   clean_names()
+
 boats <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "boat activity") %>% 
   clean_names() %>%
   mutate(site_code = if_else(site_code == "GIA/LBI", "GIA", site_code)) # coding merged GIA/LBI sites as GIA for now
+
 precip <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "precipitation") %>% 
   clean_names() %>%
   right_join(data.frame(date = seq(ymd('2023-10-10'), as.Date(today()), by='day'))) %>%
   mutate(precipitation_in = replace_na(precipitation_in, 0))
 
+# merge site, ysi, enterococcus, boat, and precipitation data into one dataset
 wq_data <- ysi %>%
   select(date, site_code_depth, temperature_c = temperature_c_24, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu) %>%
   drop_na() %>%
@@ -74,7 +89,7 @@ wq_data <- ysi %>%
   select(date, date_label, date_cat, site_code_depth, site_code, depth_m, site_name, site_cat, latitude, longitude, n_boats, temperature_c, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu, turbidity_fnu, n_colonies, entero_yn) %>%
   distinct()
 
-# streamlining data for graphs to include only regularly monitored sites and 1m depth
+# streamlining data for graphs to include only regularly monitored sites at 1m depth
 data_mon <- wq_data %>%
   filter(site_code %in% c("NBRB", "NBRM", "EC", "NBA", "LBI", "GIA", "ML", "RBA", "GOE", "TPBN", "GIE", "YIE", "DB", "MRCH", "COV", "GEB", "FHB", "YIN", "BDB", "LDB", "MRYC") & depth_m == 1) %>% # GEB currently combined as Exchange Bay - Club Hotel, also omitting EBB/EBBW, YRS, RRS
   mutate(site_name = factor(site_name, levels = c("Emerald Cove", 
@@ -98,36 +113,63 @@ data_mon <- wq_data %>%
                                                   "Offshore - Green Island E", 
                                                   "Offshore - York Island E"))) %>%
   mutate(site_name = fct_rev(site_name)) # flipped axis plot needs reversed order
-### need to organize dates from north-south
+
+# test for sites/depths where multiple samples were taken
+test_duplicates <- data_mon %>%
+  group_by(date, site_code, depth_m) %>%
+  summarize(count = n()) %>%
+  filter(count > 1)
 ```
 
+##### Setting target references, plotting ranges, and parameter labels for graphs
 
 ```{r}
-# Target ranges
-date_min <- min(data_mon$date) # earliest sampling date
-date_max <- max(data_mon$date) # most recent sampling date
+# pH
+lab_ph <- "pH"
+ref_ph = data.frame(xmin = -Inf, xmax = Inf, ymin = 7.7, ymax = 8.5)
+lab_ref_ph <- "Target range (Rogers et al. 2001)"
+ylims_ph <- c((min(data_mon$ph, na.rm = T) - .7), 9)
 
-ref_ph = data.frame(xmin = -Inf, xmax = Inf, ymin = 7.7, ymax = 8.5) # 7.5 and 8.4 units  (Rogers et al., 2001)
-ref_sal = data.frame(xmin = -Inf, xmax = Inf, ymin = 32, ymax = 42) # 32,000 to 42,000 ppm (NOAA)
-ref_turb = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 2) # <2 NTU (EPA)
-ref_do = data.frame(xmin = -Inf, xmax = Inf, ymin = 6, ymax = Inf) # Must be greater than 6.0 ppm  (EPMA, 2019)
-ref_temp = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6) # 23°–29°Celsius (Coral Reef Alliance)
-ref_temp_bleaching = 30.63 # 30.63C bleaching threshold (NOAA)
-ref_ent = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 7) # below 7/100mL (EPA)
-
-ylims_ph <- c((min(data_mon$ph, na.rm = T) - 1), 9)
+# turbidity
+lab_turb <- "Turbidity (FNU)"
+ref_turb = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 2)
+lab_ref_turb <- "Target range (EPA)"
 ylims_turb <- c((min(data_mon$turbidity_fnu, na.rm = T) - 1), (max(data_mon$turbidity_fnu, na.rm = T) + 1))
+
+# do
+lab_do <- expression("Dissolved oxygen (mg "*L^-1*")")
+ref_do = data.frame(xmin = -Inf, xmax = Inf, ymin = 6, ymax = Inf)
+lab_ref_do <- "Target range (EPMA 2019)"
 ylims_do <- c((min(data_mon$do_mg_l, na.rm = T) - 1), (max(data_mon$do_mg_l, na.rm = T) + 1))
+
+# temp
+lab_temp <- expression("Temperature ("*~degree*C*")")
+ref_temp = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6)
+lab_ref_temp <- "Target range (Coral Reef Alliance)"
+ref_temp_bleaching = 30.63
+lab_ref_temp_bleaching <- "Bleaching threshold (NOAA)"
 ylims_temp <- c(22, (max(data_mon$temperature_c, na.rm = T) + 1))
-ylims_phyco <- c((min(data_mon$phycoerythrin_rfu, na.rm = T) - 1), (max(data_mon$phycoerythrin_rfu, na.rm = T) + 1))
-ylims_chlor <- c((min(data_mon$chlorophyll_rfu, na.rm = T) - 1), (max(data_mon$chlorophyll_rfu, na.rm = T) + 1))
+
+# enterococcus
+lab_entero <- expression(paste(italic("Enterococcus" ), " spp. (colonies "*mL^-1*")"))
+ref_entero = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 7/100) # below 7/100mL (EPA)
+lab_ref_entero <- "Target range (EPA)"
 ylims_entero <- c(0, (max(data_mon$n_colonies, na.rm = T) + 10))
 
+# phycoerythrin
+lab_phyco <- "Phycoerythrin (RFU)"
+ylims_phyco <- c((min(data_mon$phycoerythrin_rfu, na.rm = T) - 1), (max(data_mon$phycoerythrin_rfu, na.rm = T) + 1))
+
+# chlorophyll a
+lab_chlor <- expression(paste("Chlorophyll ", italic("a")))
+ylims_chlor <- c((min(data_mon$chlorophyll_rfu, na.rm = T) - 1), (max(data_mon$chlorophyll_rfu, na.rm = T) + 1))
+
+# aesthetics for reference rectangles
 c_range <- "gray20" # setting color for target range in graphs
 a_range <- 0.2 # setting alpha (transparency) for target range in graphs
 ```
 
-Writing formulas for standard graph types
+#### Writing functions for graph types
 
 ```{r}
 # flipped point plots by site, with and without reference boxes
@@ -162,16 +204,21 @@ flpoint_site_ref <- function(ref_data, data_wq, y, ylab, ylims) {
 
 line_time <- function(data_wq, y, ylab, ylims) {
   ggplot() +
-    geom_line(data = data_wq,
-            aes(x = date, y = {{y}}, group = site_code, color = site_cat)) +
-    geom_point(data = data_wq,
-            aes(x = date, y = {{y}}, group = site_code, color = site_cat)) +
+    geom_line(data = data_wq %>%
+                arrange(desc(site_cat)),
+            aes(x = date, y = {{y}}, group = site_code, color = site_cat),
+            alpha = 0.9) +
+    geom_point(data = data_wq %>%
+                arrange(desc(site_cat)),
+            aes(x = date, y = {{y}}, group = site_code, color = site_cat),
+            alpha = 0.9) +
     scale_color_manual(values = c("black", "lightblue")) +
     scale_x_datetime(date_breaks = "2 months",
                    date_labels = "%b %Y") +
-    labs(x = "", y = ylab) +
+    labs(x = "", y = ylab, color = "") +
     ylim(ylims) +
-    theme_bw()
+    theme_bw() +
+    theme(legend.position = "top")
 }
 
 line_time_ref <- function(data_ref, lab_ref, data_wq, y, ylab, ylims) {
@@ -180,102 +227,143 @@ line_time_ref <- function(data_ref, lab_ref, data_wq, y, ylab, ylims) {
               aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), ymin = ymin, ymax = ymax, fill = lab_ref),
               alpha = a_range) +
     scale_fill_manual(values = c_range) +
-    geom_line(data = data_wq,
-            aes(x = date, y = {{y}}, group = site_code),
-            color = "lightblue3") +
-    geom_point(data = data_wq,
-            aes(x = date, y = {{y}}, group = site_code),
-            color = "slategray") +
+    geom_line(data = data_wq %>%
+                arrange(desc(site_cat)),
+            aes(x = date, y = {{y}}, group = site_code, color = site_cat)) +
+    geom_point(data = data_wq %>%
+                arrange(desc(site_cat)),
+            aes(x = date, y = {{y}}, color = site_cat)) +
+    scale_color_manual(values = c("black", "lightblue")) +
     scale_x_datetime(date_breaks = "2 months",
                    date_labels = "%b %Y") +
-    labs(x = "", y = ylab, fill = "") +
+    labs(x = "", y = ylab, fill = "", color = "") +
     ylim(ylims) +
-    theme(legend.position = "top") + 
-    theme_bw()
+    theme_bw() +
+    theme(legend.position = "top")
 }
 ```
 
+### Plotting standard graphs by parameter
 
-To do:
+#### Questions:
 
-- reorganize sites from north to south, with annotations for controls?
-- what to do with negative values
+- How do we want to label control (offshore) vs. treatment sites?
+- Should we be calling "Exchange Bay - Dansby" -> "Exchange Bay - Turtle Beach" for political reasons?
+
+#### To-dos:
+
+- Messing around with how I can get control/offshore lines to both plot in top layer to make line plots more clear
+- Need to figure out how to label bleaching threshold in temperature graph without changing other line aesthetics
 
 ```{r}
-flpoint_site_ref(ref_ph, data_mon, ph, "pH", ylims_ph)
-line_time_ref(ref_ph, "Target range (Rogers et al. 2001)", data_mon, ph, "pH", ylims_ph)
-flpoint_site_ref(ref_turb, filter(data_mon, as.character(date) != "2023-10-10"), turbidity_fnu, "Turbidity (FNU)", ylims_turb)
-line_time_ref(ref_turb, "Target range (EPA)", filter(data_mon, as.character(date) != "2023-10-10"), turbidity_fnu, "Turbidity (FNU)", ylims_turb)
-flpoint_site_ref(ref_do, data_mon, do_mg_l, expression("Dissolved oxygen (mg "*L^-1*")"), ylims_do)
-line_time_ref(ref_do, "Target range (EPMA 2019)", data_mon, do_mg_l, expression("Dissolved oxygen (mg "*L^-1*")"), ylims_do)
-line_time_ref(ref_temp, "Target range (Coral Reef Alliance)", data_mon, temperature_c, expression("Temperature ("*~degree*C*")"), ylims_temp) +
-  geom_hline(yintercept = ref_temp_bleaching, color = "salmon", linetype = "dashed")
+# ph
+ph_point <- flpoint_site_ref(ref_ph, data_mon, ph, lab_ph, ylims_ph)
+ph_line <- line_time_ref(ref_ph, lab_ref_ph, data_mon, ph, lab_ph, ylims_ph)
 
-flpoint_site_ref(ref_ent, data_mon, n_colonies, expression("Enterococcus (colonies "*mL^-1*")"), ylims_entero)
-line_time_ref(ref_ent, "Target range (EPA)", data_mon, n_colonies, expression("Enterococcus (colonies "*mL^-1*")"), ylims_entero)
-flpoint_site(data_mon, chlorophyll_rfu, "Chlorophyll a (RFU)", ylims_chlor)
-line_time(data_mon, chlorophyll_rfu, "Chlorophyll a (RFU)", ylims_chlor)
-flpoint_site(data_mon, phycoerythrin_rfu, "Phycoerythrin (RFU)", ylims_phyco)
-line_time(data_mon, phycoerythrin_rfu, "Phycoerythrin (RFU)", ylims_phyco)
+ggarrange(ph_point, ph_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here("water_quality", "figs", "2023-2024", "ph.png"),  width = 10, height = 6)
+
+# turbidity
+turb_point <- flpoint_site_ref(ref_turb, filter(data_mon, as.character(date) != "2023-10-10"), turbidity_fnu, lab_turb, ylims_turb) # removing first date, calibration was off
+turb_line <- line_time_ref(ref_turb, lab_ref_turb, filter(data_mon, as.character(date) != "2023-10-10"), turbidity_fnu, lab_turb, ylims_turb)
+
+ggarrange(turb_point, turb_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here("water_quality", "figs", "2023-2024", "turbidity.png"),  width = 10, height = 6)
+
+# do
+do_point <- flpoint_site_ref(ref_do, data_mon, do_mg_l, lab_do, ylims_do)
+do_line <- line_time_ref(ref_do, lab_ref_do, data_mon, do_mg_l, lab_do, ylims_do)
+
+ggarrange(do_point, do_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here("water_quality", "figs", "2023-2024", "do.png"),  width = 10, height = 6)
+
+# temp
+temp_point <- flpoint_site_ref(ref_temp, data_mon, temperature_c, lab_temp, ylims_temp) +
+  geom_hline(yintercept = ref_temp_bleaching, color = "salmon", linetype = "dashed")
+temp_line <- line_time_ref(ref_temp, lab_ref_temp, data_mon, temperature_c, lab_temp, ylims_temp) +
+  geom_hline(yintercept = ref_temp_bleaching, color = "salmon", linetype = "dashed", linetype = "test") +
+  scale_linetype_manual(name = "")
+
+ggarrange(temp_point, temp_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here("water_quality", "figs", "2023-2024", "temp.png"),  width = 10, height = 6)
+
+# chlorophyll a
+chlor_point <- flpoint_site(data_mon, chlorophyll_rfu, lab_chlor, ylims_chlor)
+chlor_line <- line_time(data_mon, chlorophyll_rfu, lab_chlor, ylims_chlor)
+
+ggarrange(chlor_point, chlor_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here("water_quality", "figs", "2023-2024", "chlor.png"),  width = 10, height = 6)
+
+# phycoerythrin
+phyco_point <- flpoint_site(data_mon, phycoerythrin_rfu, lab_phyco, ylims_phyco)
+phyco_line <- line_time(data_mon, phycoerythrin_rfu, lab_phyco, ylims_phyco)
+
+ggarrange(phyco_point, phyco_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here("water_quality", "figs", "2023-2024", "phyco.png"),  width = 10, height = 6)
+
+# enterococcus
+entero_point <- flpoint_site_ref(ref_entero, data_mon, n_colonies, lab_entero, ylims_entero)
+entero_line <- line_time_ref(ref_entero, lab_ref_entero, data_mon, n_colonies, lab_entero, ylims_entero)
+
+ggarrange(entero_point, entero_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here("water_quality", "figs", "2023-2024", "entero.png"),  width = 10, height = 6)
 ```
 
+### Map play
 
+Currently **Enterococcus** spp. only, but could potentially look at phycoerythrin/chlorophyll (its just less dramatic and I don't want to overwhelm people with graphs)
+```{r, error = FALSE}
+# Antigua shapefile
+atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
+  st_union() %>%
+  st_sf()
 
-```{r}
-# temperature
+# set lat/lon for graph (map) boundaries
+lons = c(-61.72, -61.65)
+lats = c(17.03, 17.10)
 
 ggplot() +
-  geom_rect(data = ref_temp,
-              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), ymin = ymin, ymax = ymax, fill = "Target range"),
-              alpha = 0.4) +
-  scale_fill_manual(values = c_range, guide = "none") +
-  geom_hline(yintercept = ref_temp_bleaching, color = "salmon", linetype = "dashed") +
-  geom_line(data = data_mon,
-            aes(x = date, y = temperature_c, group = site_code)) +
-  scale_x_datetime(date_breaks = "1 month",
-                   date_labels = "%b") +
-  labs(x = "", y = expression("Temperature ("*~degree*C*")")) +
-  theme_bw()
+  geom_sf(data = atg, fill = "slategray", color = "slategray") + # ATG basemap
+  coord_sf(xlim = lons, ylim = lats, expand = FALSE) + # setting map boundaries
+  geom_point(data_mon, 
+             mapping = aes(x = longitude, y = latitude, color = entero_yn, size = n_colonies), 
+             alpha = 0.7) + # add sites
+  scale_color_manual(values = c("turquoise", "tomato")) +
+  facet_wrap(. ~ factor(date_label, levels = c("Oct 2023", "Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024"))) +
+  labs(size = expression("Colonies "*mL^-1),
+       color = "Enterococcus detection") +
+  theme_bw() +
+  theme(axis.title = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+
+ggsave(here("water_quality", "figs", "2023-2024", "entero_map.png"), width = 10, height = 8)
 ```
 
+### Boat play
 
+There are some incidences of high boat numbers and high enterococcus numbers (top right), but definitely some exceptions (bottom right). Is this worth including?
 
-```{r, eval = F}
-# dual y attempts
-
-scale = .01 # relates y axis 1 with y axis 2
-
-point_precip <- function(data, y, ylab, scale) {
-  ggplot() +
-    geom_point(data = data, 
-               aes(x = date, y = {{y}}),
-               color = "salmon") +
-    geom_line(data = precip,
-               aes(x = date, y = precipitation_in/scale),
-              color = "black") +
-    scale_y_continuous(
-      name = ylab,
-      sec.axis = sec_axis(~.*scale, name = "Precipitation (in/day)")
-  ) +
-    labs(x = "") +
-    theme_bw()
-}
-
-point_precip(data_mon, n_colonies, expression("Enterococcus (colonies "*mL^-1*")"), 0.01)
-point_precip(data_mon, turbidity_fnu, "Turbidity (FNU)", .1)
-```
-
-Boat play
 ```{r}
 ggplot(data_mon %>% filter(site_code %in% c("GIA", "RBA", "NBA", "GOE")), 
-       aes(x = n_boats, y = n_colonies)) +
-  geom_point(color = "slategray", alpha = 0.8) +
-  labs(x = "Number of boats in anchorage", y = expression("Enterococcus (colonies "*mL^-1*")"), 0.01) +
-  theme_bw()
+       aes(x = n_boats, y = n_colonies, size = n_colonies)) +
+  geom_point(color = "tomato", alpha = 0.6) +
+  labs(x = "Number of boats in anchorages", y = expression(paste(italic("Enterococcus" ), " spp. (colonies "*mL^-1*")"))) +
+  theme_bw() +
+  theme(legend.position = "none")
 ```
 
 
-Precipitation play
+### Precipitation
+
+Didn't find much relationship between precipitation and any parameters at this point, it will be helpful to have more data over time. Including exploratory graphs at this point for reference.
 
 ```{r}
 ggplot() +
@@ -311,51 +399,58 @@ precip_48hr <- ysi %>%
   summarize(precip_wkprior = sum(precipitation_in))
   
 ```
-
-
-Map play
 ```{r}
-# Antigua shapefile
-atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
-  st_union() %>%
-  st_sf()
+# dual y attempts
 
-# set lat/lon for target range
-lons = c(-61.72, -61.65)
-lats = c(17.03, 17.10)
+scale = .01 # relates y axis 1 with y axis 2
 
-ggplot() +
-  geom_sf(data = atg, fill = "slategray", color = "slategray") + # ATG basemap
-  coord_sf(xlim = lons, ylim = lats, expand = FALSE) + # setting map limits
-  geom_point(data_mon, 
-             mapping = aes(x = longitude, y = latitude, color = entero_yn, size = n_colonies), 
-             alpha = 0.7) + # add sites
-  scale_color_manual(values = c("turquoise", "tomato")) +
-  facet_wrap(. ~ factor(date_label, levels = c("Oct 2023", "Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024"))) +
-  labs(size = expression("Colonies "*mL^-1),
-       color = "Enterococcus detection") +
-  theme_bw() +
-  theme(axis.title = element_blank(), 
-        axis.text = element_blank(),
-        axis.ticks = element_blank())
-
-ggsave(here("water_quality", "figs", "2023-2024", "entero_map.png"), width = 10, height = 8)
-```
-
-Sargassum play
-```{r}
-sites_sarg <- c("EBB", "EBBW", "YIE", "GIE")
-sarg <- function(y, ylab) {
-  ggplot(wq_data %>% filter(site_code %in% sites_sarg),
-       aes(x = date, y = {{y}})) +
-    geom_point(aes(color = as.character(depth_m))) +
-    facet_grid(. ~ site_cat) +
+point_precip <- function(data, y, ylab, scale) {
+  ggplot() +
+    geom_point(data = data, 
+               aes(x = date, y = {{y}}),
+               color = "salmon") +
+    geom_line(data = precip,
+               aes(x = date, y = precipitation_in/scale),
+              color = "black") +
+    scale_y_continuous(
+      name = ylab,
+      sec.axis = sec_axis(~.*scale, name = "Precipitation (in/day)")
+  ) +
+    labs(x = "") +
     theme_bw()
 }
 
-sarg(ph, "pH")
-sarg(do_mg_l, "DO")
-sarg(turbidity_fnu, "Turbidity (FNU)")
+point_precip(data_mon, n_colonies, lab_entero, 0.01)
+```
+
+### Sargassum play
+
+Trying to investigate differences between relevant parameters (DO, pH, turbidity?) at two boom sites relative to offshore control sites at both 1m and 3m depths. Currently not much to say here... DO looks like reverse expected trend (maybe offshore is not the best control in this sense?), some minor differences in turbidity at times. Is there a better way of visualizing these results, or anything else I should be investigating?
+
+```{r}
+sites_sarg <- c("EBB", "EBBW", "YIE", "GIE")
+
+sarg <- function(data_ref, lab_ref, y, ylab, ylims) {
+  ggplot() +
+    geom_rect(data = data_ref, 
+              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), ymin = ymin, ymax = ymax, fill = lab_ref),
+              alpha = a_range) +
+    scale_fill_manual(values = c_range) +
+    geom_point(data = wq_data %>% 
+                 filter(site_code %in% sites_sarg) %>%
+                 mutate(site_cat = if_else(site_cat == "Control", "Offshore control", "Seaweed boom")),
+       aes(x = date, y = {{y}}, color = site_cat, shape = as.character(depth_m)),
+       alpha = 0.8, size = 2) +
+    scale_color_manual(values = c("cadetblue", "orange")) +
+    ylim(ylims) + 
+    labs(x = "", y = ylab, shape = "Depth (m)", color = "Sampling location", fill = "") +
+    theme_bw()
+}
+
+sarg(ref_ph, lab_ref_ph, ph, lab_ph, ylims_ph)
+sarg(ref_do, lab_ref_do, do_mg_l, lab_do, ylims_do)
+sarg(ref_turb, lab_ref_turb, turbidity_fnu, lab_turb, ylims_turb)
+# sarg(ref_entero, lab_ref_entero, n_colonies, lab_entero, ylims_entero)
 
 ```
 
