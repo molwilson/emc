@@ -29,6 +29,7 @@ library(ggspatial)
 library(fuzzyjoin)
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE) # this sets the preferences for each code chunk so that errors/messages/warnings don't get displayed in the knit rmarkdown
+`%nin%` <- negate(`%in%`) # creating 'not in' function for general use
 ```
 
 #### Importing, cleaning, and merging datasets
@@ -47,7 +48,7 @@ ysi <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), 
                                ))) %>%
   rename(site_code_depth = site_code) %>%
   filter(as.character(date) != "2023-10-05" # removing incomplete/aborted day 
-          & as.character(time) != 	c("1899-12-31 11:38:13", 	"1899-12-31 14:45:28", "1899-12-31 09:41:43", "1899-12-31 09:29:43")) # removing duplicate samples
+          & as.character(time) %nin%	c("1899-12-31 11:38:13", 	"1899-12-31 14:45:28", "1899-12-31 09:41:43", "1899-12-31 09:29:43", "1899-12-31 10:36:28", "1899-12-31 12:55:39", "1899-12-31 14:20:21")) # removing duplicate samples
 
 entero <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "enterococcus") %>% 
   clean_names()
@@ -99,7 +100,7 @@ data_mon <- wq_data %>%
                                                   "Little Bird Island", 
                                                   "Green Island Anchorage", 
                                                   "Mill Reef Yacht Club", 
-                                                  "Macy's Ledge", 
+                                                  "Macy Ledge", 
                                                   "Ricketts Bay Anchorage", 
                                                   "Garden of Eden", 
                                                   "Ten Pound Bay Nursery", 
@@ -108,8 +109,7 @@ data_mon <- wq_data %>%
                                                   "York Island Nursery", 
                                                   "Friars Head Bay", 
                                                   "Exchange Bay - Dansby", 
-                                                  "Exchange Bay - Club Hotel", 
-                                                  "Exchange Bay - Covington",
+                                                  "Exchange Bay - MRC Hotel",
                                                   "Offshore - Green Island E", 
                                                   "Offshore - York Island E"))) %>%
   mutate(site_name = fct_rev(site_name)) # flipped axis plot needs reversed order
