@@ -125,6 +125,10 @@ test_duplicates <- data_mon %>%
 ##### Setting target references, plotting ranges, and parameter labels for graphs
 
 ```{r}
+# sampling date ranges
+date_min <- min(data_mon$date)
+date_max <- max(data_mon$date)
+
 # pH
 lab_ph <- "pH"
 ref_ph = data.frame(xmin = -Inf, xmax = Inf, ymin = 7.7, ymax = 8.5)
@@ -164,6 +168,9 @@ ylims_phyco <- c((min(data_mon$phycoerythrin_rfu, na.rm = T) - 1), (max(data_mon
 # chlorophyll a
 lab_chlor <- expression(paste("Chlorophyll ", italic("a"), " (RFU)"))
 ylims_chlor <- c((min(data_mon$chlorophyll_rfu, na.rm = T) - 1), (max(data_mon$chlorophyll_rfu, na.rm = T) + 1))
+
+# precipitation
+lab_precip <- expression("Precipitation (in. "*day^-1*")")
 
 # aesthetics for reference rectangles
 c_range <- "gray20" # setting color for target range in graphs
@@ -282,7 +289,7 @@ line_time_ref <- function(data_ref, lab_ref, data_wq, y, ylab, ylims) {
 
 ```{r}
 # plot dimensions
-plot_dim_w <- 8
+plot_dim_w <- 8.2
 plot_dim_h <- 4
 
 # ph
@@ -398,11 +405,14 @@ Didn't find much relationship between precipitation and any parameters at this p
 
 ```{r}
 ggplot() +
-  geom_line(data = precip, 
+  geom_line(data = precip %>% 
+              filter(as.Date(date) < date_max), 
              aes(x = date, y = precipitation_in)) +
-  labs(x = "", y = "Precipitation (inches)") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  labs(x = "", y = lab_precip) +
+  scale_x_datetime(date_breaks = "2 months",
+                   date_labels = "%b %Y") +
+  theme_bw()
+ggsave(here("water_quality", "figs", "2023-2024", "precip.png"), width = 6, height = 4)
 
 # trying to calculate the amount of rainfall preceding a testing day
 ysi_dates <- ysi %>%
