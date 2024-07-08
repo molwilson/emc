@@ -62,6 +62,19 @@ precip <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"
   right_join(data.frame(date = seq(ymd('2023-10-10'), as.Date(today()), by='day'))) %>%
   mutate(precipitation_in = replace_na(precipitation_in, 0))
 
+sargassum_regional <- read.csv(here("water_quality", "data_raw", "sargassum_2024.csv")) %>%
+  pivot_longer(everything(), names_to = "date", values_to = "sargassum_mil_tonnes") %>% 
+  filter(!is.na(sargassum_mil_tonnes)) %>%
+  mutate_at(.vars = "date", 
+            .funs = gsub,
+            pattern = "X",
+            replacement = "") %>%
+  mutate_at(.vars = "date", 
+            .funs = gsub,
+            pattern = "[.]",
+            replacement = "-") %>%
+  mutate(date = as.POSIXct(date))
+
 # merge site, ysi, enterococcus, boat, and precipitation data into one dataset
 wq_data <- ysi %>%
   select(date, site_code_depth, temperature_c = temperature_c_24, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu) %>%
@@ -143,9 +156,11 @@ ylims_turb <- c((min(data_mon$turbidity_fnu, na.rm = T) - 1), (max(data_mon$turb
 
 # do
 lab_do <- expression("Dissolved oxygen (mg "*L^-1*")")
-ref_do = data.frame(xmin = -Inf, xmax = Inf, ymin = 6, ymax = Inf)
-lab_ref_do <- "Target range (EPMA 2019)"
-ylims_do <- c((min(data_mon$do_mg_l, na.rm = T) - 1), (max(data_mon$do_mg_l, na.rm = T) + 1))
+ref_do = data.frame(xmin = -Inf, xmax = Inf, ymin = 5, ymax = Inf)
+lab_ref_do <- "Target range (Long et al. 2013)"
+ref_do_hypoxia = 2
+lab_ref_do_hypoxia <- "Hypoxia threshold"
+ylims_do <- c(0, (max(data_mon$do_mg_l, na.rm = T) + 1))
 
 # temp
 lab_temp <- expression("Temperature ("*~degree*C*")")
@@ -233,7 +248,7 @@ line_time <- function(data_wq, y, ylab, ylims) {
             color = "black",
             alpha = 0.9) +
     geom_hline(data = data_wq, # adding geom_hline to work create color legend now that layers are split up 
-              aes(yintercept = 0, color = site_cat)) +
+              aes(yintercept = -100, color = site_cat)) +
     scale_color_manual(values = c("black", "lightblue"), labels = c("Control sites", "Treatment sites")) +
     guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
     scale_x_datetime(date_breaks = "2 months",
@@ -273,7 +288,7 @@ line_time_ref <- function(data_ref, lab_ref, data_wq, y, ylab, ylims) {
             color = "black",
             alpha = 0.9) +
     geom_hline(data = data_wq,
-              aes(yintercept = 0, color = site_cat)) +
+              aes(yintercept = -100, color = site_cat)) +
     scale_color_manual(values = c("black", "lightblue"), labels = c("Control sites", "Treatment sites")) +
     guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
     scale_x_datetime(date_breaks = "2 months",
@@ -310,7 +325,10 @@ ggsave(here("water_quality", "figs", "2023-2024", "turbidity.png"),  width = plo
 
 # do
 do_point <- flpoint_site_ref(ref_do, data_mon, do_mg_l, lab_do, ylims_do)
-do_line <- line_time_ref(ref_do, lab_ref_do, data_mon, do_mg_l, lab_do, ylims_do)
+do_line <- line_time_ref(ref_do, lab_ref_do, data_mon, do_mg_l, lab_do, ylims_do) +
+  geom_hline(aes(yintercept = ref_do_hypoxia, linetype = lab_ref_do_hypoxia),
+             color = "salmon") +
+  scale_linetype_manual(values = "dashed", name = "")
 
 ggarrange(do_point, do_line, 
           ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
@@ -374,14 +392,15 @@ ggplot() +
              alpha = 0.7) + # add sites
   scale_color_manual(values = c("turquoise", "tomato")) +
   facet_wrap(. ~ factor(date_label, levels = c("Oct 2023", "Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024"))) +
-  labs(size = lab_entero,
-       color = expression(paste(italic("Enterococcus" ), " spp. detection"))) +
+  labs(size = expression("Concentration (CFU "*mL^-1*")"),
+       color = expression("Enterococci detection")) +
   theme_bw() +
   theme(axis.title = element_blank(), 
         axis.text = element_blank(),
-        axis.ticks = element_blank())
+        axis.ticks = element_blank(),
+        legend.position = "top")
 
-ggsave(here("water_quality", "figs", "2023-2024", "entero_map.png"), width = 10, height = 8)
+ggsave(here("water_quality", "figs", "2023-2024", "entero_map.png"), width = 10, height = 9)
 ```
 
 ### Boat play
@@ -390,12 +409,11 @@ There are some incidences of high boat numbers and high enterococcus numbers (to
 
 ```{r}
 ggplot(data_mon %>% filter(site_code %in% c("GIA", "RBA", "NBA", "GOE")), 
-       aes(x = n_boats, y = n_colonies, size = n_colonies)) +
-  geom_point(color = "tomato", alpha = 0.6) +
-  labs(x = "Number of boats in anchorages", y = lab_entero) +
-  theme_bw() +
-  theme(legend.position = "none")
-ggsave(here("water_quality", "figs", "2023-2024", "entero_boats.png"), width = 5, height = 4)
+       aes(x = n_boats, y = n_colonies, shape = site_name, color = site_name)) +
+  geom_point(alpha = 0.6, size = 2) +
+  labs(x = "Number of boats in anchorages", y = lab_entero, color = "", shape = "") +
+  theme_bw()
+ggsave(here("water_quality", "figs", "2023-2024", "entero_boats.png"), width = 6, height = 4)
 ```
 
 
@@ -466,7 +484,21 @@ point_precip(data_mon, n_colonies, lab_entero, 0.01)
 
 ### Sargassum play
 
-Trying to investigate differences between relevant parameters (DO, pH, turbidity?) at two boom sites relative to offshore control sites at both 1m and 3m depths. Currently not much to say here... DO looks like reverse expected trend (maybe offshore is not the best control in this sense?), some minor differences in turbidity at times. Is there a better way of visualizing these results, or anything else I should be investigating?
+```{r}
+# sargassum accumulation 2023-2024 (from Ruleo)
+
+ggplot() +
+  geom_col(data = sargassum_regional, 
+             aes(x = date, y = sargassum_mil_tonnes),
+           fill = "orange3") +
+  labs(x = "", y = "Caribbean & GOM sargassum influx (mil tonnes)") +
+  scale_x_datetime(date_breaks = "1 month",
+                   date_labels = "%b %Y") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "2023-2024", "sargassum.png"), width = 6, height = 4)
+```
+
 
 ```{r}
 sites_sarg <- c("EBB", "EBBW", "MRCH", "BDB", "LDB", "FHB", "NBRM")
@@ -479,10 +511,10 @@ ref_sarg_turb <- 26.2 # NTU (YSI says no conversion to FNU needed if YSI was use
 ref_sarg_entero <- 10/100 # CFU/mL
 ref_sarg_df <- data.frame(label, ref_sarg_ph, ref_sarg_do, ref_sarg_turb, ref_sarg_entero) # had to create df to be able to label reference line in a faceted plot
 
-sarg <- function(data_ref, lab_ref, ref_sarg, y, ylab, ylims) {
+sarg <- function(data_ref, ref_sarg, y, ylab, ylims) {
   ggplot() +
     geom_rect(data = data_ref, 
-              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), ymin = ymin, ymax = ymax, fill = lab_ref),
+              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), ymin = ymin, ymax = ymax, fill = "Target range"),
               alpha = a_range) +
     scale_fill_manual(values = c_range) +
     geom_hline(data = ref_sarg_df, aes(yintercept = ref_sarg, linetype = label),
@@ -500,27 +532,27 @@ sarg <- function(data_ref, lab_ref, ref_sarg, y, ylab, ylims) {
     ylim(ylims) +
     labs(x = "", y = ylab, shape = "Depth", color = "Depth", fill = "", linetype = "") +
     guides(color = guide_legend(order = 1), linetype = guide_legend(order = 2), linetype = guide_legend(order = 3)) +
-    theme_bw() +
-    theme(axis.text.x = (element_text(angle = 45, hjust = 1)),
-          legend.position = "top")
+    theme_bw()
 }
 
-
-# plot dimensions
-plot_dim_w <- 8
-plot_dim_h <- 3
-
 # do
-sarg(ref_do, lab_ref_do, ref_sarg_do, do_mg_l, lab_do, ylims = c(0,10))
-ggsave(here("water_quality", "figs", "2023-2024", "do_sarg.png"),  width = plot_dim_w, height = plot_dim_h)
+do_sarg <- sarg(ref_do, ref_sarg_do, do_mg_l, lab_do, ylims = c(0,9.5)) +
+  theme(legend.position = "top",
+        axis.text.x = element_blank())
 
 # ph
-sarg(ref_ph, lab_ref_ph, ref_sarg_ph, ph, lab_ph, ylims_ph)
-ggsave(here("water_quality", "figs", "2023-2024", "ph_sarg.png"),  width = plot_dim_w, height = plot_dim_h)
+ph_sarg <- sarg(ref_ph, ref_sarg_ph, ph, lab_ph, ylims_ph) +
+  theme(legend.position = "none",
+        axis.text.x = element_blank())
 
 # turbidity
-sarg(ref_turb, lab_ref_turb, ref_sarg_turb, turbidity_fnu, lab_turb, c(0,30))
-ggsave(here("water_quality", "figs", "2023-2024", "turb_sarg.png"),  width = plot_dim_w, height = plot_dim_h)
+turb_sarg <- sarg(ref_turb, ref_sarg_turb, turbidity_fnu, lab_turb, c(0,30)) +
+  theme(legend.position = "none",
+        axis.text.x = (element_text(angle = 45, hjust = 1)))
+
+ggarrange(do_sarg, ph_sarg, turb_sarg, 
+          ncol = 1, common.legend = TRUE, legend = "top", heights = c(4, 4, 5)) # need to set heights so last graph with x axis doesn't get squished
+ggsave(here("water_quality", "figs", "2023-2024", "sarg.png"),  width = 8, height = 8)
 
 ```
 
