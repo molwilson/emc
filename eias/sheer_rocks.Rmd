@@ -47,7 +47,8 @@ sg_cover_spp <- sg_quad_exp %>%
   summarise(percent_tot = mean(percent_tran),
             se = sd(percent_tran)/sqrt(12)) %>%
   ungroup() %>%
-  mutate(species = fct_reorder(species, desc(species)))
+  mutate(species = fct_reorder(species, desc(species)),
+         status = if_else(species == "Halophila stipulacea", "Invasive", "Native")) 
 write.csv(sg_cover_spp, here("eias", "sheer_rocks", "data_outputs", "sg_cover_spp.csv"))
 
 sg_cover_cat <- sg_quad_exp %>%
@@ -65,12 +66,12 @@ write.csv(sg_cover_cat, here("eias", "sheer_rocks", "data_outputs", "sg_cover_ca
 ggplot(sg_cover_spp %>% 
          filter(category %in% c("Seagrass", "Algae")) %>%
          mutate(species = fct_reorder(species, percent_tot)), 
-       aes(x = species, y = percent_tot, group = category, fill = category)) +
+       aes(x = species, y = percent_tot, group = category, fill = status)) +
   geom_col(color = "black") +
-  scale_fill_manual(values = c("orange3", "darkseagreen")) +
+  scale_fill_manual(values = c("red3", "darkseagreen")) +
   coord_flip() +
   geom_errorbar(aes(ymin = percent_tot - se, ymax = percent_tot + se), width = .2) +
-  labs(x = "", y = "Mean percent cover", fill = "Benthic category") +
+  labs(x = "", y = "Mean percent cover", fill = "") +
   ylim(0,100) +
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
@@ -112,6 +113,20 @@ rf_benthic_spp <- rf_benthic %>%
   filter(!is.na(category)) %>%
   ungroup()
 write.csv(rf_benthic_spp, here("eias", "sheer_rocks", "data_outputs", "rf_benthic_spp.csv"))
+
+rf_benthic_cat <- rf_benthic %>%
+  expand(transect, category) %>%
+  left_join(rf_benthic %>% select(transect, species, category, count), 
+            by = c("transect", "category")) %>%
+  mutate(count = replace_na(count, 0)) %>%
+  group_by(transect, category) %>%
+  summarize(count = sum(count)) %>%
+  group_by(category) %>%
+  summarize(abundance_mean = mean(count),
+            se = sd(count)/sqrt(7)) %>%
+  filter(!is.na(category)) %>%
+  ungroup()
+write.csv(rf_benthic_cat, here("eias", "sheer_rocks", "data_outputs", "rf_benthic_cat.csv"))
 ```
 
 ```{r}
@@ -126,6 +141,16 @@ ggplot(rf_benthic_spp %>%
   theme_bw() +
   theme(axis.text.y = element_text(face = "italic"))
 ggsave(here("eias", "sheer_rocks", "figs", "rf_benthic_spp.png"), width = 6, height = 3)
+
+ggplot(rf_benthic_cat, 
+       aes(x = category, y = abundance_mean, group = category, fill = category)) +
+  geom_col(color = "black") +
+  scale_fill_manual(values = c("orange", "cadetblue", "coral")) +
+  geom_errorbar(aes(ymin = abundance_mean - se, ymax = abundance_mean + se), width = .2) +
+  labs(x = "", y = "Mean abundance per 10m transect") +
+  theme_bw() +
+  theme(legend.position = "none")
+ggsave(here("eias", "sheer_rocks", "figs", "rf_benthic_cat.png"), width = 6, height = 3)
 ```
 
 
@@ -139,31 +164,32 @@ rf_fish <- read_excel(here("eias", "sheer_rocks", "data_raw", "Sheer rocks_surve
 
 rf_fish_spp <- rf_fish %>%
   expand(transect, spp_name) %>%
-  left_join(rf_fish %>% select(transect, spp_name, com_name, func_group, number), 
+  left_join(rf_fish %>% select(spp_name, com_name, func_group), 
+            by = "spp_name") %>%
+  distinct() %>%
+  left_join(rf_fish %>% select(transect, spp_name, number), 
             by = c("transect", "spp_name")) %>%
   mutate(number = replace_na(number, 0)) %>%
   group_by(spp_name, com_name, func_group) %>%
-  summarize(density_mean = mean(number)/60, # 60m2 transects
+  summarize(density_mean = mean(number)/60*100, # 60m2 transects -> indv/100m2
             se = sd(number)/sqrt(9)) %>%
   filter(!is.na(func_group)) %>%
   ungroup()
 write.csv(rf_fish_spp, here("eias", "sheer_rocks", "data_outputs", "rf_fish_spp.csv"))
 
-# need to check this one...
 rf_fish_func <- rf_fish %>%
   expand(transect, func_group) %>%
-  left_join(rf_fish %>% 
-              group_by(transect, func_group) %>%
-              summarize(number = sum(number)), 
+  left_join(rf_fish %>% select(transect, spp_name, func_group, number), 
             by = c("transect", "func_group")) %>%
   mutate(number = replace_na(number, 0)) %>%
+  group_by(transect, func_group) %>%
+  summarize(number = sum(number)) %>%
   group_by(func_group) %>%
-  summarize(density_mean = mean(number)/60, # 60m2 transects
+  summarize(density_mean = mean(number)/60*100, # 60m2 transects -> indv/100m2
             se = sd(number)/sqrt(9)) %>%
   filter(!is.na(func_group)) %>%
   ungroup()
 write.csv(rf_fish_func, here("eias", "sheer_rocks", "data_outputs", "rf_fish_func.csv"))
-
 ```
 
 ```{r}
@@ -174,8 +200,8 @@ ggplot(rf_fish_spp %>%
   scale_fill_manual(values = c("orange", "darkseagreen", "cadetblue")) +
   coord_flip() +
   geom_errorbar(aes(ymin = density_mean, ymax = density_mean + se), width = .2) +
-  labs(x = "", y = expression("Mean density (indv. "*m^-1*")"), fill = "Functional group") +
-  ylim(0,2) +
+  labs(x = "", y = expression("Mean density (indv. 100"*m^-2*")"), fill = "Functional group") +
+  #ylim(0,2) +
   theme_bw()
   # theme(axis.text.y = element_text(face = "italic"))
 ggsave(here("eias", "sheer_rocks", "figs", "rf_fish_spp.png"), width = 6, height = 3)
@@ -185,8 +211,8 @@ ggplot(rf_fish_func %>%
        aes(x = func_group, y = density_mean)) +
   geom_col(color = "black", fill = "slategray3") +
   geom_errorbar(aes(ymin = density_mean, ymax = density_mean + se), width = .2) +
-  labs(x = "", y = expression("Mean density (indv. "*m^-1*")"), ) +
-  ylim(0,2) +
+  labs(x = "", y = expression("Mean density (indv. 100"*m^-2*")"), ) +
+  #ylim(0,2) +
   theme_bw()
 ggsave(here("eias", "sheer_rocks", "figs", "rf_fish_func.png"), width = 6, height = 3)
 ```

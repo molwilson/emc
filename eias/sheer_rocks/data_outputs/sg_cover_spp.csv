@@ -1,8 +1,8 @@
-"","category","species","percent_tot","se"
-"1","Algae","Halimeda spp.",8.76470588235294,1.17014229361756
-"2","Algae","Penicillus spp.",0.388235294117647,0.107127751997237
-"3","Bare substrate","Sand",19.0915032679739,2.54864495040043
-"4","Seagrass","Halodule wrightii",4.62352941176471,1.23270035816105
-"5","Seagrass","Halophila stipulacea",1.21176470588235,0.665685552571153
-"6","Seagrass","Syringodium filiforme",10.621568627451,1.04613248783768
-"7","Seagrass","Thalassia testudinum",54.8235294117647,3.09578908109097
+"","category","species","percent_tot","se","status"
+"1","Algae","Halimeda spp.",8.76470588235294,1.17014229361756,"Native"
+"2","Algae","Penicillus spp.",0.388235294117647,0.107127751997237,"Native"
+"3","Bare substrate","Sand",19.0915032679739,2.54864495040043,"Native"
+"4","Seagrass","Halodule wrightii",4.62352941176471,1.23270035816105,"Native"
+"5","Seagrass","Halophila stipulacea",1.21176470588235,0.665685552571153,"Invasive"
+"6","Seagrass","Syringodium filiforme",10.621568627451,1.04613248783768,"Native"
+"7","Seagrass","Thalassia testudinum",54.8235294117647,3.09578908109097,"Native"
