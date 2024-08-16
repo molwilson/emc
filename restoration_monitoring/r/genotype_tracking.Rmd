@@ -33,6 +33,11 @@ tpb <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx")
                   range = "A1:B10",
                   col_names = FALSE, 
                   .name_repair = letter_names)
+cades <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
+                  sheet = "Cades", 
+                  range = "A1:B4",
+                  col_names = FALSE, 
+                  .name_repair = letter_names)
 genebank <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), 
                   sheet = "Gene banks",
                   col_names = TRUE)
@@ -63,6 +68,17 @@ structures <- york %>% mutate(row=row_number()) %>%
   mutate(nursery = "TPB",
          structure = case_when(row <= 4 ~ "Tree",
                                row > 4 ~ "Rope")
+           )) %>%
+  rbind(cades %>% mutate(row=row_number()) %>%
+          pivot_longer(
+              cols = -row,
+              names_to = "col",
+              values_to = "genotype",
+              values_drop_na = TRUE
+      ) %>%
+  mutate(nursery = "Cades",
+         structure = case_when(row == 1 ~ "Rope",
+                               row > 1 ~ "Tree")
            )) %>%
   unite(location, col, row, sep = "", remove = TRUE) %>%
   mutate(genotype = strsplit(as.character(genotype), " / ")) %>% 
@@ -251,6 +267,22 @@ genotypes_boulder <- genotype_tracking %>%
 #   select(genotype) %>%
 #   distinct()
 ```
+
+```{r}
+# temp summary
+
+nursery_mon_cur <- nursery_mon %>%
+  filter(as_date(date) %in% as_date(c("2024-07-19", "2024-07-16")))
+
+frags_cur <- nursery_mon_cur %>%
+  mutate(n_frags = n_healthy + n_bleached + n_pale) %>%
+  summarize(n_frags_tot = sum(n_frags))
+
+genotypes_cur <- nursery_mon_cur %>%
+  distinct(genotype) %>%
+  summarize(n_genotypes_tot = n())
+```
+
 
 
 
