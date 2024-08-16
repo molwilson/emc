@@ -1,0 +1,54 @@
+---
+title: "Lab cycling"
+author: "Molly Wilson"
+date: "2024-08-11"
+output: html_document
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(lubridate)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+`%nin%` <- negate(`%in%`) # creating 'not in' function for general use
+```
+
+```{r}
+cycling <- read_excel(here("lab", "data_raw", "Cycle monitoring.xlsx"), 
+                  sheet = "Cycling") %>%
+  clean_names()
+
+cycling_long <- cycling %>%
+  select(cycle_day, ammonium_phosphate, nitrite, nitrate) %>%
+  pivot_longer(-cycle_day, names_to = "parameter", values_to = "value") %>%
+  #filter(value %nin% c("NA", "NaNA")) %>%
+  mutate(value = as.numeric(value)) %>%
+  filter(!is.na(value)) %>%
+  mutate(across(parameter, ~factor(., levels=c("ammonium_phosphate","nitrite","nitrate"))))
+  
+
+dosing <- cycling %>% 
+  select(cycle_day, dose_quick_cycle_ml, dose_start_xlm_ml) %>%
+  pivot_longer(-cycle_day, names_to = "product", values_to = "dose")
+```
+
+```{r}
+ggplot() +
+  geom_line(data = cycling_long, 
+       aes(x = cycle_day, y = value, group = parameter)) +
+  geom_point(data = cycling_long,
+             aes(x = cycle_day, y = value)) +
+  facet_wrap(. ~ parameter, ncol = 1) +
+  geom_vline(data = dosing %>% 
+               filter(dose != 0 & product == "dose_quick_cycle_ml") %>% 
+               select(cycle_day),
+           mapping = aes(xintercept = cycle_day),
+           linetype = "dashed", color = "cadetblue"
+           ) +
+  theme_bw()
+```
+
+
