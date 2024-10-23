@@ -1,0 +1,64 @@
+---
+title: "Untitled"
+author: "Molly Wilson"
+date: "2024-09-18"
+output: html_document
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(snakecase) # for adjusting capitalization of text within data (e.g., species names)
+library(knitr) # for including tables
+library(stringr)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r}
+lookups_fish <- read_excel(here("lookups", "data_raw", "Fish species lookups.xlsx"),
+                  sheet = "lookups_fish", 
+                  col_names = TRUE)
+
+mma_reef_fish_spp <- read_excel(here("mma", "data", "mma_coral_fish.xlsx"), sheet = "fish") %>%  
+  clean_names() %>%
+  filter(!is.na(site)) %>% # remove any incomplete rows at the end of the data
+  mutate(number = if_else(is.na(number), 1, number)) %>% # all entries with no number specified were single observations
+  uncount(number) %>% # expand to replicate rows if multiple fish were recorded to look at length distributions
+  expand(nesting(site, transect), species_name) %>%
+  left_join(mma_reef_fish %>%
+      select(site, transect, species_name)) %>%
+  group_by(site, transect, species_name) %>%
+  summarize(dens_t = n()/120) %>% #indv./m2
+  group_by(site, species_name) %>%
+  summarize(dens_site = mean(dens_t)) %>%
+  group_by(species_name) %>%
+  summarize(dens_mean = mean(dens_site),
+            dens_se = sd(dens_site)/sqrt(n())) %>%
+  rename(name_spp = species_name)
+
+fish_spp <- lookups_fish %>%
+  mutate(genus = word(name_spp, 1),
+         species = word(name_spp, 2)) %>%
+  mutate(code_spp = if_else(word(name_spp, 2) == "spp.",
+                            paste0(substr(genus, 1, 4)),
+                            paste0(substr(genus, 1, 1), substr(species, 1, 4))
+                              )) %>%
+  mutate_at(c('code_spp', 'code_com'), str_to_upper) %>%
+  mutate_at(c('name_spp', 'name_com'), str_to_sentence) %>%
+  left_join(mma_reef_fish_spp) %>%
+  select(code_spp, name_spp, code_com, name_com, mma_dens = dens_mean, family, functional_group, a, b, trophic_level, trophic_se, citation = 'L-W_citation') %>%
+  arrange(-mma_dens)
+
+# testing for potential duplicate codes
+test <- fish_spp %>%
+  group_by(code_spp) %>%
+  summarize(count = n())
+
+write.csv(fish_spp, here("lookups", "data_outputs", "lookups_fish.csv"), row.names=FALSE)
+
+# need to add AGRRA-specific species indicators
+```
+
