@@ -125,11 +125,6 @@ nursery_locations <- structures %>%
   mutate_at('lab', ~replace_na(.,"N"))
 ```
 
-Current nursery fragment counts
-```{r}
-
-```
-
 
 Collection and outplant data
 ```{r}
@@ -174,6 +169,7 @@ nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype t
   filter(!is.na(date)) %>%
   mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased', 'n_other'), ~replace_na(.,0))
 
+frag_status <- read.csv(here("restoration_monitoring", "data_outputs", "frag_status.csv"))
 disease <- read.csv(here("restoration_monitoring", "data_outputs", "disease.csv"))
 thermtol_2023 <- read.csv(here("restoration_monitoring", "data_outputs", "thermtol_2023.csv"))
 ```
@@ -186,44 +182,46 @@ Integrating information by genotype
 genotype_tracking <- collection %>%
   select(genotype, collection_date = date, collection_site, collection_lat, collection_lon) %>%
   left_join(nursery_locations) %>%
-  left_join(thermtol_2023) %>%
-  left_join(disease) %>%
-  left_join(outplant_monitoring %>%
-              group_by(genotype, site) %>%
-              summarise(colonies_live = sum(colonies_live)) %>%
-              mutate(site = case_when(site == "York Island" ~ "york_colonies",
-                                      site == "Ten Pound Bay" ~ "tpb_colonies",
-                                      site == "Ricketts" ~ "ricketts_colonies")) %>%
-              pivot_wider(names_from = site, values_from = colonies_live) %>%
-              mutate(outplant_colonies = ricketts_colonies + tpb_colonies + york_colonies) %>% # live colonies
-              select(genotype, outplant_colonies, york_colonies, tpb_colonies, ricketts_colonies)) %>%
-  left_join(outplant_monitoring %>%
-              pivot_longer(
-                 cols = starts_with("live_c"),
-                 names_to = "colony",
-                 names_prefix = "live_c",
-                 values_to = "survivorship",
-                 values_drop_na = TRUE #  drops all colonies planted as indv (APALs and some APROs)
-              ) %>%
-              group_by(genotype, id) %>%
-              summarise(survivorship_col = mean(survivorship)) %>%
-              right_join(outplant_monitoring %>%
-                           select(date_monitored, site, genotype, id, date_planted, colonies_planted, colonies_live),
-                         by = c("genotype", "id")) %>%
-              mutate(survivorship_col = if_else(is.na(survivorship_col), 100, survivorship_col),
-                     survivorship_pop = survivorship_col * colonies_live / colonies_planted) %>%
-              relocate(survivorship_col, .before = survivorship_pop) %>%
-              group_by(genotype) %>%
-              summarise(survivorship = round(mean(survivorship_pop), 2),
-                        se = round(sd(survivorship_pop)/sqrt(n()), 2))) %>%
+  left_join(frag_status %>% 
+              select(genotype, n_frags_nurseries = n_tot_alive)) %>%
+  # left_join(thermtol_2023) %>%
+  # left_join(disease) %>%
+  # left_join(outplant_monitoring %>%
+  #             group_by(genotype, site) %>%
+  #             summarise(colonies_live = sum(colonies_live)) %>%
+  #             mutate(site = case_when(site == "York Island" ~ "york_colonies",
+  #                                     site == "Ten Pound Bay" ~ "tpb_colonies",
+  #                                     site == "Ricketts" ~ "ricketts_colonies")) %>%
+  #             pivot_wider(names_from = site, values_from = colonies_live) %>%
+  #             mutate(outplant_colonies = ricketts_colonies + tpb_colonies + york_colonies) %>% # live colonies
+  #             select(genotype, outplant_colonies, york_colonies, tpb_colonies, ricketts_colonies)) %>%
+  # left_join(outplant_monitoring %>%
+  #             pivot_longer(
+  #                cols = starts_with("live_c"),
+  #                names_to = "colony",
+  #                names_prefix = "live_c",
+  #                values_to = "survivorship",
+  #                values_drop_na = TRUE #  drops all colonies planted as indv (APALs and some APROs)
+  #             ) %>%
+  #             group_by(genotype, id) %>%
+  #             summarise(survivorship_col = mean(survivorship)) %>%
+  #             right_join(outplant_monitoring %>%
+  #                          select(date_monitored, site, genotype, id, date_planted, colonies_planted, colonies_live),
+  #                        by = c("genotype", "id")) %>%
+  #             mutate(survivorship_col = if_else(is.na(survivorship_col), 100, survivorship_col),
+  #                    survivorship_pop = survivorship_col * colonies_live / colonies_planted) %>%
+  #             relocate(survivorship_col, .before = survivorship_pop) %>%
+  #             group_by(genotype) %>%
+  #             summarise(survivorship = round(mean(survivorship_pop), 2),
+  #                       se = round(sd(survivorship_pop)/sqrt(n()), 2))) %>%
   mutate_at(c('york_locations', 'tpb_locations', 'cades_locations', 'gb_locations', 'lab'), ~replace_na(.,"")) %>%
-  mutate_at(c('n_ropes', 'n_trees', 'outplant_colonies', 'york_colonies', 'tpb_colonies', 'ricketts_colonies'), ~replace_na(.,0)) %>%
+  mutate_at(c('n_ropes', 'n_trees', 'n_frags_nurseries'), ~replace_na(.,0)) %>% # , 'outplant_colonies', 'york_colonies', 'tpb_colonies', 'ricketts_colonies'
   arrange(genotype) %>%
   mutate(active = case_when((york_locations == "") & (tpb_locations == "") & (cades_locations == "") & (gb_locations == "") ~ "N",
          .default = "Y")) %>%
   mutate(productive = case_when((york_locations == "") & (tpb_locations == "") & (cades_locations == "") ~ "N",
          .default = "Y")) %>%
-  select(genotype, active, productive, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, cades_locations, gb_locations, lab, mean_infection, survivorship_bl_2023 = survivorship, min_thermtol_bl_2023 = min_thermtolerance) # removing outplant results for now until we start outplanting again
+  select(genotype, active, productive, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, cades_locations, gb_locations, lab, n_frags_nurseries) # removing outplant results for now until we start outplanting again
 
 write.csv(genotype_tracking, here("restoration_monitoring", "data_outputs", "genotype_tracking.csv"), row.names=FALSE)
 ```

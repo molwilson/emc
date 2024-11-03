@@ -39,33 +39,25 @@ nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype t
   mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased', 'n_other'), ~replace_na(.,0))
 ```
 
-Summarizing current fragment status
+Determining baseline and current monitoring dates
 ```{r}
-# determine starting number of frags per genotype at each nursery before bleaching started
+# determine baseline dates before 2024 bleaching started
 start_mon_cades <- nursery_mon %>%
-  filter(nursery == "Cades" & date < ymd("2024-10-01")) %>%
+  filter(nursery == "Cades" & date < ymd("2024-09-01")) %>%
   filter(date == last(date))
 start_mon_date_cades <- start_mon_cades$date
 
 start_mon_nonsuch <- nursery_mon %>%
-  filter(nursery == "York" & date < ymd("2024-10-01")) %>%
+  filter(nursery == "York" & date < ymd("2024-09-01")) %>%
   filter(date == last(date))
 start_mon_date_nonsuch <- start_mon_nonsuch$date
 
-temp <- nursery_mon %>%
-  filter(date %in% c(start_mon_cades$date, start_mon_nonsuch$date)) %>% # most recent pre-bleaching dates
-  group_by(nursery) %>%
-  summarize(n_healthy = sum(n_healthy),
-            n_diseased = sum(n_diseased),
-            n_pale = sum(n_pale),
-            n_bleached = sum(n_bleached),
-            n_other = sum(n_other),
-            n_dead = sum(n_dead)
-            ) %>% 
-  mutate(n_tot = n_healthy + n_diseased + n_pale + n_bleached + n_dead)
+start_mon_deep <- nursery_mon %>%
+  filter(nursery == "DN") %>%
+  filter(date == first(date))
+start_mon_date_deep <- start_mon_deep$date
 
 # determine most recent monitoring dates for Cades and Nonsuch to get latest data
-
 last_mon_cades <- nursery_mon %>%
   filter(nursery == "Cades") %>%
   filter(date == last(date))
@@ -75,66 +67,125 @@ last_mon_nonsuch <- nursery_mon %>%
   filter(nursery == "York") %>%
   filter(date == last(date))
 last_mon_date_nonsuch <- last_mon_nonsuch$date
+```
 
-# determining condition of fragments at most recent monitoring dates
+Summarizing current fragment status by genotype
+```{r}
+# current nursery fragment numbers and status by genotype
+therm_stress_baseline_genotype <- nursery_mon %>%
+  filter((nursery == "Cades" & date == start_mon_cades$date) |
+           (nursery %in% c("TPB", "York") & date == start_mon_nonsuch$date) |
+           (nursery == "DN" & date == start_mon_deep$date)
+         ) %>%
+  group_by(genotype) %>%
+  summarize(n_healthy = sum(n_healthy),
+            n_diseased = sum(n_diseased),
+            n_pale = sum(n_pale),
+            n_bleached = sum(n_bleached),
+            n_other = sum(n_other)
+            ) %>% 
+  mutate(n_tot_og = n_healthy + n_diseased + n_pale + n_bleached + n_other)
 
-therm_stress_summary_nursery <- nursery_mon %>%
+frag_status_genotype <- nursery_mon %>%
   filter(date %in% c(last_mon_cades$date, last_mon_nonsuch$date)) %>% # most recent dates
-  select(nursery, n_healthy, n_bleached, n_pale, n_diseased, n_dead) %>% # "other" frags not included here for simplicity
+  select(genotype, n_healthy, n_diseased, n_pale, n_bleached, n_other) %>%
+  group_by(genotype) %>%
+  summarize(n_healthy = sum(n_healthy),
+            n_diseased = sum(n_diseased),
+            n_pale = sum(n_pale),
+            n_bleached = sum(n_bleached),
+            n_other = sum(n_other)
+            ) %>% 
+  mutate(n_tot_alive = n_healthy + n_diseased + n_pale + n_bleached + n_other) %>%
+  left_join(therm_stress_baseline_genotype %>%
+              select(genotype, n_tot_og)) %>%
+  mutate(n_dead = n_tot_og-n_tot_alive) %>%
+  select(genotype, n_tot_og, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead) %>%
+  distinct()
+
+write.csv(frag_status_genotype, here("restoration_monitoring", "data_outputs", "frag_status.csv"), row.names=FALSE)
+```
+
+Summarizing current fragment status by nursery
+```{r}
+# determine nursery-level pre-bleaching baseline numbers
+therm_stress_baseline_nursery <- nursery_mon %>%
+  filter((nursery == "Cades" & date == start_mon_cades$date) |
+           (nursery %in% c("TPB", "York") & date == start_mon_nonsuch$date) |
+           (nursery == "DN" & date == start_mon_deep$date)
+         ) %>%
   group_by(nursery) %>%
   summarize(n_healthy = sum(n_healthy),
             n_diseased = sum(n_diseased),
             n_pale = sum(n_pale),
             n_bleached = sum(n_bleached),
+            n_other = sum(n_other),
             n_dead = sum(n_dead)
             ) %>% 
-  mutate(n_tot = n_healthy + n_diseased + n_pale + n_bleached + n_dead,
-         p_healthy = n_healthy/n_tot*100,
-         p_diseased = n_diseased/n_tot*100,
-         p_pale = n_pale/n_tot*100,
-         p_bleached = n_bleached/n_tot*100,
-         p_dead = n_dead/n_tot*100
-         ) %>%
-  select(nursery, n_tot, n_healthy, n_diseased, n_pale, n_bleached, n_dead, p_healthy, p_diseased, p_pale, p_bleached, p_dead)
+  mutate(n_tot_og = n_healthy + n_diseased + n_pale + n_bleached + n_dead + n_other)
+
+# determining condition of fragments at most recent monitoring dates
+therm_stress_summary_nursery <- nursery_mon %>%
+  filter(date %in% c(last_mon_cades$date, last_mon_nonsuch$date)) %>% # most recent dates
+  select(nursery, n_healthy, n_bleached, n_pale, n_diseased) %>% # "other" frags not included here for simplicity
+  group_by(nursery) %>%
+  summarize(n_healthy = sum(n_healthy),
+            n_diseased = sum(n_diseased),
+            n_pale = sum(n_pale),
+            n_bleached = sum(n_bleached)
+            ) %>% 
+  mutate(n_tot_alive = n_healthy + n_diseased + n_pale + n_bleached) %>%
+  left_join(therm_stress_baseline_nursery %>%
+              select(nursery, n_tot_og)) %>%
+  mutate(n_dead = n_tot_og-n_tot_alive) %>%
+  select(nursery, n_tot_og, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead)
 
 therm_stress_summary <- therm_stress_summary_nursery %>%
   summarize(n_healthy = sum(n_healthy),
             n_diseased = sum(n_diseased),
             n_pale = sum(n_pale),
             n_bleached = sum(n_bleached),
-            n_dead = sum(n_dead)
+            n_dead = sum(n_dead),
+            n_tot_alive = sum(n_tot_alive),
+            n_tot_og = sum(n_tot_og)
             ) %>%
-  mutate(n_tot = n_healthy + n_diseased + n_pale + n_bleached + n_dead,
-         p_healthy = n_healthy/n_tot*100,
-         p_diseased = n_diseased/n_tot*100,
-         p_pale = n_pale/n_tot*100,
-         p_bleached = n_bleached/n_tot*100,
-         p_dead = n_dead/n_tot*100,
-         nursery = "Total"
+  mutate(nursery = "Total") %>%
+  select(nursery, n_tot_og, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead) %>%
+  rbind(therm_stress_summary_nursery) %>%
+  mutate(p_healthy = n_healthy/n_tot_og*100,
+         p_diseased = n_diseased/n_tot_og*100,
+         p_pale = n_pale/n_tot_og*100,
+         p_bleached = n_bleached/n_tot_og*100,
+         p_dead = (n_tot_og-n_tot_alive)/n_tot_og*100,
+         p_survival = n_tot_alive/n_tot_og*100
          ) %>%
-  select(nursery, n_tot, n_healthy, n_diseased, n_pale, n_bleached, n_dead, p_healthy, p_diseased, p_pale, p_bleached, p_dead) %>%
-  rbind(therm_stress_summary_nursery)
+  select(nursery, n_tot_og, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead, p_healthy, p_diseased, p_pale, p_bleached, p_dead, p_survival)
 
 # plots
 
-ggplot(therm_stress_summary_nursery %>%
+ggplot(therm_stress_summary %>%
          select(nursery, n_healthy, n_diseased, n_pale, n_bleached, n_dead) %>%
          pivot_longer(cols = n_healthy:n_dead, 
                       names_to = "condition", 
                       names_prefix = 'n_',
-                      values_to = "n_frags"),
+                      values_to = "n_frags") %>%
+         mutate(nursery = fct_relevel(nursery, c('Total','York','TPB', 'DN', 'Cades'))) %>%
+         arrange(nursery),
        aes(x = nursery, y = n_frags, fill = condition)) +
   geom_col(color = "black") +
+  #scale_x_discrete(labels = c('Total','York','TPB', 'DN', 'Cades')) +
   scale_fill_manual(breaks = c('dead', 'diseased', 'bleached', 'pale', 'healthy'), values = c("slategray", "coral", "azure1", "tan", "goldenrod")) +
   labs(y = "Number of fragments", x = "Nursery", fill = "Condition") +
   theme_bw()
 
-ggplot(therm_stress_summary_nursery %>%
+ggplot(therm_stress_summary %>%
          select(nursery, p_healthy, p_diseased, p_pale, p_bleached, p_dead) %>%
          pivot_longer(cols = p_healthy:p_dead, 
                       names_to = "condition", 
                       names_prefix = 'p_',
-                      values_to = "percent"),
+                      values_to = "percent")  %>%
+         mutate(nursery = fct_relevel(nursery, c('Total','York','TPB', 'DN', 'Cades'))) %>%
+         arrange(nursery),
        aes(x = nursery, y = percent, fill = condition)) +
   geom_col(color = "black") +
   scale_fill_manual(breaks = c('dead', 'diseased', 'bleached', 'pale', 'healthy'), values = c("slategray", "coral", "azure1", "tan", "goldenrod")) +
