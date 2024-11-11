@@ -38,7 +38,7 @@ deep <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Deep wate
   mutate(nursery = "Deep Nursery")
 
 temp_data <- rbind(cades, tpb, deep) %>%
-  filter(temp_c < 32) # removing outlyers from loggers being on the boat and heating up
+  filter(temp_c < 32) # removing outliers from loggers being on the boat and heating up
 
 ref_temp_bleaching = 30.63
 
@@ -51,7 +51,7 @@ ggplot(temp_data,
   labs(x = "", y = "Temperature (°C)", color = "Nursery location") +
   theme_bw() +
   theme(legend.position = "bottom")
-ggsave(here("restoration_monitoring", "figs", "hobo_24.10a.png"), width = 6, height = 4)
+ggsave(here("restoration_monitoring", "figs", "hobo_summary.png"), width = 6, height = 4)
 
 ggplot(temp_data,
        aes(x = date, y = temp_c)) +
@@ -61,7 +61,7 @@ ggplot(temp_data,
   facet_grid(. ~ nursery) +
   labs(x = "", y = "Temperature (°C)", color = "Nursery") +
   theme_bw()
-ggsave(here("restoration_monitoring", "figs", "hobo_24.10b.png"), width = 6, height = 4)
+ggsave(here("restoration_monitoring", "figs", "hobo_nursery.png"), width = 6, height = 4)
   
 ```
 
