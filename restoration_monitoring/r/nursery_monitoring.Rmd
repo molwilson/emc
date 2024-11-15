@@ -7,10 +7,9 @@ output:
     code_folding: hide
 ---
 To do:
-- Update over-time graphs
 - Update genotype-specific graphs
 - Compare 2023 vs 2024 bleaching performance by genotype?
-- Incorporate Hobo data here?
+- Compare Cades/DN/York performance
 
 ```{r, message = F, warning = F, echo = F}
 library(tidyverse)
@@ -23,7 +22,61 @@ library(stringr)
 library(lubridate)
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
 
+Nursery temperature status
+
+```{r}
+cades <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Cades.xlsx"), 
+                  sheet = 1) %>%
+  clean_names() %>%
+  dplyr::rename(date = 2, temp_c = 3) %>%
+  select(-number) %>%
+  mutate(nursery = "Cades")
+
+tpb <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Ten pound bay.xlsx"), 
+                  sheet = 1) %>%
+  clean_names() %>%
+  dplyr::rename(date = 2, temp_c = 3) %>%
+  select(-number) %>%
+  mutate(nursery = "Ten Pound Bay")
+
+deep <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Deep water.xlsx"), 
+                  sheet = 1) %>%
+  clean_names() %>%
+  dplyr::rename(date = 2, temp_c = 3) %>%
+  select(-number) %>%
+  mutate(nursery = "Deep Nursery")
+
+temp_data <- rbind(cades, tpb, deep) %>%
+  filter(temp_c < 32) # removing outliers from loggers being on the boat and heating up
+
+ref_temp_bleaching = 30.63
+
+ggplot(temp_data,
+       aes(x = date, y = temp_c, color = nursery)) +
+  geom_line(alpha = 0.9, size = 0.3) +
+  scale_color_manual(values = c("cadetblue", "coral", "gold")) +
+  geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed') +
+  scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
+  labs(x = "", y = "Temperature (°C)", color = "Nursery location") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+ggsave(here("restoration_monitoring", "figs", "hobo_summary.png"), width = 6, height = 4)
+
+ggplot(temp_data,
+       aes(x = date, y = temp_c)) +
+  geom_line(alpha = 0.9, size = 0.3, color = "cadetblue") +
+  geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed', color = "coral") +
+  scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
+  facet_grid(. ~ nursery) +
+  labs(x = "", y = "Temperature (°C)", color = "Nursery") +
+  theme_bw()
+ggsave(here("restoration_monitoring", "figs", "hobo_nursery.png"), width = 6, height = 4)
+  
+```
+
+```{r, message = F, warning = F, echo = F}
 nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
   clean_names() %>%
   mutate(date = ymd(date),
@@ -34,6 +87,10 @@ nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype t
          ) %>%
     filter(!is.na(date)) %>% # removing any extra lines
   mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased', 'n_other'), ~replace_na(.,0))
+
+frags_lab <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), sheet = "Lab") %>% 
+  clean_names() %>%
+  select(genotype, n_lab = n_frags_initial, nursery = source)
 
 # determine date references
 
@@ -85,7 +142,7 @@ ggplot(status_nursery %>%
   theme_bw() +
   theme(plot.title = element_text(hjust=0.5))
 
-ggsave(here("restoration_monitoring", "figs", "current_status_nursery.png"), width = 12, height = 5)
+ggsave(here("restoration_monitoring", "figs", "frag_status_nursery.png"), width = 8, height = 5)
 ```
 
 
@@ -95,7 +152,12 @@ Summarizing 2024 bleaching outcomes by nursery
 status_nursery_pre_bleaching_2024 <- nursery_mon %>%
   filter(date_floor == pre_bleaching_baseline_2024) %>% # manually check here that there are only one monitoring event per nursery in this date group
   group_by(nursery) %>%
-  summarize(n_tot_baseline = sum(n_healthy + n_other + n_pale)) # "other" frags consolidated here for simplicity, should not be significant numbers of bleached in baseline
+  summarize(n_tot_baseline = sum(n_healthy + n_other + n_pale)) %>% # "other" frags consolidated here for simplicity, should not be significant numbers of bleached in baseline
+  left_join(frags_lab %>%
+              group_by(nursery) %>%
+              summarize(n_lab = sum(n_lab)) %>%
+              rename(nursery = nursery)) %>%
+  mutate(n_lab = replace_na(n_lab, 0))
 
 # determining condition of fragments at post-bleaching monitoring dates
 status_nursery_post_bleaching_2024 <- nursery_mon %>%
@@ -109,9 +171,9 @@ status_nursery_post_bleaching_2024 <- nursery_mon %>%
             ) %>% 
   mutate(n_tot_alive = n_healthy + n_pale + n_bleached + n_diseased) %>%
   left_join(status_nursery_pre_bleaching_2024 %>%
-              select(nursery, n_tot_baseline)) %>%
-  mutate(n_dead_rel_baseline = n_tot_baseline-n_tot_alive) %>%
-  select(nursery, n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
+              select(nursery, n_tot_baseline, n_lab)) %>%
+  mutate(n_dead_rel_baseline = n_tot_baseline - n_tot_alive - n_lab) %>%
+  select(nursery, n_tot_baseline, n_lab, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
   adorn_totals("row") %>%
   mutate(p_healthy = n_healthy/n_tot_alive*100, # relative to current total
          p_diseased = n_diseased/n_tot_alive*100, 
@@ -124,7 +186,7 @@ status_nursery_post_bleaching_2024 <- nursery_mon %>%
          p_dead_rel_baseline = (n_tot_baseline-n_tot_alive)/n_tot_baseline*100,
          p_survival_rel_baseline = n_tot_alive/n_tot_baseline*100
          ) %>%
-  select(nursery, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)
+  select(nursery, n_tot_baseline, n_lab, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)
 
 # plots
 
@@ -150,28 +212,48 @@ ggplot(status_nursery_post_bleaching_2024 %>%
   theme_bw() +
   theme(plot.title = element_text(hjust=0.5))
 
-ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_nursery.png"), width = 12, height = 5)
+ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_nursery.png"), width = 10, height = 5)
 ```
 
-Summarizing 2024 bleaching by genotype
 ```{r}
-# determine genotype-level pre-bleaching baseline numbers
-status_genotype_baseline <- nursery_mon %>%
-  filter(date_label == pre_bleaching_baseline_2024) %>%
+# identify genotypes present at all 3 comparison nurseries
+genotype_comparisons <- nursery_mon %>%
+  filter(date_floor == pre_bleaching_baseline_2024 &
+           nursery %in% c("Cades", "DN", "York")
+         ) %>%
+  select(genotype, nursery) %>%
+  distinct() %>%
   group_by(genotype) %>%
+  summarize(count = n()) %>%
+  filter(count == 3) %>%
+  select(genotype)
+genotype_comparisons <- as.list(genotype_comparisons$genotype)
+
+# determine genotype-level pre-bleaching baseline numbers at each nursery for genotypes selected for comparison
+status_genotype_nursery_baseline <- nursery_mon %>%
+  filter(date_floor == pre_bleaching_baseline_2024 & 
+           genotype %in% c(genotype_comparisons) &
+           nursery %in% c("Cades", "DN", "York")
+         ) %>%
+  group_by(genotype, nursery) %>%
   summarize(n_healthy = sum(n_healthy),
             n_diseased = sum(n_diseased),
             n_pale = sum(n_pale),
             n_bleached = sum(n_bleached),
             n_other = sum(n_other)
             ) %>% 
-  mutate(n_tot_baseline = n_healthy + n_diseased + n_pale + n_bleached + n_other)
+  left_join(frags_lab, by = c("genotype", "nursery")) %>%
+  mutate(n_lab = replace_na(n_lab, 0),
+         n_tot_baseline = n_healthy + n_diseased + n_pale + n_bleached + n_other)
 
-# nursery snapshot at post-bleaching date, using baseline pre-bleaching data to calculate percent loss
-status_genotype <- nursery_mon %>%
-  filter(date_floor == post_bleaching_2024) %>% # most recent dates
-  select(genotype, n_healthy, n_diseased, n_pale, n_bleached, n_other) %>%
-  group_by(genotype) %>%
+# determine genotype-level post-bleaching numbers at each nursery for genotypes selected for comparison
+status_genotype_nursery <- nursery_mon %>%
+  filter(date_floor == post_bleaching_2024 & 
+           genotype %in% c(genotype_comparisons) &
+           nursery %in% c("Cades", "DN", "York")
+         ) %>%
+  select(genotype, nursery, n_healthy, n_diseased, n_pale, n_bleached, n_other) %>%
+  group_by(genotype, nursery) %>%
   summarize(n_healthy = sum(n_healthy),
             n_diseased = sum(n_diseased),
             n_pale = sum(n_pale),
@@ -180,9 +262,9 @@ status_genotype <- nursery_mon %>%
             ) %>% 
   mutate(n_tot_alive = n_healthy + n_diseased + n_pale + n_bleached + n_other) %>%
   left_join(status_genotype_baseline %>%
-              select(genotype, n_tot_baseline)) %>%
-  mutate(n_dead_rel_baseline = n_tot_baseline-n_tot_alive) %>%
-  select(genotype, n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
+              select(genotype, nursery, n_tot_baseline, n_lab)) %>%
+  mutate(n_dead_rel_baseline = n_tot_baseline - n_tot_alive - n_lab) %>%
+  select(genotype, nursery, n_tot_baseline, n_lab, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
   distinct() %>%
   mutate(p_healthy = n_healthy/n_tot_alive*100, # relative to current total
          p_diseased = n_diseased/n_tot_alive*100, 
@@ -195,7 +277,64 @@ status_genotype <- nursery_mon %>%
          p_dead_rel_baseline = (n_tot_baseline-n_tot_alive)/n_tot_baseline*100,
          p_survival_rel_baseline = n_tot_alive/n_tot_baseline*100
          ) %>%
-  select(genotype, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)
+  select(genotype, nursery, n_tot_baseline, n_lab, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)
+
+
+### need to work on visualization/stats
+ggplot(status_genotype_nursery %>%
+         filter(genotype != "APAL58"), # removing temporarily until data is fixed
+       aes(x = genotype, y = p_survival_rel_baseline, fill = nursery)) +
+  geom_col(position = position_dodge()) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45))
+```
+
+
+Summarizing 2024 bleaching by genotype
+```{r}
+# determine genotype-level pre-bleaching baseline numbers
+status_genotype_baseline <- nursery_mon %>%
+  filter(date_floor == pre_bleaching_baseline_2024) %>%
+  group_by(genotype) %>%
+  summarize(n_healthy = sum(n_healthy),
+            n_diseased = sum(n_diseased),
+            n_pale = sum(n_pale),
+            n_bleached = sum(n_bleached),
+            n_other = sum(n_other)
+            ) %>% 
+  left_join(frags_lab) %>%
+  mutate(n_lab = replace_na(n_lab, 0),
+         n_tot_baseline = n_healthy + n_diseased + n_pale + n_bleached + n_other)
+
+# genotype-level snapshot at post-bleaching date, using baseline pre-bleaching data to calculate percent loss
+status_genotype <- nursery_mon %>%
+  filter(date_floor == post_bleaching_2024) %>% # most recent dates
+  select(genotype, n_healthy, n_diseased, n_pale, n_bleached, n_other) %>%
+  group_by(genotype) %>%
+  summarize(n_healthy = sum(n_healthy),
+            n_diseased = sum(n_diseased),
+            n_pale = sum(n_pale),
+            n_bleached = sum(n_bleached),
+            n_other = sum(n_other)
+            ) %>% 
+  mutate(n_tot_alive = n_healthy + n_diseased + n_pale + n_bleached + n_other) %>%
+  left_join(status_genotype_baseline %>%
+              select(genotype, n_tot_baseline, n_lab)) %>%
+  mutate(n_dead_rel_baseline = n_tot_baseline - n_tot_alive - n_lab) %>%
+  select(genotype, n_tot_baseline, n_lab, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
+  distinct() %>%
+  mutate(p_healthy = n_healthy/n_tot_alive*100, # relative to current total
+         p_diseased = n_diseased/n_tot_alive*100, 
+         p_pale = n_pale/n_tot_alive*100,
+         p_bleached = n_bleached/n_tot_alive*100,
+         p_healthy_rel_baseline = n_healthy/n_tot_baseline*100, # relative to baseline total
+         p_diseased_rel_baseline = n_diseased/n_tot_baseline*100,
+         p_pale_rel_baseline = n_pale/n_tot_baseline*100,
+         p_bleached_rel_baseline = n_bleached/n_tot_baseline*100,
+         p_dead_rel_baseline = (n_tot_baseline-n_tot_alive)/n_tot_baseline*100,
+         p_survival_rel_baseline = n_tot_alive/n_tot_baseline*100
+         ) %>%
+  select(genotype, n_tot_baseline, n_lab, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)
 ### need to figure out negative numbers/NAs here ^
 
 ggplot(status_genotype %>%
@@ -216,15 +355,15 @@ ggplot(status_genotype %>%
                       month(ymd(pre_bleaching_baseline_2024), label = TRUE), " ", 
                       year(ymd(pre_bleaching_baseline_2024)))) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  coord_flip()
 
-ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_genotype.png"), width = 12, height = 5)
+ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_genotype.png"), width = 6, height = 14)
 ```
 
 
 Graphing nursery heat stress over time
-```{r, eval = F}
-### need to redo this by nursery or with mechanism for combining dates
+```{r}
 therm_stress_time <- nursery_mon %>%
   select(date_floor, date_label, n_healthy, n_bleached, n_pale, n_diseased, n_dead) %>%
   mutate(n_tot_frags = n_healthy + n_bleached + n_pale + n_diseased + n_dead) %>%
@@ -248,6 +387,8 @@ ggplot(therm_stress_time,
   labs(y = "Percent of fragments", x = "Date", fill = "Condition") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("restoration_monitoring", "figs", "frag_status_over_time.png"), width = 12, height = 5)
 ```
 
 Genotype-specific results of 2023 bleaching
