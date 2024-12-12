@@ -165,26 +165,45 @@ outplant_adjustments <- read_excel(here("restoration_monitoring", "data_raw", "G
   mutate(genotype = substr(id, start = 1, stop = 6),
          date = as.Date("2024-12-01")) %>% # this will substitute December data
   group_by(date, nursery = site, genotype) %>%
-  summarize(n_frags = sum(n_frags)) %>%
-  mutate(nursery = if_else(nursery == "Cades Nursery", "Cades", nursery))
+  summarize(n_healthy = sum(n_frags)) %>%
+  mutate(nursery = if_else(nursery == "Cades Nursery", "Cades", nursery),
+         date_floor = floor_date(ymd(date), unit = "month"))
+
+# import lab data for comparison
+
+lab_frags <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), sheet = "Lab") %>% 
+  clean_names() %>%
+  select(genotype, n_frags_initial, n_frags_final) %>%
+  pivot_longer(cols = n_frags_initial:n_frags_final,
+               names_to = "date",
+               values_to = "n_healthy") %>%
+  mutate(date = case_when(date == "n_frags_initial" ~ as.Date("2024-07-01"),
+                          date == "n_frags_final" ~ as.Date("2024-12-01")),
+         nursery = "Lab",
+         date_floor = floor_date(ymd(date), unit = "month"))
+
+nursery_mon_bleaching_2024 <- nursery_mon %>%
+  bind_rows(lab_frags, outplant_adjustments) %>%
+  mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased', 'n_other'), ~replace_na(.,0))
 
 # determine nursery-level pre-bleaching baseline numbers
 
-status_nursery_pre_bleaching_2024 <- nursery_mon %>%
-  filter(date_floor == pre_bleaching_baseline_2024) %>% # manually check here that there are only one monitoring event per nursery in this date group
+status_nursery_pre_bleaching_2024 <- nursery_mon_bleaching_2024 %>%
+  filter(date_floor == pre_bleaching_baseline_2024) %>%
   group_by(nursery) %>%
-  summarize(n_tot_baseline = sum(n_healthy + n_other + n_pale)) %>% # "other" frags consolidated here for simplicity, should not be significant numbers of bleached in baseline
+  summarize(n_tot_baseline_og = sum(n_healthy + n_other + n_pale)) %>% # "other" frags consolidated here for simplicity, should not be significant numbers of bleached in baseline
   left_join(nursery_adjustments %>% # incorporating frags that were removed/re-added for lab, DN, etc.
               group_by(nursery) %>%
               summarize(n_adj = sum(n_frags))) %>%
-  mutate(n_adj = replace_na(n_adj, 0))
+  mutate(n_adj = replace_na(n_adj, 0),
+         n_tot_baseline = n_tot_baseline_og + n_adj)
 
 # determining condition of fragments at post-bleaching monitoring dates
 
-status_nursery_post_bleaching_2024 <- nursery_mon %>%
+status_nursery_post_bleaching_2024 <- nursery_mon_bleaching_2024 %>%
   filter(date_floor == post_bleaching_2024 & 
-           !(nursery == "York" & location %in% c("C1", "D1", "E1", "F1")) & # removing GBs because those would be double counted with deep nursery after moving it 
-           !(nursery == "Cades" & location %in% c("A1", "B1"))) %>% # remove A1 and B1 from Cades as new ropes were added
+           !(nursery == "York" & location %in% c("C1", "D1", "E1", "F1")) & # removing GBs because those would be double counted with deep nursery after moving it in Nov.
+           !(nursery == "Cades" & location %in% c("A1", "B1"))) %>% # remove A1 and B1 from Cades as new ropes were added in Dec.
   select(nursery, n_healthy, n_bleached, n_pale, n_diseased, n_other) %>%
   group_by(nursery) %>%
   summarize(n_healthy = sum(n_healthy + n_other), # "other" frags consolidated here for simplicity
@@ -194,9 +213,9 @@ status_nursery_post_bleaching_2024 <- nursery_mon %>%
             ) %>% 
   mutate(n_tot_alive = n_healthy + n_pale + n_bleached + n_diseased) %>%
   left_join(status_nursery_pre_bleaching_2024 %>%
-              select(nursery, n_tot_baseline, n_adj)) %>%
-  mutate(n_dead_rel_baseline = n_tot_baseline - n_tot_alive + n_adj) %>%
-  select(nursery, n_tot_baseline, n_adj, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
+              select(nursery, n_tot_baseline)) %>%
+  mutate(n_dead_rel_baseline = n_tot_baseline - n_tot_alive) %>%
+  select(nursery, n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
   adorn_totals("row") %>%
   mutate(p_healthy = n_healthy/n_tot_alive*100, # relative to current total
          p_diseased = n_diseased/n_tot_alive*100, 
@@ -206,10 +225,10 @@ status_nursery_post_bleaching_2024 <- nursery_mon %>%
          p_diseased_rel_baseline = n_diseased/n_tot_baseline*100,
          p_pale_rel_baseline = n_pale/n_tot_baseline*100,
          p_bleached_rel_baseline = n_bleached/n_tot_baseline*100,
-         p_dead_rel_baseline = (n_tot_baseline-n_tot_alive)/n_tot_baseline*100,
+         p_dead_rel_baseline = (n_tot_baseline - n_tot_alive)/n_tot_baseline*100,
          p_survival_rel_baseline = n_tot_alive/n_tot_baseline*100
          ) %>%
-  select(nursery, n_tot_baseline, n_adj, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)
+  select(nursery, n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)
 
 # plots
 
@@ -237,30 +256,30 @@ ggplot(status_nursery_post_bleaching_2024 %>%
 
 ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_nursery.png"), width = 10, height = 5)
 ```
-### Comparing only genotypes present in all 3 nurseries
+### Comparing only genotypes present in all 4 nurseries
 
 - non-normal distribution -> non-parametric tests
 - significantly higher survival at Cade's than York, no other significant differences among groups
 
 ```{r}
 # identify genotypes present at all 3 comparison nurseries
-genotype_comparisons <- nursery_mon %>%
+genotype_comparisons <- nursery_mon_bleaching_2024 %>%
   filter(date_floor == pre_bleaching_baseline_2024 &
-           nursery %in% c("Cades", "DN", "York")
+           nursery %in% c("Cades", "DN", "York", "Lab")
          ) %>%
   select(genotype, nursery) %>%
   distinct() %>%
   group_by(genotype) %>%
   summarize(count = n()) %>%
-  filter(count == 3) %>%
+  filter(count == 4) %>%
   select(genotype)
 genotype_comparisons <- as.list(genotype_comparisons$genotype)
 
 # determine genotype-level pre-bleaching baseline numbers at each nursery for genotypes selected for comparison
-status_genotype_nursery_baseline <- nursery_mon %>%
+status_genotype_nursery_baseline <- nursery_mon_bleaching_2024 %>%
   filter(date_floor == pre_bleaching_baseline_2024 & 
            genotype %in% c(genotype_comparisons) &
-           nursery %in% c("Cades", "DN", "York")
+           nursery %in% c("Cades", "DN", "York", "Lab")
          ) %>%
   group_by(genotype, nursery) %>%
   summarize(n_healthy = sum(n_healthy),
@@ -268,16 +287,19 @@ status_genotype_nursery_baseline <- nursery_mon %>%
             n_pale = sum(n_pale),
             n_bleached = sum(n_bleached),
             n_other = sum(n_other)
-            ) %>% 
-  left_join(frags_lab, by = c("genotype", "nursery")) %>%
-  mutate(n_lab = replace_na(n_lab, 0),
-         n_tot_baseline = n_healthy + n_diseased + n_pale + n_bleached + n_other)
+            ) %>%
+  mutate(n_tot_baseline_og = sum(n_healthy + n_other + n_pale)) %>%
+  left_join(nursery_adjustments %>% # incorporating frags that were removed/re-added for lab, DN, etc.
+              group_by(nursery) %>%
+              summarize(n_adj = sum(n_frags))) %>%
+  mutate(n_adj = replace_na(n_adj, 0),
+         n_tot_baseline = n_tot_baseline_og + n_adj)
 
 # determine genotype-level post-bleaching numbers at each nursery for genotypes selected for comparison
-status_genotype_nursery <- nursery_mon %>%
+status_genotype_nursery <- nursery_mon_bleaching_2024 %>%
   filter(date_floor == post_bleaching_2024 
            & genotype %in% c(genotype_comparisons)
-           & nursery %in% c("Cades", "DN", "York")
+           & nursery %in% c("Cades", "DN", "York", "Lab")
          ) %>%
   select(genotype, nursery, n_healthy, n_diseased, n_pale, n_bleached, n_other) %>%
   group_by(genotype, nursery) %>%
@@ -289,9 +311,9 @@ status_genotype_nursery <- nursery_mon %>%
             ) %>% 
   mutate(n_tot_alive = n_healthy + n_diseased + n_pale + n_bleached + n_other) %>%
   right_join(status_genotype_nursery_baseline %>%
-              select(genotype, nursery, n_tot_baseline, n_lab)) %>%
-  mutate(n_dead_rel_baseline = n_tot_baseline - n_tot_alive - n_lab) %>%
-  select(genotype, nursery, n_tot_baseline, n_lab, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
+              select(genotype, nursery, n_tot_baseline)) %>%
+  mutate(n_dead_rel_baseline = n_tot_baseline - n_tot_alive) %>%
+  select(genotype, nursery, n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
   distinct() %>%
   mutate(p_healthy = n_healthy/n_tot_alive*100, # relative to current total
          p_diseased = n_diseased/n_tot_alive*100, 
@@ -304,7 +326,7 @@ status_genotype_nursery <- nursery_mon %>%
          p_dead_rel_baseline = (n_tot_baseline-n_tot_alive)/n_tot_baseline*100,
          p_survival_rel_baseline = n_tot_alive/n_tot_baseline*100
          ) %>%
-  select(genotype, nursery, n_tot_baseline, n_lab, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)  %>%
+  select(genotype, nursery, n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)  %>%
   filter(! genotype %in% c("APAL58", "APAL53", "APAL60", "APAL46")) # removing temporarily until data is fixed
 
 # exploratory boxplot
