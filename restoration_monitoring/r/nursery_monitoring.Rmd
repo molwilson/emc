@@ -24,6 +24,7 @@ library(stringr)
 library(rstatix)
 library(dunn.test)
 library(ggpubr)
+library(ggbeeswarm) # beeswarm plots
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
@@ -121,20 +122,26 @@ status_nursery <- nursery_mon %>%
          p_dead = n_dead/n_tot*100
          )
 
+write.csv(status_nursery, here("restoration_monitoring", "data_outputs", "status_nursery_2024Dec.csv"), row.names=FALSE)
+
 # plots
 
 ggplot(status_nursery %>%
          select(nursery, n_healthy, n_diseased, n_pale, n_bleached, n_dead) %>%
+         mutate(nursery = case_when(nursery == "DN" ~ "Deep",
+                                    nursery == "TPB" ~ "Ten Lb.",
+                                    .default = nursery)) %>%
          pivot_longer(cols = n_healthy:n_dead, 
                       names_to = "condition", 
                       names_prefix = 'n_',
                       values_to = "n_frags") %>%
          filter(nursery != "Total") %>%
          mutate(condition = fct_relevel(str_to_sentence(condition), c("Dead", "Diseased", "Bleached", "Pale", "Healthy"))) %>%
+         filter(condition != "Dead") %>% # removing dead for this graph
          arrange(nursery),
        aes(x = nursery, y = n_frags, fill = condition)) +
   geom_col(color = "black") +
-  scale_fill_manual(values = c("slategray", "coral", "azure1", "tan", "goldenrod")) +
+  scale_fill_manual(values = c("coral", "azure1", "tan", "goldenrod")) + # dead color "slategray", 
   labs(y = "Number of fragments", x = "Nursery", fill = "Condition", , title = paste0("Status of fragments in ", month(ymd(last_mon_month), label = TRUE), ". ", year(ymd(last_mon_month)))) +
   theme_bw() +
   theme(plot.title = element_text(hjust=0.5))
@@ -258,6 +265,73 @@ ggplot(status_nursery_post_bleaching_2024 %>%
 
 ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_nursery.png"), width = 10, height = 5)
 ```
+
+### Comparing 2024 outcomes to 2023
+
+```{r}
+# establish date references
+
+pre_bleaching_baseline_2023 <- ymd("2023-09-01")
+post_bleaching_2023 <- ymd("2023-12-01") 
+
+# determine nursery-level pre-bleaching baseline numbers
+
+status_total_pre_bleaching_2023 <- nursery_mon %>%
+  filter(date_floor == pre_bleaching_baseline_2023) %>%
+  summarize(n_tot_baseline = sum(n_healthy + n_other + n_pale))
+
+
+# determining condition of fragments at post-bleaching monitoring dates
+
+status_total_post_bleaching_2024 <- nursery_mon %>%
+  filter(date_floor == post_bleaching_2023) %>%
+  mutate(n_tot_alive = n_healthy + n_bleached + n_pale + n_other + n_diseased) %>%
+  summarise(n_healthy = sum(n_healthy + n_other),
+            n_pale = sum(n_pale),
+            n_bleached = sum(n_bleached),
+            n_diseased = sum(n_diseased),
+            n_tot_alive = sum(n_tot_alive)) %>%
+  bind_cols(status_total_pre_bleaching_2023) %>%
+  mutate(n_dead_rel_baseline = n_tot_baseline - n_tot_alive) %>%
+  select(n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
+  mutate(p_healthy = n_healthy/n_tot_alive*100, # relative to current total
+         p_diseased = n_diseased/n_tot_alive*100, 
+         p_pale = n_pale/n_tot_alive*100,
+         p_bleached = n_bleached/n_tot_alive*100,
+         p_healthy_rel_baseline = n_healthy/n_tot_baseline*100, # relative to baseline total
+         p_diseased_rel_baseline = n_diseased/n_tot_baseline*100,
+         p_pale_rel_baseline = n_pale/n_tot_baseline*100,
+         p_bleached_rel_baseline = n_bleached/n_tot_baseline*100,
+         p_dead_rel_baseline = (n_tot_baseline - n_tot_alive)/n_tot_baseline*100,
+         p_survival_rel_baseline = n_tot_alive/n_tot_baseline*100
+         ) %>%
+  select(n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)
+
+bleaching_comp_yr <- status_total_post_bleaching_2024 %>%
+  mutate(year = "2023") %>%
+  bind_rows(status_nursery_post_bleaching_2024 %>%
+              filter(nursery == "Total") %>%
+              mutate(year = "2024")) %>%
+  select(year, healthy = p_healthy_rel_baseline, bleached = p_bleached_rel_baseline, pale = p_pale_rel_baseline, diseased = p_diseased_rel_baseline, dead = p_dead_rel_baseline) %>%
+  pivot_longer(cols = healthy:dead, 
+                      names_to = "condition",
+                      values_to = "percent")
+
+ggplot(bleaching_comp_yr %>%
+         mutate(condition = fct_relevel(str_to_sentence(condition), c("Dead", "Diseased", "Bleached", "Pale", "Healthy"))),
+       aes(x = year, y = percent, fill = condition)) +
+  geom_col(color = "black", position = "stack") +
+  scale_fill_manual(values = c("slategray", "coral", "azure1", "tan", "goldenrod")) +
+  labs(y = "Percent of fragments", 
+       x = "", fill = "Condition", 
+       title = "Fragment status post-bleaching") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust=0.5))
+
+ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024v2023.png"), width = 4, height = 5)
+  
+```
+
 ### Comparing only genotypes present in all 4 nurseries over the summer of 2024
 
 - non-normal distribution -> non-parametric tests
@@ -315,12 +389,12 @@ status_genotype_nursery <- nursery_mon_bleaching_2024 %>%
             n_other = sum(n_other),
             n_dead = sum(n_dead)
             ) %>% 
-  mutate(n_tot_alive = n_healthy + n_diseased + n_pale + n_bleached + n_other) %>%
   right_join(status_genotype_nursery_baseline %>%
               select(genotype, nursery, n_tot_baseline)) %>%
   mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased', 'n_other'),
             ~replace_na(.,0)) %>%
-  mutate(n_dead_rel_baseline = n_tot_baseline - n_tot_alive) %>%
+  mutate(n_tot_alive = n_healthy + n_diseased + n_pale + n_bleached + n_other,
+         n_dead_rel_baseline = n_tot_baseline - n_tot_alive) %>%
   select(genotype, nursery, n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline) %>%
   distinct() %>%
   mutate(p_healthy = n_healthy/n_tot_alive*100, # relative to current total
@@ -336,13 +410,38 @@ status_genotype_nursery <- nursery_mon_bleaching_2024 %>%
          ) %>%
   select(genotype, nursery, n_tot_baseline, n_tot_alive, n_healthy, n_diseased, n_pale, n_bleached, n_dead_rel_baseline, p_healthy, p_diseased, p_pale, p_bleached, p_healthy_rel_baseline, p_diseased_rel_baseline, p_pale_rel_baseline, p_bleached_rel_baseline, p_dead_rel_baseline, p_survival_rel_baseline)
 
-# exploratory boxplot
+# exploratory plots
+my_comparisons <- list( c("Cades", "Lab"), c("York", "Lab"))
 ggplot(status_genotype_nursery, 
        aes(x = nursery, y = p_survival_rel_baseline)) +
-  geom_boxplot() +
-  geom_point() +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45))
+  geom_violin(fill = "cadetblue", color = "cadetblue", alpha = 0.2) +
+  stat_summary(fun = "mean",
+               geom = "crossbar", 
+               width = 0.2,
+               colour = "coral") +
+  geom_beeswarm(color = "cadetblue", alpha = 0.8) +
+  stat_compare_means(paired = TRUE, method = "wilcox.test", 
+                     comparisons = my_comparisons, label.y = c(105, 110),
+                     label = "p.signif",
+                     ref.group = "0.5") +
+  stat_compare_means(label.y = 120) +
+  scale_y_continuous(breaks = c(0, 25, 50, 75, 100)) +
+  labs(x = "Nursery", y = "Percent survival", title = "Survival of replicated genotypes across nurseries (July - Dec. 2024)") +
+  theme_bw()
+ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_compgenotypes_nursery.png"), width = 6, height = 5)
+
+ggplot(status_genotype_nursery,
+       aes(x = nursery, y = p_survival_rel_baseline)) +
+  geom_col(aes(fill = nursery), alpha = 0.8, color = "black") +
+  scale_fill_manual(values = c("deepskyblue3", "cadetblue4", "goldenrod", "seagreen")) +
+  coord_flip() +
+  labs(x = "", y = "Percent survival", fill = "") +
+  scale_y_continuous(breaks = c(0, 100)) +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~genotype, ncol = 7)
+ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_compgenotypes.png"), width = 10, height = 5)
 
 # summary statistics
 genotype_nursery_stats <- status_genotype_nursery %>%
@@ -364,49 +463,11 @@ friedman_genotype_nursery
 pwc_genotype_nursery <- status_genotype_nursery %>%
   arrange(genotype) %>%
   wilcox_test(p_survival_rel_baseline ~ nursery, paired = TRUE, p.adjust.method = "bonferroni")
-# print(pwc_genotype_nursery)
-# this wasn't working for me?
+print(pwc_genotype_nursery)
 
 dunn_genotype_nursery <- dunn.test(status_genotype_nursery$p_survival_rel_baseline, status_genotype_nursery$nursery, 
                           method = "bonferroni")  # Use Bonferroni correction
 print(dunn_genotype_nursery)
-
-
-# plots
-
-ggplot(status_genotype_nursery,
-       aes(x = genotype, y = p_survival_rel_baseline)) +
-  geom_col(aes(fill = nursery), position = "dodge") +
-  coord_flip() +
-  theme_bw()
-
-ggplot(status_genotype_nursery %>%
-         group_by(nursery) %>%
-         summarize(
-           
-         ) %>%
-         select(nursery, healthy = p_healthy_rel_baseline, bleached = p_bleached_rel_baseline, pale = p_pale_rel_baseline, diseased = p_diseased_rel_baseline, dead = p_dead_rel_baseline) %>%
-         pivot_longer(cols = healthy:dead, 
-                      names_to = "condition",
-                      values_to = "percent")  %>%
-         mutate(nursery = fct_relevel(nursery, c('Total','York','TPB', 'Cades', 'DN', 'Cades')),
-                condition = fct_relevel(str_to_sentence(condition), c("Dead", "Diseased", "Bleached", "Pale", "Healthy"))) %>%
-         arrange(nursery),
-       aes(x = nursery, y = percent, fill = condition)) +
-  geom_col(color = "black") +
-  scale_fill_manual(values = c("slategray", "coral", "azure1", "tan", "goldenrod")) +
-  labs(y = "Percent of fragments", 
-       x = "Nursery", fill = "Condition", 
-       title = paste0("Fragment status in ",  
-                      month(ymd(post_bleaching_2024), label = TRUE), " ", 
-                      year(ymd(post_bleaching_2024)), " ",
-                      "relative to ", 
-                      month(ymd(pre_bleaching_baseline_2024), label = TRUE), " ", 
-                      year(ymd(pre_bleaching_baseline_2024)))) +
-  theme_bw() +
-  theme(plot.title = element_text(hjust=0.5))
-
-ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_nursery_compgenotypes.png"), width = 10, height = 5)
 ```
 
 ## Graphing nursery heat stress over time
@@ -438,6 +499,18 @@ ggplot(therm_stress_time,
 
 ggsave(here("restoration_monitoring", "figs", "frag_status_over_time.png"), width = 12, height = 5)
 ```
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Incomplete code/analyses
 
@@ -516,6 +589,8 @@ ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_genotype.
 
 ```{r}
 int_bleaching_2023 <- interval(ymd("2023-09-01"), ymd("2023-12-10")) # date range for investigation of 2023 bleaching
+
+# calculate total loss across nurseries
 
 thermtol_geno_date <- nursery_mon %>%
   filter(date == "2023-09-25") %>%
