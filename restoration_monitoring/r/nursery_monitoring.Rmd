@@ -52,17 +52,18 @@ deep <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Deep wate
   dplyr::rename(date = 2, temp_c = 3) %>%
   select(-number) %>%
   mutate(nursery = "Deep Nursery")
-# deep nursery monitor was moved to York on 11/26/24, reformatted on 12/2/24
+# deep nursery monitor was moved to York on 11/26/24, reformatted on 12/2/24, logger dysfunctional as of early 2025
 
-temp_data <- rbind(cades, tpb, deep) %>%
-  filter(temp_c < 32) # removing outliers from loggers being on the boat and heating up
+temp_data <- rbind(cades, tpb) %>%
+  filter(temp_c < 31.99 & temp_c > 20) # removing outliers from loggers being on the boat and heating up - check this doesn't affect data during heat events
 
 ref_temp_bleaching = 30.63
 
-ggplot(temp_data,
+ggplot(temp_data %>%
+         filter(as.Date(date) < "2025-06-30"), #for July 2025 report
        aes(x = date, y = temp_c, color = nursery)) +
   geom_line(alpha = 0.9, size = 0.3) +
-  scale_color_manual(values = c("cadetblue", "coral", "gold")) +
+  scale_color_manual(values = c("cadetblue", "coral")) + #, "gold" if third nursery is added
   geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed') +
   scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
   labs(x = "", y = "Temperature (°C)", color = "Nursery location") +
@@ -85,7 +86,9 @@ ggsave(here("restoration_monitoring", "figs", "hobo_nursery.png"), width = 6, he
 ```{r, message = F, warning = F, echo = F}
 nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
   clean_names() %>%
-  mutate(date = ymd(date),
+  mutate(date = as.character(date),
+         date = if_else(date == "2024-12-27", "2025-01-01", date),
+         date = ymd(date),
          date_floor = floor_date(ymd(date), unit = "month"),
          month = month(ymd(date), label = TRUE),
          year = year(ymd(date)),
@@ -122,7 +125,7 @@ status_nursery <- nursery_mon %>%
          p_dead = n_dead/n_tot*100
          )
 
-write.csv(status_nursery, here("restoration_monitoring", "data_outputs", "status_nursery_2024Dec.csv"), row.names=FALSE)
+write.csv(status_nursery, here("restoration_monitoring", "data_outputs", "status_nursery_2025Jan.csv"), row.names=FALSE)
 
 # plots
 
@@ -146,7 +149,7 @@ ggplot(status_nursery %>%
   theme_bw() +
   theme(plot.title = element_text(hjust=0.5))
 
-ggsave(here("restoration_monitoring", "figs", "frag_status_nursery.png"), width = 8, height = 5)
+ggsave(here("restoration_monitoring", "figs", "frag_status_nursery_Jan2025.png"), width = 8, height = 5)
 ```
 
 
@@ -328,7 +331,6 @@ ggplot(bleaching_comp_yr %>%
   theme_bw() +
   theme(plot.title = element_text(hjust=0.5))
 
-ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024v2023.png"), width = 4, height = 5)
   
 ```
 
@@ -683,7 +685,19 @@ disease <- nursery_mon %>%
   summarize(mean_infection = mean(p_diseased)) # need to check APAL14
 
 write.csv(disease, here("restoration_monitoring", "data_outputs", "disease.csv"), row.names=FALSE)
-  
+
+#SCTLD graph for MRC talk
+# remove ACER, APAL, APRO,
+
+ggplot(disease %>% filter(!str_detect(genotype, "ACER|APRO|APAL")),
+       aes(x = genotype, y = mean_infection*100)) +
+  geom_col(fill = "darkslategray4") +
+  ylim(0, 100) +
+  labs(x = "Genotype", y = "Mean rate of infection (%)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("restoration_monitoring", "figs", "disease_rate_sctld.png"), width = 10, height = 6)
 ```
 
 ### Broodstock survival

@@ -1,0 +1,96 @@
+---
+title: "Species interaction study"
+author: "Molly Wilson"
+date: "2025-06-10"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(stringr)
+library(lubridate)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+Steps:
+
+1a. Calculate changes in buoyant weights
+1b. Test for differences in growth rates across groups
+2a. Calculate survival rates
+2b. Test for differences in survival rates
+
+Import data
+
+```{r}
+weights <- read_excel(here("spp_interaction_exp", "data_raw", "Species interaction data.xlsx"), 
+                  sheet = "Buoyant weights") %>%
+  clean_names() %>%
+  mutate(type = case_when(table %in% c("C1", "C2") ~ "Control",
+                          table %in% c("T1", "T2") ~ "Treatment")
+         )
+```
+
+
+Growth rates
+1. Remove NAs
+2. Calculate adjusted masses
+3. Get mean adjusted mass
+
+```{r}
+
+growth <- weights %>%
+  select("id", "date", starts_with("buoy_wght_"), "density_seawater_kg_m3") %>%
+  na.omit() %>%
+  pivot_longer(
+    cols = starts_with("buoy_wght_"),
+    names_to = "replicate",
+    values_to = "buoy_wght_g"
+  ) %>%
+  mutate(adj_wght_g = buoy_wght_g/(1-density_seawater_kg_m3/1000/2.94)) %>%
+  group_by(id, date) %>%
+  summarize(adj_wght_g = mean(adj_wght_g)) %>%
+  group_by(id) %>%
+  mutate(growth_rate = (adj_wght_g - lag(adj_wght_g)) / lag(adj_wght_g)) %>%
+  ungroup() %>%
+  na.omit() %>%
+  mutate(treatment = case_when(substr(id, 1, 1) == "C" ~ "Control",
+                          substr(id, 1, 1) == "T" ~ "Treatment"),
+         table = substr(id, 1, 2),
+         genotype = substr(id, 4, 5)
+         ) 
+
+model_growth <- lm(growth_rate ~ treatment + table + genotype, data = growth)
+summary(model_growth)
+```
+
+Survival rates:
+1. Create df with condition (alive/dead) per individual
+2. Determine predictors of condition (alive or dead)
+
+```{r}
+survival <- weights %>%
+  group_by(id) %>%
+  filter(date == max(date)) %>%
+  ungroup() %>%
+  select(id, condition) %>%
+  filter(condition != "missing original") %>%
+  mutate(treatment = case_when(substr(id, 1, 1) == "C" ~ "Control",
+                          substr(id, 1, 1) == "T" ~ "Treatment"),
+         table = substr(id, 1, 2),
+         genotype = substr(id, 4, 5)
+         ) %>%
+  mutate(condition = factor(condition, levels = c("alive", "dead"))) # for model
+
+model_survival <- glm(condition ~ treatment + table + genotype, 
+             data = survival, 
+             family = binomial)
+
+summary(model_survival) # no statistically significant differences
+```
+
