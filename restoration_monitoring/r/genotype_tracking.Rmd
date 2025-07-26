@@ -226,11 +226,29 @@ genotype_tracking <- collection %>%
 write.csv(genotype_tracking, here("restoration_monitoring", "data_outputs", "genotype_tracking.csv"), row.names=FALSE)
 ```
 
+### Disease susceptibility
+
+- rate of infection: number of infected frags / total frags across all structures
+
+```{r}
+### need to account for multiple dates - or combine dates
+disease <- nursery_mon %>%
+  group_by(genotype, date) %>%
+  summarize(n_healthy = sum(n_healthy), n_bleached = sum(n_bleached), n_pale = sum(n_pale),  n_dead = sum(n_dead), n_diseased = sum(n_diseased), n_other = sum(n_other)) %>%
+  mutate(p_diseased = n_diseased / (n_diseased + n_healthy + n_bleached + n_pale + n_other)) %>% # not relative to dead fragments
+  mutate(across(p_diseased, ~ replace(., is.nan(.), 0))) %>%
+  group_by(genotype) %>%
+  summarize(mean_infection = mean(p_diseased)) # need to check APAL14
+
+write.csv(disease, here("restoration_monitoring", "data_outputs", "disease.csv"), row.names=FALSE)
+  
+```
+
 Summary data
 
 ```{r, eval = F}
 
-# determine most recent monitoring dates for Cades and Nonsuch to get latest data
+# Using "12-27-2024" and "01-01-2025" as most recent nursery-level monitoring dates for Cades and Nonsuch
 last_mon_cades <- nursery_mon %>%
   filter(nursery == "Cades") %>%
   filter(date == last(date))

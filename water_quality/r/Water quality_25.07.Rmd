@@ -49,22 +49,23 @@ sites <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx")
 ysi <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi") %>% 
   rename_with(tolower) %>% # prevents clean_names() from adding extra underscores before caps
   clean_names() %>%
-  mutate(site_code = if_else(site_code == "Corington", "COV",
-                             if_else(site_code == "greenhEB", "GEB",
-                                     if_else(site_code == "1gic", "GIC1",
-                                             if_else(site_code == "3gic", "GIC3",
-                                                     if_else(site_code == "1yic", "YIC1",
-                                                             if_else(site_code == "3yic", "YIC3",
-                                     site_code # can remove a lot of these now that data is corrected
-                               ))))))) %>%
+  # mutate(site_code = if_else(site_code == "Corington", "COV",
+  #                            if_else(site_code == "greenhEB", "GEB",
+  #                                    if_else(site_code == "1gic", "GIC1",
+  #                                            if_else(site_code == "3gic", "GIC3",
+  #                                                    if_else(site_code == "1yic", "YIC1",
+  #                                                            if_else(site_code == "3yic", "YIC3",
+  #                                    site_code # can remove a lot of these now that data is corrected
+  #                              ))))))) %>%
   rename(site_code_depth = site_code) %>%
   filter(as.character(date) != "2023-10-05" # removing incomplete/aborted day 
-          & as.character(time) %nin%	c("1899-12-31 11:38:13", 	"1899-12-31 14:45:28", "1899-12-31 09:41:43", "1899-12-31 09:29:43", "1899-12-31 10:36:28", "1899-12-31 12:55:39", "1899-12-31 14:20:21", "1899-12-31 11:25:50", "1899-12-31 12:02:20", "1899-12-31 12:12:54")) # removing duplicate samples
+          & as.character(time) %nin%	c("1899-12-31 11:38:13", 	"1899-12-31 14:45:28", "1899-12-31 09:41:43", "1899-12-31 09:29:43", "1899-12-31 10:36:28", "1899-12-31 12:55:39", "1899-12-31 14:20:21", "1899-12-31 11:25:50", "1899-12-31 12:02:20", "1899-12-31 12:12:54")) # removing duplicate samples - some have been removed from dataset directly, eventually all should be
 
 entero <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "enterococcus") %>% 
-  clean_names()
+  clean_names() %>%
+  mutate(n_colonies = as.numeric(str_replace_all(n_colonies, ">", "")))
 
-boats <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "boat activity") %>% 
+boat_activity <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "boat activity") %>% 
   clean_names() %>%
   mutate(site_code = if_else(site_code == "GIA/LBI", "GIA", site_code)) # coding merged GIA/LBI sites as GIA for now
 
@@ -78,11 +79,15 @@ sargassum_regional <- read_excel(here("water_quality", "data_raw", "Water qualit
   mutate(date = as.numeric(date)) %>%
   mutate(date = as.Date(date, origin = "1899-12-30")) # converting from weird excel format
 
+sargassum_local <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sargassum") %>%
+  clean_names() %>%
+  mutate(date = as.Date(date))
+
 # merge site, ysi, enterococcus, boat, and precipitation data into one dataset
 wq_data <- ysi %>%
   select(date, site_code_depth, temperature_c = temperature_c_24, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu) %>%
   drop_na() %>%
-  left_join(ysi %>%
+  left_join(ysi %>% # joining data from 5th probe
               select(date, site_code_depth, turbidity_fnu) %>%
               drop_na(),
             by = c("date", "site_code_depth")) %>%
@@ -91,51 +96,51 @@ wq_data <- ysi %>%
          depth_m = replace_na(depth_m, 1)) %>% # surface-only sites are assumed to be approx 1m
   left_join(sites, by = c("site_code")) %>%
   left_join(entero, by = c("date", "site_code")) %>%
-  left_join(boats, by = c("date", "site_code")) %>%
+  left_join(boat_activity, by = c("date", "site_code")) %>%
+  left_join(sargassum_local, by = c("date", "site_code")) %>%
   mutate(n_colonies = replace_na(as.numeric(str_replace(n_colonies, ">" ,"")), 0),
          #n_colonies = replace_na(n_colonies, 0),
          entero_yn = if_else(n_colonies == 0, "Absent",
                              if_else(n_colonies > 0, "Present", "NA")),
          n_boats = replace_na(n_boats, 0),
+         leachate = replace_na(leachate, 0),
          month = month(ymd(date), label = TRUE),
          year = year(ymd(date)),
          date_label = paste(as.character(month), as.character(year)),
          date_label = if_else(as.character(date) == "2024-04-29", "May 2024", date_label),
          date_cat = if_else(substr(date_label, 1, 3) %in% c("Dec", "Jan", "Feb", "Mar", "Apr"), "High season", "Low season"),
-         site_cat = if_else(site_code %in% c("YIE", "GIE", "YIC", "GIC"), "Control", "Treatment")) %>%
-  select(date, date_label, date_cat, site_code_depth, site_code, depth_m, site_name, site_cat, latitude, longitude, n_boats, temperature_c, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu, turbidity_fnu, n_colonies, entero_yn) %>%
+         site_cat = if_else(site_code %in% c("YIE", "GIE", "YIC", "GIC", "CRS"), "Control", "Treatment")) %>%
+  select(date, date_label, date_cat, site_code_depth, site_code, depth_m, site_name, site_cat, latitude, longitude, n_boats, leachate, temperature_c, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu, turbidity_fnu, n_colonies, entero_yn) %>%
   distinct()
 
 # streamlining data for graphs to include only regularly monitored sites at 1m depth
 data_mon <- wq_data %>%
-  filter(site_code %in% c("NBRB", "NBRM", "EC", "NBA", "LBI", "GIA", "ML", "RBA", "RRS", "GOE", "TPBN", "GIE", "GIC", "YIE", "YIC", "DB", "MRCH", "COV", "GEB", "FHB", "YIN", "YRS", "BDB", "LDB", "MRYC", "EBB", "EBBW") & depth_m == 1) %>% # GEB and COV currently combined as Exchange Bay - Club Hotel
+  filter(site_code %in% c("NBRB", "NBRM", "EC", "NBA", "GIA", "ML", "RBA", "GOE", "TPBN", "GIE", "GIC", "YIE", "YIC", "DB", "MRCH", "COV", "GEB", "FHB", "YIN", "BDB", "LDB", "MRYC", "EBB", "EBBW", "CN", "CRS") & depth_m == 1) %>% # GEB and COV currently combined as Exchange Bay - Club Hotel
   mutate(site_name = factor(site_name, levels = c("Emerald Cove", 
                                                   "Nonsuch Bay Resort Mangrove", 
                                                   "Nonsuch Bay Resort Beach", 
-                                                  "Nonsuch Bay Anchorage", 
-                                                  "Little Bird Island", 
+                                                  "Nonsuch Bay Anchorage",
                                                   "Green Island Anchorage", 
                                                   "Mill Reef Yacht Club", 
                                                   "Macy Ledge", 
                                                   "Ricketts Bay Anchorage", 
-                                                  "Ricketts Restoration Site",
                                                   "Garden of Eden", 
                                                   "Ten Pound Bay Nursery", 
                                                   "Little Deep Bay", 
                                                   "Great Deep Bay", 
                                                   "York Island Nursery", 
-                                                  "York Restoration Site",
                                                   "Friars Head Bay", 
                                                   "Exchange Bay - Turtle Beach", 
                                                   "Exchange Bay - MRC Hotel",
                                                   "Exchange Bay - Boom E",
                                                   "Exchange Bay - Boom W",
-                                                  "Green Island Offshore Control", 
-                                                  "Green Island Inshore Control",
-                                                  "York Island Offshore Control",
-                                                  "York Island Inshore Control"))) %>%
+                                                  "Green Island Control", 
+                                                  "York Island Control",
+                                                  "Cades Nursery",
+                                                  "Cades Restoration Site"
+                                                          ))) %>%
   mutate(site_name = fct_rev(site_name)) %>% # flipped axis plot needs reversed order
-  filter(as.Date(date) < "2024-12-31") # for 2024 report
+  filter(as.Date(date) < "2025-06-30") # for 2025 report
 
 
 # test for sites/depths where multiple samples were taken
@@ -262,7 +267,8 @@ line_time <- function(data_wq, y, ylab, ylims) {
     scale_color_manual(values = c("dodgerblue4", "lightblue"), labels = c("Control sites", "Treatment sites")) +
     guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
     scale_x_datetime(date_breaks = "2 months",
-                   date_labels = "%b %Y") +
+                   date_labels = "%b %Y",
+                   expand = c(0.02, 0.02)) +
     labs(x = "", y = ylab, color = "") +
     ylim(ylims) +
     theme_bw() +
@@ -303,7 +309,8 @@ line_time_ref <- function(data_ref, lab_ref, data_wq, y, ylab, ylims) {
     scale_color_manual(values = c("dodgerblue4", "lightblue"), labels = c("Control sites", "Treatment sites")) +
     guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
     scale_x_datetime(date_breaks = "2 months",
-                   date_labels = "%b %Y") +
+                   date_labels = "%b %Y",
+                   expand = c(0.02, 0.02)) +
     labs(x = "", y = ylab, fill = "", color = "") +
     ylim(ylims) +
     theme_bw() +
@@ -325,7 +332,7 @@ ph_line <- line_time_ref(ref_ph, lab_ref_ph, data_mon, ph, lab_ph, ylims_ph)
 
 ggarrange(ph_point, ph_line, 
           ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
-ggsave(here("water_quality", "figs", "2024", "ph.png"),  width = plot_dim_w, height = plot_dim_h)
+ggsave(here("water_quality", "figs", "2024-2025", "ph.png"),  width = plot_dim_w, height = plot_dim_h)
 
 # turbidity
 turb_point <- flpoint_site_ref(ref_turb, filter(data_mon, as.character(date) != "2023-10-10"), turbidity_fnu, lab_turb, ylims_turb) # removing first date, calibration was off
@@ -333,7 +340,7 @@ turb_line <- line_time_ref(ref_turb, lab_ref_turb, filter(data_mon, as.character
 
 ggarrange(turb_point, turb_line, 
           ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
-ggsave(here("water_quality", "figs", "2024", "turbidity.png"),  width = plot_dim_w, height = plot_dim_h)
+ggsave(here("water_quality", "figs", "2024-2025", "turbidity.png"),  width = plot_dim_w, height = plot_dim_h)
 
 # do
 do_point <- flpoint_site_ref(ref_do, data_mon, do_mg_l, lab_do, ylims_do)
@@ -344,7 +351,7 @@ do_line <- line_time_ref(ref_do, lab_ref_do, data_mon, do_mg_l, lab_do, ylims_do
 
 ggarrange(do_point, do_line, 
           ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
-ggsave(here("water_quality", "figs", "2024", "do.png"),  width = plot_dim_w, height = plot_dim_h)
+ggsave(here("water_quality", "figs", "2024-2025", "do.png"),  width = plot_dim_w, height = plot_dim_h)
 
 # temp
 data_mon_temp <- data_mon %>% filter(site_code != "GEB")
@@ -357,7 +364,7 @@ temp_line <- line_time_ref(ref_temp, lab_ref_temp, data_mon_temp, temperature_c,
 
 ggarrange(temp_point, temp_line, 
           ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
-ggsave(here("water_quality", "figs", "2024", "temp.png"),  width = plot_dim_w, height = plot_dim_h)
+ggsave(here("water_quality", "figs", "2024-2025", "temp.png"),  width = plot_dim_w, height = plot_dim_h)
 
 # chlorophyll a
 chlor_point <- flpoint_site(data_mon, chlorophyll_rfu, lab_chlor, ylims_chlor)
@@ -365,7 +372,7 @@ chlor_line <- line_time(data_mon, chlorophyll_rfu, lab_chlor, ylims_chlor)
 
 ggarrange(chlor_point, chlor_line, 
           ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
-ggsave(here("water_quality", "figs", "2024", "chlor.png"),  width = plot_dim_w, height = plot_dim_h)
+ggsave(here("water_quality", "figs", "2024-2025", "chlor.png"),  width = plot_dim_w, height = plot_dim_h)
 
 # phycoerythrin
 phyco_point <- flpoint_site(data_mon, phycoerythrin_rfu, lab_phyco, ylims_phyco)
@@ -373,7 +380,7 @@ phyco_line <- line_time(data_mon, phycoerythrin_rfu, lab_phyco, ylims_phyco)
 
 ggarrange(phyco_point, phyco_line, 
           ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
-ggsave(here("water_quality", "figs", "2024", "phyco.png"),  width = plot_dim_w, height = plot_dim_h)
+ggsave(here("water_quality", "figs", "2024-2025", "phyco.png"),  width = plot_dim_w, height = plot_dim_h)
 
 # enterococcus
 entero_point <- flpoint_site_ref(ref_entero, data_mon, n_colonies, lab_entero, ylims_entero)
@@ -381,7 +388,7 @@ entero_line <- line_time_ref(ref_entero, lab_ref_entero, data_mon, n_colonies, l
 
 ggarrange(entero_point, entero_line, 
           ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
-ggsave(here("water_quality", "figs", "2024", "entero.png"),  width = plot_dim_w, height = plot_dim_h)
+ggsave(here("water_quality", "figs", "2024-2025", "entero.png"),  width = plot_dim_w, height = plot_dim_h)
 ```
 
 ### Map play
@@ -404,7 +411,8 @@ ggplot() +
              mapping = aes(x = longitude, y = latitude, color = entero_yn, size = n_colonies), 
              alpha = 0.7) + # add sites
   scale_color_manual(values = c("turquoise", "tomato")) +
-  facet_wrap(. ~ factor(date_label, levels = c("Oct 2023", "Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024", "Jul 2024", "Aug 2024", "Sep 2024", "Oct 2024", "Nov 2024", "Dec 2024"))) +
+  facet_wrap(. ~ factor(date_label, levels = c("Oct 2023", "Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024", "Jul 2024", "Aug 2024", "Sep 2024", "Oct 2024", "Nov 2024", "Dec 2024", "Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025")),
+             ncol = 6) +
   labs(size = expression("Concentration (CFU "*mL^-1*")"),
        color = expression("Enterococci detection")) +
   theme_bw() +
@@ -413,31 +421,9 @@ ggplot() +
         axis.ticks = element_blank(),
         legend.position = "top")
 
-ggsave(here("water_quality", "figs", "2024", "entero_map.png"), width = 10, height = 9)
+ggsave(here("water_quality", "figs", "2024-2025", "entero_map_nonsuch.png"), width = 10, height = 9)
 ```
 
-```{r}
-# map for MRC talk slides
-
-ggplot() +
-  geom_sf(data = atg, fill = "slategray", color = "slategray") + # ATG basemap
-  coord_sf(xlim = lons, ylim = lats, expand = FALSE) + # setting map boundaries
-  geom_point(data_mon %>% filter(date_label %in% c("Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024", "Jul 2024", "Aug 2024", "Sep 2024", "Oct 2024", "Nov 2024")), 
-             mapping = aes(x = longitude, y = latitude, color = entero_yn, size = n_colonies), 
-             alpha = 0.7) + # add sites
-  scale_color_manual(values = c("turquoise", "tomato")) +
-  facet_wrap(. ~ factor(date_label, levels = c("Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024", "Jul 2024", "Aug 2024", "Sep 2024", "Oct 2024", "Nov 2024")),
-             nrow = 2) +
-  labs(size = expression("Concentration (CFU "*mL^-1*")"),
-       color = expression("Enterococci detection")) +
-  theme_bw() +
-  theme(axis.title = element_blank(), 
-        axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        legend.position = "top")
-
-ggsave(here("water_quality", "figs", "2024", "entero_map_mrc.png"), width = 10, height = 9)
-```
 
 
 ### Boat play
@@ -449,7 +435,7 @@ ggplot(data_mon %>% filter(site_code %in% c("GIA", "RBA", "NBA", "GOE")),
   geom_point(alpha = 0.6, size = 2) +
   labs(x = "Number of boats in anchorages", y = lab_entero, color = "", shape = "") +
   theme_bw()
-ggsave(here("water_quality", "figs", "2024", "entero_boats.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "2024-2025", "entero_boats.png"), width = 6, height = 4)
 ```
 ### Enterococcus ~ chlorophyll play
 
@@ -470,7 +456,7 @@ entero_chlor <- ggplot(data_mon,
 
 ggarrange(entero_phyco, entero_chlor, 
           ncol = 2, nrow = 1)
-ggsave(here("water_quality", "figs", "2024", "entero_chlor.png"), width = 6, height = 3)
+ggsave(here("water_quality", "figs", "2024-2025", "entero_chlor.png"), width = 6, height = 3)
 ```
 
 ### Precipitation
@@ -481,12 +467,15 @@ Didn't find much relationship between precipitation and any parameters at this p
 ggplot() +
   geom_line(data = precip %>% 
               filter(as.Date(date) < date_max), 
-             aes(x = date, y = precipitation_in)) +
+             aes(x = as.Date(date), y = precipitation_in)) +
   labs(x = "", y = lab_precip) +
-  scale_x_datetime(date_breaks = "2 months",
-                   date_labels = "%b %Y") +
-  theme_bw()
-ggsave(here("water_quality", "figs", "2024", "precip.png"), width = 6, height = 4)
+  scale_x_date(
+    limits = as.Date(c("2023-11-01", "2025-06-30")),
+    date_breaks = "2 months",
+    date_labels = "%b %Y") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here("water_quality", "figs", "2024-2025", "precip.png"), width = 6, height = 4)
 
 # trying to calculate the amount of rainfall preceding a testing day
 ysi_dates <- ysi %>%
@@ -544,7 +533,7 @@ ggplot(precip_prior, aes(x = date_label, y = precip_prior, group = factor(interv
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
-ggsave(here("water_quality", "figs", "2024", "precip_prior.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "2024-2025", "precip_prior.png"), width = 6, height = 4)
   
 ```
 ```{r}
@@ -582,22 +571,26 @@ ggplot() +
            fill = "orange3") +
   labs(x = "", y = "Caribbean & GOM sargassum influx (mil tonnes)") +
   scale_x_datetime(date_breaks = "2 months",
-                   date_labels = "%b %Y") +
+                   date_labels = "%b %Y",
+                   expand = c(0.01, 0.01)) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(here("water_quality", "figs", "2024", "sargassum.png"), width = 6, height = 4)
+ggsave(here("water_quality", "figs", "2024-2025", "sargassum.png"), width = 6, height = 4)
 ```
 
 
 ```{r}
 sites_sarg <- c("EBB", "EBBW", "MRCH", "BDB", "LDB", "FHB", "NBRM")
+date_min_sarg <- min(sargassum_local$date) # date at which we started recording leachate levels
 
 # reference values from Aug. 2021 decay at FHB
-label <- "Sargassum leachate"
+
 ref_sarg_ph <- 7.25
 ref_sarg_do <- 0.26 # mg/L
 ref_sarg_turb <- 26.2 # NTU (YSI says no conversion to FNU needed if YSI was used to collect both)
 ref_sarg_entero <- 10/100 # CFU/mL
+
+label <- "Decay reference"
 ref_sarg_df <- data.frame(label, ref_sarg_ph, ref_sarg_do, ref_sarg_turb, ref_sarg_entero) # had to create df to be able to label reference line in a faceted plot
 
 sarg <- function(data_ref, ref_sarg, y, ylab, ylims) {
@@ -610,19 +603,36 @@ sarg <- function(data_ref, ref_sarg, y, ylab, ylims) {
              color = "salmon") +
     scale_linetype_manual(values = "dashed") +
     geom_point(data = wq_data %>% 
-                 filter(site_code %in% sites_sarg),
+                 filter(site_code %in% sites_sarg & date >= date_min_sarg) ,
        aes(x = date, y = {{y}}, color = as.character(depth_m)),
        alpha = 0.8, size = 2) +
     scale_color_manual(values = c("cadetblue", "darkblue"), labels = c("1m", "3m")) +
     # scale_shape_manual(values = c(16, 18), labels = c("1m", "3m")) +
     facet_wrap(. ~ site_name, nrow = 1, labeller = labeller(site_name = label_wrap_gen(17))) +
-    scale_x_datetime(date_breaks = "3 months",
+    scale_x_datetime(date_breaks = "4 months",
                    date_labels = "%b %Y") +
     ylim(ylims) +
     labs(x = "", y = ylab, shape = "Depth", color = "Depth", fill = "", linetype = "") +
     guides(color = guide_legend(order = 1), linetype = guide_legend(order = 2), linetype = guide_legend(order = 3)) +
     theme_bw()
 }
+
+# sargassum leachate levels
+leachate_sarg <- ggplot() +
+  geom_col(data = wq_data %>% 
+             filter(site_code %in% sites_sarg & date >= date_min_sarg) %>%
+             select(date, site_name, leachate) %>%
+             distinct(),
+       aes(x = date, y = leachate),
+       fill = "orange3") +
+  scale_x_datetime(date_breaks = "2 months",
+                   date_labels = "%b %Y") +
+  ylim(0, 2) +
+  scale_y_continuous(breaks = seq(0, 1, by = 1)) +
+  labs(y = "Leachate score", x = "") +
+  facet_wrap(. ~ site_name, nrow = 1, labeller = labeller(site_name = label_wrap_gen(17))) +
+  theme_bw() +
+  theme(axis.text.x = (element_text(angle = 45, hjust = 1)))
 
 # do
 do_sarg <- sarg(ref_do, ref_sarg_do, do_mg_l, lab_do, ylims = c(0,9.5)) +
@@ -634,14 +644,30 @@ ph_sarg <- sarg(ref_ph, ref_sarg_ph, ph, lab_ph, ylims_ph) +
   theme(legend.position = "none",
         axis.text.x = element_blank())
 
-# turbidity
+# turbidity - excluded for now
 turb_sarg <- sarg(ref_turb, ref_sarg_turb, turbidity_fnu, lab_turb, c(0,30)) +
   theme(legend.position = "none",
         axis.text.x = (element_text(angle = 45, hjust = 1)))
 
-ggarrange(do_sarg, ph_sarg, turb_sarg, 
+
+sarg1 <- ggarrange(do_sarg, ph_sarg, 
           ncol = 1, common.legend = TRUE, legend = "top", heights = c(4, 4, 5)) # need to set heights so last graph with x axis doesn't get squished
-ggsave(here("water_quality", "figs", "2024", "sarg.png"),  width = 8, height = 8)
+ggarrange(leachate_sarg, sarg1,
+          ncol = 1, common.legend = FALSE)
+
+ggarrange(
+  # Top row: two plots with shared legend
+  ggarrange(do_sarg, ph_sarg, 
+            ncol = 1, 
+            common.legend = TRUE, 
+            legend = "top",
+            heights = c(4, 4)),
+  # Bottom row: third plot without legend
+  leachate_sarg + theme(legend.position = "none"),
+  nrow = 2,
+  heights = c(4, 2)  # Give 2/3 of the height to the top row, 1/3 to the bottom
+)
+ggsave(here("water_quality", "figs", "2024-2025", "sarg.png"),  width = 8, height = 8)
 
 ```
 
