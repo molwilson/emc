@@ -55,20 +55,31 @@ deep <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Deep wate
 # deep nursery monitor was moved to York on 11/26/24, reformatted on 12/2/24, logger dysfunctional as of early 2025
 
 temp_data <- rbind(cades, tpb) %>%
-  filter(temp_c < 31.99 & temp_c > 20) # removing outliers from loggers being on the boat and heating up - check this doesn't affect data during heat events
+  filter(temp_c < 31.99 & temp_c > 20) %>% # removing outliers from loggers being on the boat and heating up - check this doesn't affect data during heat events
+  filter(as.Date(date) < "2025-06-30") #for July 2025 report
 
+# references
+lab_temp <- expression("Temperature ("*~degree*C*")")
+ref_temp = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6)
+lab_ref_temp <- "Target range (Coral Reef Alliance)"
 ref_temp_bleaching = 30.63
+lab_ref_temp_bleaching <- "Coral bleaching threshold (NOAA)"
+ylims_temp <- c(22, (max(data_mon$temperature_c, na.rm = T) + 1))
 
-ggplot(temp_data %>%
-         filter(as.Date(date) < "2025-06-30"), #for July 2025 report
-       aes(x = date, y = temp_c, color = nursery)) +
-  geom_line(alpha = 0.9, size = 0.3) +
-  scale_color_manual(values = c("cadetblue", "coral")) + #, "gold" if third nursery is added
+# plot
+ggplot() +
+  geom_rect(data = ref_temp, 
+              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), ymin = ymin, ymax = ymax, fill = lab_ref_temp),
+              alpha = 0.5) +
+  scale_fill_manual(values = "gray") +
+  geom_line(data = temp_data,
+            aes(x = date, y = temp_c, group = nursery, color = nursery),
+            alpha = 0.9) +
   geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed') +
   scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
-  labs(x = "", y = "Temperature (°C)", color = "Nursery location") +
+  labs(x = "", y = "Temperature (°C)", color = "Nursery location", fill = "") +
   theme_bw() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "top")
 ggsave(here("restoration_monitoring", "figs", "hobo_summary.png"), width = 6, height = 4)
 
 ggplot(temp_data,
