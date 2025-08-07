@@ -1,0 +1,531 @@
+<metadata xml:lang="en">
+	<eainfo>
+		<detailed Name="_CoralRecruitsBySite_Total">
+			<enttyp>
+				<enttypl Sync="TRUE">_CoralRecruitsBySite_Total</enttypl>
+				<enttypt Sync="TRUE">Feature Class</enttypt>
+				<enttypc Sync="TRUE">8</enttypc>
+			</enttyp>
+			<attr>
+				<attrlabl Sync="TRUE">FID</attrlabl>
+				<attalias Sync="TRUE">FID</attalias>
+				<attrtype Sync="TRUE">OID</attrtype>
+				<attwidth Sync="TRUE">4</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdef Sync="TRUE">Internal feature number.</attrdef>
+				<attrdefs Sync="TRUE">Esri</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Sequential unique whole numbers that are automatically generated.</udom>
+				</attrdomv>
+			</attr>
+			<attr>
+				<attrlabl Sync="TRUE">Shape</attrlabl>
+				<attalias Sync="TRUE">Shape</attalias>
+				<attrtype Sync="TRUE">Geometry</attrtype>
+				<attwidth Sync="TRUE">0</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdef Sync="TRUE">Feature geometry.</attrdef>
+				<attrdefs Sync="TRUE">Esri</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Coordinates defining the features.</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BATCH</attrlabl>
+				<attalias Sync="TRUE">BATCH</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Name of batch</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CODE</attrlabl>
+				<attalias Sync="TRUE">CODE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Site code</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SITE</attrlabl>
+				<attalias Sync="TRUE">SITE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Name of site</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DATE</attrlabl>
+				<attalias Sync="TRUE">DATE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">19</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Date of survey</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">LATITUDE</attrlabl>
+				<attalias Sync="TRUE">LATITUDE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Latitude (in decimal degrees)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">LONGITUDE</attrlabl>
+				<attalias Sync="TRUE">LONGITUDE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Longitude (in decimal degrees)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ZONE</attrlabl>
+				<attalias Sync="TRUE">ZONE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Reef zone category</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SUBREGION</attrlabl>
+				<attalias Sync="TRUE">SUBREGION</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Region within country</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SHELF</attrlabl>
+				<attalias Sync="TRUE">SHELF</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Continental/insular shelf unit</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ECOREGION</attrlabl>
+				<attalias Sync="TRUE">ECOREGION</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Marine ecoregional classification</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DEPTH</attrlabl>
+				<attalias Sync="TRUE">DEPTH</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Average depth of survey (meters)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">NT</attrlabl>
+				<attalias Sync="TRUE">NT</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Total number of transects</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">NQ</attrlabl>
+				<attalias Sync="TRUE">NQ</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Total number of quadrats</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">S_ALL</attrlabl>
+				<attalias Sync="TRUE">S_ALL</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of all (Small) recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">S_AGAR</attrlabl>
+				<attalias Sync="TRUE">S_AGAR</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Small) Agaricia/Undaria recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">S_DICH</attrlabl>
+				<attalias Sync="TRUE">S_DICH</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Small) Dichocoenia recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">S_FAVI</attrlabl>
+				<attalias Sync="TRUE">S_FAVI</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Small) Favia recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">S_PORI</attrlabl>
+				<attalias Sync="TRUE">S_PORI</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Small) Porites recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">S_SIDE</attrlabl>
+				<attalias Sync="TRUE">S_SIDE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Small) Siderastrea recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">S_UNKN</attrlabl>
+				<attalias Sync="TRUE">S_UNKN</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Small) Unknown recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">L_ALL</attrlabl>
+				<attalias Sync="TRUE">L_ALL</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of all (Large) recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">L_AGAR</attrlabl>
+				<attalias Sync="TRUE">L_AGAR</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large) Agaricia/Undaria recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">L_DICH</attrlabl>
+				<attalias Sync="TRUE">L_DICH</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large) Dichocoenia recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">L_FAVI</attrlabl>
+				<attalias Sync="TRUE">L_FAVI</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large) Favia recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">L_PORI</attrlabl>
+				<attalias Sync="TRUE">L_PORI</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large) Porites recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">L_SIDE</attrlabl>
+				<attalias Sync="TRUE">L_SIDE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large) Siderastrea recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">L_UNKN</attrlabl>
+				<attalias Sync="TRUE">L_UNKN</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large) Unknown recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">T_ALL</attrlabl>
+				<attalias Sync="TRUE">T_ALL</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of all (Large & Small) recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">T_AGAR</attrlabl>
+				<attalias Sync="TRUE">T_AGAR</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large & Small) Agaricia/Undaria recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">T_DICH</attrlabl>
+				<attalias Sync="TRUE">T_DICH</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large & Small) Dichocoenia recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">T_FAVI</attrlabl>
+				<attalias Sync="TRUE">T_FAVI</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large & Small) Favia recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">T_PORI</attrlabl>
+				<attalias Sync="TRUE">T_PORI</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large & Small) Porites recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">T_SIDE</attrlabl>
+				<attalias Sync="TRUE">T_SIDE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large & Small) Siderastrea recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">T_UNKN</attrlabl>
+				<attalias Sync="TRUE">T_UNKN</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Density of (Large & Small) Unknown recruits (per square meter) (Total)</udom>
+				</attrdomv>
+			</attr>
+			
+		</detailed>
+	</eainfo>
+	<distInfo>
+		<distTranOps>
+			<onLineSrc>
+				<linkage>www.agrra.org</linkage>
+			</onLineSrc>
+			<transSize Sync="TRUE">0.065</transSize>
+		</distTranOps>
+		<distFormat>
+			<formatName Sync="TRUE">Shapefile</formatName>
+		</distFormat>
+	</distInfo>
+	<dataIdInfo>
+		<idCitation>
+			<resTitle></resTitle>
+			<resEd></resEd>
+			<citRespParty>
+				<rpOrgName></rpOrgName>
+				<role>
+					<RoleCd value="006"/>
+				</role>
+			</citRespParty>
+			<presForm>
+				<PresFormCd value="005" Sync="TRUE"/>
+			</presForm>
+		</idCitation>
+		<idAbs>Densities of coral recruits measured within quadrats with overall totals as well as densities of the most commonly encountered coral recruit genera. In V5.4 'large' recruits (2-4 cm) were added.</idAbs>
+		<idPurp>The Atlantic and Gulf Rapid Reef Assessment (AGRRA) Program champions coral reef conservation and empowers those who protect these diverse ecosystems. We are an international collaboration of scientists, managers, and supporters aimed at improving the regional condition of reefs in the Western Atlantic and Gulf of Mexico. For 20 years, AGRRA has used an innovative regional approach to examine the condition of reef-building corals, algae and fishes and support the conservation of coral reef ecosystems. We curate and distribute data, research and educational materials that support this mission.<br></br>AGRRA’s Data Explorer houses the largest database on Caribbean coral reef health indicators, with data available from more than 2,000 reef areas in 28 countries throughout the Caribbean. You can explore the data through our database, ready-made spreadsheets and GIS shapefiles.</idPurp>
+		<idCredit>AGRRA. 2018. Atlantic and Gulf Rapid Reef Assessment (AGRRA): An online database of AGRRA coral reef survey data. Available: http://agrra.org. (Accessed: Date [e.g., March 10, 2018]).</idCredit>
+		<idPoC>
+			<rpIndName></rpIndName>
+			<rpCntInfo>
+				<cntPhone>
+					<voiceNum></voiceNum>
+				</cntPhone>
+				<cntInstr></cntInstr>
+			</rpCntInfo>
+			<role>
+				<RoleCd value="007"/>
+			</role>
+		</idPoC>
+		<resConst>
+			<LegConsts>
+				<othConsts></othConsts>
+			</LegConsts>
+		</resConst>
+		<resConst>
+			<Consts>
+				<useLimit>By accessing and using any of the datasets distributed by AGRRA, you acknowledge that you have read, understood, and agree to comply with the terms and conditions contained within the AGRRA data usage agreement provided along with these shapefiles. AGRRA may amend these terms and conditions at any time. Your continued use of this data constitutes acceptance of the terms and conditions stated at the time of your use. You should contact AGRRA to determine the current terms and conditions to which you are bound.</useLimit>
+			</Consts>
+		</resConst>
+	</dataIdInfo>
+</metadata>

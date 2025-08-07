@@ -1,0 +1,479 @@
+<metadata xml:lang="en">
+	<eainfo>
+		<detailed Name="_BenthicIndexBySite">
+			<enttyp>
+				<enttypl Sync="TRUE">_BenthicIndexBySite</enttypl>
+				<enttypt Sync="TRUE">Feature Class</enttypt>
+				<enttypc Sync="TRUE">8</enttypc>
+			</enttyp>
+			<attr>
+				<attrlabl Sync="TRUE">FID</attrlabl>
+				<attalias Sync="TRUE">FID</attalias>
+				<attrtype Sync="TRUE">OID</attrtype>
+				<attwidth Sync="TRUE">4</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdef Sync="TRUE">Internal feature number.</attrdef>
+				<attrdefs Sync="TRUE">Esri</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Sequential unique whole numbers that are automatically generated.</udom>
+				</attrdomv>
+			</attr>
+			<attr>
+				<attrlabl Sync="TRUE">Shape</attrlabl>
+				<attalias Sync="TRUE">Shape</attalias>
+				<attrtype Sync="TRUE">Geometry</attrtype>
+				<attwidth Sync="TRUE">0</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdef Sync="TRUE">Feature geometry.</attrdef>
+				<attrdefs Sync="TRUE">Esri</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Coordinates defining the features.</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BATCH</attrlabl>
+				<attalias Sync="TRUE">BATCH</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Name of batch</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CODE</attrlabl>
+				<attalias Sync="TRUE">CODE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Site code</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SITE</attrlabl>
+				<attalias Sync="TRUE">SITE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Name of site</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DATE</attrlabl>
+				<attalias Sync="TRUE">DATE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">19</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Date of survey</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">LATITUDE</attrlabl>
+				<attalias Sync="TRUE">LATITUDE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Latitude (in decimal degrees)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">LONGITUDE</attrlabl>
+				<attalias Sync="TRUE">LONGITUDE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Longitude (in decimal degrees)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ZONE</attrlabl>
+				<attalias Sync="TRUE">ZONE</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Reef zone category</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SUBREGION</attrlabl>
+				<attalias Sync="TRUE">SUBREGION</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Region within country</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SHELF</attrlabl>
+				<attalias Sync="TRUE">SHELF</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Continental/insular shelf unit</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ECOREGION</attrlabl>
+				<attalias Sync="TRUE">ECOREGION</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Marine ecoregional classification</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DEPTH</attrlabl>
+				<attalias Sync="TRUE">DEPTH</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Average depth of survey (meters)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">NT</attrlabl>
+				<attalias Sync="TRUE">NT</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Total number of transects</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">LC</attrlabl>
+				<attalias Sync="TRUE">LC</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Live Coral (POSITIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CCA</attrlabl>
+				<attalias Sync="TRUE">CCA</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Algae-Crustose (POSITIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">FILM</attrlabl>
+				<attalias Sync="TRUE">FILM</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Biofilm (POSITIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TA</attrlabl>
+				<attalias Sync="TRUE">TA</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Algae-Turf (POSITIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TAS</attrlabl>
+				<attalias Sync="TRUE">TAS</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Algae-Turf-Sediment (NEGATIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">MA</attrlabl>
+				<attalias Sync="TRUE">MA</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Algae-Macro-(mixed) (NEGATIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CMA</attrlabl>
+				<attalias Sync="TRUE">CMA</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Algae-Macro-Calcareous (NEGATIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">FMA</attrlabl>
+				<attalias Sync="TRUE">FMA</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Algae-Macro-Fleshy (NEGATIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CYAN</attrlabl>
+				<attalias Sync="TRUE">CYAN</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Cyanobacteria (NEGATIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PEYS</attrlabl>
+				<attalias Sync="TRUE">PEYS</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Algae-Peyssonnelid (NEGATIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">AINV</attrlabl>
+				<attalias Sync="TRUE">AINV</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Invertebrates-Aggressive (NEGATIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">NDC</attrlabl>
+				<attalias Sync="TRUE">NDC</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Newly Dead Coral (NEGATIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">NDCCA</attrlabl>
+				<attalias Sync="TRUE">NDCCA</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% Algae-Crustose-Newly Dead (NEGATIVE)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">POSSUM</attrlabl>
+				<attalias Sync="TRUE">POSSUM</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% POSITIVE benthic components (LC + CCA + FILM + TA)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">POSRANK</attrlabl>
+				<attalias Sync="TRUE">POSRANK</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Rank of POSITIVE benthic components (1 = <15%, 2 = <30%, 3 = <60%, 4 = >=60%)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">NEGSUM</attrlabl>
+				<attalias Sync="TRUE">NEGSUM</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">% NEGATIVE benthic components (TAS + MA + CMA + FMA + CYAN + PEYS + AINV + NDC + NDCCA)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">NEGRANK</attrlabl>
+				<attalias Sync="TRUE">NEGRANK</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Rank of NEGATIVE benthic components (1 = >=60%, 2 = >=30%, 3 = >=15%, 4 = <15%)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BI</attrlabl>
+				<attalias Sync="TRUE">BI</attalias>
+				<attrtype Sync="TRUE">String</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Benthic Index = (POSrank + NEGrank) / 2</udom>
+				</attrdomv>
+			</attr>
+			
+		</detailed>
+	</eainfo>
+	<distInfo>
+		<distTranOps>
+			<onLineSrc>
+				<linkage>www.agrra.org</linkage>
+			</onLineSrc>
+			<transSize Sync="TRUE">0.065</transSize>
+		</distTranOps>
+		<distFormat>
+			<formatName Sync="TRUE">Shapefile</formatName>
+		</distFormat>
+	</distInfo>
+	<dataIdInfo>
+		<idCitation>
+			<resTitle></resTitle>
+			<resEd></resEd>
+			<citRespParty>
+				<rpOrgName></rpOrgName>
+				<role>
+					<RoleCd value="006"/>
+				</role>
+			</citRespParty>
+			<presForm>
+				<PresFormCd value="005" Sync="TRUE"/>
+			</presForm>
+		</idCitation>
+		<idAbs>Protocol: V5. Positive and negative benthic components as recorded under points along benthic transect are summed and converted to rankings used to calculate the benthic index.</idAbs>
+		<idPurp>The Atlantic and Gulf Rapid Reef Assessment (AGRRA) Program champions coral reef conservation and empowers those who protect these diverse ecosystems. We are an international collaboration of scientists, managers, and supporters aimed at improving the regional condition of reefs in the Western Atlantic and Gulf of Mexico. For 20 years, AGRRA has used an innovative regional approach to examine the condition of reef-building corals, algae and fishes and support the conservation of coral reef ecosystems. We curate and distribute data, research and educational materials that support this mission.<br></br>AGRRA’s Data Explorer houses the largest database on Caribbean coral reef health indicators, with data available from more than 2,000 reef areas in 28 countries throughout the Caribbean. You can explore the data through our database, ready-made spreadsheets and GIS shapefiles.</idPurp>
+		<idCredit>AGRRA. 2018. Atlantic and Gulf Rapid Reef Assessment (AGRRA): An online database of AGRRA coral reef survey data. Available: http://agrra.org. (Accessed: Date [e.g., March 10, 2018]).</idCredit>
+		<idPoC>
+			<rpIndName></rpIndName>
+			<rpCntInfo>
+				<cntPhone>
+					<voiceNum></voiceNum>
+				</cntPhone>
+				<cntInstr></cntInstr>
+			</rpCntInfo>
+			<role>
+				<RoleCd value="007"/>
+			</role>
+		</idPoC>
+		<resConst>
+			<LegConsts>
+				<othConsts></othConsts>
+			</LegConsts>
+		</resConst>
+		<resConst>
+			<Consts>
+				<useLimit>By accessing and using any of the datasets distributed by AGRRA, you acknowledge that you have read, understood, and agree to comply with the terms and conditions contained within the AGRRA data usage agreement provided along with these shapefiles. AGRRA may amend these terms and conditions at any time. Your continued use of this data constitutes acceptance of the terms and conditions stated at the time of your use. You should contact AGRRA to determine the current terms and conditions to which you are bound.</useLimit>
+			</Consts>
+		</resConst>
+	</dataIdInfo>
+</metadata>

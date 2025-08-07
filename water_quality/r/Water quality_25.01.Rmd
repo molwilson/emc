@@ -11,12 +11,6 @@ output:
     highlight: haddock
 ---
 
-# make controls dark blue
-# incoporate new control sites
-# stop at Dec 2024
-# take mean when more than one sample per site/date are taken
-# take GEB out of this analysis...?
-
 ### Set-up code
 
 ```{r setup, include=FALSE}
