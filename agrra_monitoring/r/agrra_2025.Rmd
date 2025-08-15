@@ -15,10 +15,107 @@ library(lubridate) # for converting date formats
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
-Import data
+Import and wrangle benthic data
+
+Questions:
+- percent calculated shouldn't include sand/mud/etc...?
+- no tas in 2025 data? Included in TA?
+- peys got combined into AINV in 2025?
+- no cyan in 2017?
 
 ```{r}
-sites <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sites") %>% 
-  clean_names()
+benthic_cover_2017 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2017", "BenthicPointCover", "BenthicPointCoverByTransect.xlsx"), sheet = "Data") %>% 
+  clean_names() %>%
+  select(site, transect = trans, lc, cca, ta, fma, ainv) %>% # tas, peys, cyan
+  mutate(year = "2017")
+
+benthic_cover_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoverByTransect.xlsx"), sheet = "Overall") %>% 
+  clean_names() %>%
+  select(site = survey_name, transect = transect_name, t_coral, t_cca, t_ta, t_fma, t_ainv) %>%
+  mutate(across(contains("t_"), ~ . * 100)) %>%
+  mutate(year = "2025",
+         site = if_else(site == "Little Bird Patch", "Little Bird Backreef", site)) %>%
+  rename_with(~ gsub("^t_", "", .x)) %>%
+  rename(lc = coral)
+
+benthic_cover_trans <- bind_rows(benthic_cover_2017, benthic_cover_2025) 
+
+se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+benthic_cover_site <- benthic_cover_trans %>%
+  group_by(site, year) %>%
+  summarise(across(c(lc, cca, ta, fma, ainv),
+                   list(mean = ~ mean(.x, na.rm = TRUE),
+                        se   = ~ se(.x)),
+                   .names = "{.col}_{.fn}"))
 ```
+
+Initial plots
+
+```{r}
+ggplot(benthic_cover_site, aes(x = year, y = lc_mean, group = site, color = site)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Year", y = "Live Coral Cover (percent)", color = "Site", group = "Site") +
+  theme_minimal()
+
+ggplot(benthic_cover_site, aes(x = year, y = fma_mean, group = site, color = site)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Year", y = "FMA Cover (percent)", color = "Site", group = "Site") +
+  theme_minimal()
+```
+
+Import and wrangle fish data
+
+Questions:
+- To include commercially significant species, would have to go back to raw 2025 data or do custom calculations by family
+
+```{r}
+fish_bm_2017 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2017", "FishBiomass", "FishBiomassByTransect.xlsx"), sheet = "Data") %>% 
+  clean_names() %>%
+  select(site, transect = trans, total = t, herbivore = h) %>%
+  mutate(year = "2017")
+
+fish_bm_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "FishBiomassByTransect.xlsx"), sheet = "Overall") %>% 
+  clean_names() %>%
+  mutate(herbivore = t_scar + t_acan) %>%
+  select(site = survey_name, transect = transect_name, total = all, herbivore) %>%
+  mutate(year = "2025",
+         site = if_else(site == "Little Bird Patch", "Little Bird Backreef", site))
+
+fish_bm_trans <- bind_rows(fish_bm_2017, fish_bm_2025) 
+
+se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+fish_bm_site <- fish_bm_trans %>%
+  group_by(site, year) %>%
+  summarise(across(c(total, herbivore),
+                   list(mean = ~ mean(.x, na.rm = TRUE),
+                        se   = ~ se(.x)),
+                   .names = "{.col}_{.fn}"))
+
+### Revisit when ready to choose size bins - # or percent
+# fish_size_2017 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2017", "FishSize", "FishSizeByTransect.xlsx"), sheet = "PARR") %>%
+#   clean_names() %>%
+#   select(site, transect = trans, total = t, herbivores = h, commercial = cs) %>%
+#   mutate(year = "2017")
+
+
+```
+
+Initial plots
+
+```{r}
+ggplot(fish_bm_site, aes(x = year, y = total_mean, group = site, color = site)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Year", y = "Total fish biomass (g/100m2)", color = "Site", group = "Site") +
+  theme_minimal()
+
+ggplot(fish_bm_site, aes(x = year, y = herbivore_mean, group = site, color = site)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Year", y = "Herbivorous fish biomass (g/100m2)", color = "Site", group = "Site") +
+  theme_minimal()
+```
+
 
