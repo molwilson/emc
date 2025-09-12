@@ -1,0 +1,179 @@
+---
+title: "Map options"
+author: "Molly Wilson"
+date: "2025-08-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(here)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(sf)
+#library(ggmap) # do I need this anymore?
+#library(ggspatial) # do I need this anymore?
+library(ggrepel)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# sample data from coral collections
+
+collection_dat <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "collection") %>% 
+  clean_names() %>%
+  filter(!lat %in% c("NA", "n/a")) %>%
+  select(genotype, date, lat, lon) %>%
+  mutate(date = as.Date(as.numeric(date), origin = "1899-12-30"),
+         year = year(ymd(date)),
+         species_code = substr(genotype, 1, 4),
+         species = case_when(substr(genotype, 1, 4) == "ACER" ~ "A. cervicornis",
+                             substr(genotype, 1, 4) == "APRO" ~ "A. prolifera",
+                             substr(genotype, 1, 4) == "APAL" ~ "A. palmata",
+                             substr(genotype, 1, 4) == "PPOR" ~ "P. porites",
+                             substr(genotype, 1, 4) == "PFUR" ~ "P. furcata",
+                             substr(genotype, 1, 4) == "PDIV" ~ "P. divaricata",
+                             substr(genotype, 1, 4) == "OANN" ~ "O. annularis",
+                             substr(genotype, 1, 4) == "OFAV" ~ "O. faveolata",
+                             substr(genotype, 1, 4) == "OFRA" ~ "O. franksi",
+                             substr(genotype, 1, 4) == "PSTR" ~ "P. strigosa",
+                             substr(genotype, 1, 4) == "PCLI" ~ "P. clivosa",
+                             substr(genotype, 1, 4) == "CNAT" ~ "C. natans",
+                             substr(genotype, 1, 4) == "DLAB" ~ "D. labyrinthiformis",
+                             substr(genotype, 1, 4) == "DCYL" ~ "D. cylindrus",
+                             substr(genotype, 1, 4) == "MCAV" ~ "M. cavernosa")) %>%
+  mutate(across(c(lat, lon), as.numeric))
+
+lon_range <- range(collection_dat$lon)
+lat_range <- range(collection_dat$lat)
+```
+
+# Shapefile
+```{r}
+# Shapefile for Antigua & Barbuda
+atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
+  st_union() %>%
+  st_sf()
+
+ggplot() +
+  geom_sf(data = atg, fill = "tan", color = "tan") +
+  geom_point(data = collection_dat, 
+             aes(x = lon, y = lat, color = species), 
+             alpha = 0.7
+             ) +
+  # geom_text_repel(data = collection_dat,
+  #           mapping = aes(x = lon, y = lat, label = genotype),
+  #           size = 1,
+  #           max.overlaps = Inf
+  #           ) +
+  coord_sf(xlim = lon_range,
+           ylim = lat_range
+           ) +
+  scale_x_continuous(expand = expansion(mult = c(.1, .15))) +
+  scale_y_continuous(expand = expansion(mult = c(.15, .1))) +
+  labs(x = NULL, y = NULL) +
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "lightblue2"),
+        panel.grid = element_blank())
+```
+
+
+# Tiles
+
+None of these are high res enough for Antigua only
+
+```{r}
+sf_points <- st_as_sf(collection_dat, coords = c("lon", "lat"), crs = 4326)
+
+# A few baselayer options
+esri_ocean <- paste0('https://services.arcgisonline.com/arcgis/rest/services/','Ocean/World_Ocean_Base/MapServer/tile/${z}/${y}/${x}.jpeg')
+esri_sat <- "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}.jpeg"
+carto_light <- "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/${z}/${x}/${y}.png"
+
+ggplot() + 
+  annotation_map_tile(type = esri_sat, progress = "none") +
+  layer_spatial(sf_points, aes(), color = "#F8766D", alpha = 0.6, linewidth = 0.75) +
+  scale_x_continuous(expand = expansion(mult = c(.1, .15))) +
+  scale_y_continuous(expand = expansion(mult = c(.1, .1))) +
+  theme_bw()
+```
+# Rasters
+
+```{r}
+library(elevatr)
+library(terra)
+
+sf_points <- st_as_sf(collection_dat, coords = c("lon", "lat"), crs = 4326)
+
+# Load bathymetry raster (user-defined GeoTIFF)
+
+## GEBCO: download manually from https://download.gebco.net/
+gebco_sub <- rast(here("mapping", "rasters", "gebco_atg",
+"gebco_2025_n17.8806_s16.6401_w-62.2738_e-61.2816.tif"))
+gebco_df <- as.data.frame(gebco_sub, xy = TRUE)
+colnames(gebco_df) <- c("x", "y", "depth")
+
+## Sentinel2 2022 ATG-specific from TNC: downloaded from https://caribbeanscienceatlas.tnc.org/maps/28371a902f414fef830cc2e6ff9b3d8f
+sentinel_sub <- rast(here("mapping", "rasters", "sentinel_atg",
+"atg_bath_Sentinel2_2022_clip.tif"))
+sentinel_df <- as.data.frame(sentinel_sub, xy = TRUE)
+colnames(sentinel_df) <- c("x", "y", "depth")
+
+ggplot() +
+  geom_raster(data = sentinel_df, aes(x = x, y = y, fill = depth)) +
+  scale_fill_gradient2(low = "tan", mid = "lightblue", high = "steelblue4", midpoint = 0, name = "Depth (m)") +
+  # geom_sf(data = atg, fill = "tan", color = "tan") +
+  geom_sf(data = sf_points, color = "coral2", size = 1, alpha = 0.7) +
+  coord_sf(xlim = lon_range,
+           ylim = lat_range
+           ) +
+  scale_x_continuous(expand = expansion(mult = c(.1, .15))) +
+  scale_y_continuous(expand = expansion(mult = c(.1, .1))) +
+  labs(x = NULL, y = NULL) +
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "steelblue4"),
+        panel.grid = element_blank())
+
+# find a way to use different gradient if its on land vs in water??
+
+```
+
+# Animation
+
+# Shapefile
+```{r}
+
+library(gganimate)
+
+# Shapefile for Antigua & Barbuda
+atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
+  st_union() %>%
+  st_sf()
+
+
+p <- ggplot() +
+  geom_sf(data = atg, fill = "tan", color = "tan") +
+  geom_point(data = collection_dat, 
+             aes(x = lon, y = lat), 
+             alpha = 0.6,
+             color = "coral",
+             size = 3
+             ) +
+  coord_sf(xlim = lon_range,
+           ylim = lat_range
+           ) +
+  scale_x_continuous(expand = expansion(mult = c(.1, .15))) +
+  scale_y_continuous(expand = expansion(mult = c(.15, .1))) +
+  labs(x = NULL, y = NULL) +
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "lightblue2"),
+        panel.grid = element_blank()) +
+  transition_manual(date, cumulative = TRUE)
+
+animate(p, nframes = 100, fps = 10, width = 600, height = 600,
+        renderer = gifski_renderer(here("mapping", "figs", "collection_by_year.gif")))
+
+```
+
