@@ -55,6 +55,16 @@ ysi <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), 
   filter(as.character(date) != "2023-10-05" # removing incomplete/aborted day 
           & as.character(time) %nin%	c("1899-12-31 11:38:13", 	"1899-12-31 14:45:28", "1899-12-31 09:41:43", "1899-12-31 09:29:43", "1899-12-31 10:36:28", "1899-12-31 12:55:39", "1899-12-31 14:20:21", "1899-12-31 11:25:50", "1899-12-31 12:02:20", "1899-12-31 12:12:54")) # removing duplicate samples
 
+df_clean <- df %>%
+  group_by(site, date) %>%
+  slice_min(order_by = timestamp, n = 1) %>%
+  ungroup()
+
+
+
+#####
+
+
 entero <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "enterococcus") %>% 
   clean_names()
 

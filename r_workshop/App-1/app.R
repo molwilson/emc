@@ -4,23 +4,24 @@
 #
 # Find out more about building applications with Shiny here:
 #
-#    http://shiny.rstudio.com/
+#    https://shiny.posit.co/
 #
 
 library(shiny)
+library(ggplot2)
 
 # Define UI for application that draws a histogram
-ui <- fluidPage(
+ui <- fixedPage(
 
     # Application title
-    titlePanel("Old Faithful Geyser Data"),
+    titlePanel("Hello!"),
 
     # Sidebar with a slider input for number of bins 
     sidebarLayout(
         sidebarPanel(
             sliderInput("bins",
                         "Number of bins:",
-                        min = 1,
+                        min = 5,
                         max = 50,
                         value = 30)
         ),
@@ -41,10 +42,26 @@ server <- function(input, output) {
         bins <- seq(min(x), max(x), length.out = input$bins + 1)
 
         # draw the histogram with the specified number of bins
-        hist(x, breaks = bins, col = 'darkgray', border = 'white',
+        hist(x, breaks = bins, col = 'pink', border = 'white',
              xlab = 'Waiting time to next eruption (in mins)',
              main = 'Histogram of waiting times')
     })
+}
+
+server2 <- function(input, output) {
+  
+  output$distPlot <- renderPlot({
+    # generate bins based on input$bins from ui.R
+    x    <- faithful[, 2]
+    bins <- seq(min(x), max(x), length.out = input$bins + 1)
+    
+    # draw the histogram with the specified number of bins
+    ggplot(data = x) +
+      geom_hist()
+    # hist(x, breaks = bins, col = 'pink', border = 'white',
+    #      xlab = 'Waiting time to next eruption (in mins)',
+    #      main = 'Histogram of waiting times')
+  })
 }
 
 # Run the application 
