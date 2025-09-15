@@ -1,0 +1,113 @@
+---
+title: "2025-26 Q1 Data Report"
+author: "Molly Wilson"
+date: "2025-09-15"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    theme: cerulean
+    highlight: haddock
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+# Nurseries
+
+## Temp loggers
+
+```{r}
+cades <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Cades") %>%
+  clean_names() %>%
+  slice(-1) %>% # remove first row 
+  mutate(nursery = "Cades")
+
+tpb <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Ten Pound Bay") %>%
+  clean_names() %>%
+  slice(-1) %>%
+  mutate(nursery = "Ten Pound Bay")
+
+jumby <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Jumby") %>%
+  clean_names() %>%
+  slice(-1) %>%
+  mutate(nursery = "Jumby")
+
+temp_data <- rbind(cades, tpb, jumby) %>%
+  filter(between(temp_c, 25, 35)) # removing outliers from loggers being on the boat and heating up
+# create a filter for more than 1 degree above prior hour...?
+# create a filter to remove times during surface intervals
+
+# references
+lab_temp <- expression("Temperature ("*~degree*C*")")
+ref_temp = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6)
+lab_ref_temp <- "Target range (Coral Reef Alliance)"
+ref_temp_bleaching = 30.63
+lab_ref_temp_bleaching <- "Coral bleaching threshold (NOAA)"
+ylims_temp <- c(22, (max(data_mon$temperature_c, na.rm = T) + 1))
+
+# plots
+ggplot() +
+  geom_rect(data = ref_temp, 
+              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), 
+                  ymin = ymin, ymax = ymax, 
+                  fill = lab_ref_temp),
+              alpha = 0.3) +
+  scale_fill_manual(values = "gray") +
+  geom_line(data = temp_data,
+            aes(x = date_time, y = temp_c, group = nursery, color = nursery),
+            alpha = 0.9) +
+  scale_color_manual(values = c("cadetblue", "coral", "gold")) +
+  geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed') +
+  scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
+  labs(x = "", y = "Temperature (°C)", color = "Nursery location", fill = "") +
+  theme_bw() +
+  theme(legend.position = "top")
+ggsave(here("restoration_monitoring", "figs", "hobo_summary_25-26_Q1.png"), width = 6, height = 4)
+
+ggplot(temp_data,
+       aes(x = date_time, y = temp_c)) +
+  geom_line(alpha = 0.9, size = 0.3, color = "cadetblue") +
+  geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed', color = "coral") +
+  scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
+  facet_grid(. ~ nursery) +
+  labs(x = "", y = "Temperature (°C)", color = "Nursery") +
+  theme_bw()
+ggsave(here("restoration_monitoring", "figs", "hobo_nursery_25-26_Q1.png"), width = 6, height = 4)
+```
+
+## Nursery stats
+
+```{r}
+# import genotype tracking - nursery monitoring sheet
+# generate tables.... 
+# - # frags per nursery + total
+# - # frags and # genotypes per species + total
+# - # frags per genotype + total
+```
+
+## Genebank
+```{r}
+# import genotype tracking - genebank data
+# account for any fragment adjustments during Q1
+# determine survival by genotype and by nursery
+# determine which is bigger predictor
+```
+
+
+## Genotype tracking
+```{r}
+# integrate genotype location(s) (nursery map), # frags per genotype (nursery monitoring) and genotype performance into one output
+```
+
+
+# Restoration sites
+
+## Outplants
