@@ -36,4 +36,13 @@ ysi <- ysi_raw %>%
          depth_m = replace_na(depth_m, 1)) # surface-only sites are assumed to be approx 1m
 
 ```
+# Archive
+
+```{r}
+         # mutate(
+#date_adj = if_else(day(date) > 25, date %m+% months(1), date),
+         #monitoring_month = floor_date(date_adj, unit = "month"),
+         #month_label = format(monitoring_month, "%b %Y")
+# )
+```
 
