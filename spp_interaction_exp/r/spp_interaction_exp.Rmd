@@ -25,19 +25,18 @@ Steps:
 2a. Calculate survival rates
 2b. Test for differences in survival rates
 
-Import data
+# Import data
 
 ```{r}
 weights <- read_excel(here("spp_interaction_exp", "data_raw", "Species interaction data.xlsx"), 
                   sheet = "Buoyant weights") %>%
   clean_names() %>%
   mutate(type = case_when(table %in% c("C1", "C2") ~ "Control",
-                          table %in% c("T1", "T2") ~ "Treatment")
-         )
+                          table %in% c("T1", "T2") ~ "Treatment"))
 ```
 
 
-Growth rates
+# Growth rates
 1. Remove NAs
 2. Calculate adjusted masses
 3. Get mean adjusted mass
@@ -45,6 +44,8 @@ Growth rates
 ```{r}
 
 growth <- weights %>%
+  filter(date != as.Date("2025-06-06")) %>% # remove intermediate sampling date to look at long term growth
+  filter(is.na(partial_death) | partial_death != "with") %>% # remove measurements that include dead tissue weight
   select("id", "date", starts_with("buoy_wght_"), "density_seawater_kg_m3") %>%
   na.omit() %>%
   pivot_longer(
@@ -65,15 +66,44 @@ growth <- weights %>%
          genotype = substr(id, 4, 5)
          ) 
 
-model_growth <- lm(growth_rate ~ treatment + table + genotype, data = growth)
-summary(model_growth)
+ggplot(growth, aes(x = treatment, y = growth_rate, fill = genotype)) +
+  geom_violin(position = position_dodge(width = 0.8), trim = FALSE) +
+  geom_boxplot(width = 0.1, position = position_dodge(width = 0.8), outlier.shape = NA, color = "black", alpha = 0.3) +
+  labs(
+    x = "Treatment",
+    y = "Growth rate",
+    fill = "Genotype"
+  ) +
+  theme_classic(base_size = 14)
+
+ggplot(growth, aes(x = treatment, y = growth_rate, fill = table)) +
+  geom_violin(position = position_dodge(width = 0.8), trim = FALSE) +
+  geom_boxplot(width = 0.1, position = position_dodge(width = 0.8), outlier.shape = NA, color = "black", alpha = 0.3) +
+  labs(
+    x = "Treatment",
+    y = "Growth rate",
+    fill = "Table"
+  ) +
+  theme_classic(base_size = 14)
+
+sample_sizes <- growth %>%
+  group_by(treatment, table, genotype) %>%
+  summarize(n = n())
+
+model_growth1 <- lm(growth_rate ~ treatment + table + genotype, data = growth)
+summary(model_growth1)
+model_growth2 <- lm(growth_rate ~ treatment + genotype, data = growth)
+summary(model_growth2)
+
+# check normality?
 ```
 
-Survival rates:
+# Survival rates
 1. Create df with condition (alive/dead) per individual
 2. Determine predictors of condition (alive or dead)
 
 ```{r}
+# do I have intermediate death data somewhere? Check distinction between dead vs missing
 survival <- weights %>%
   group_by(id) %>%
   filter(date == max(date)) %>%

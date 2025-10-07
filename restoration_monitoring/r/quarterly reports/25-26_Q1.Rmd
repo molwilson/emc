@@ -42,10 +42,9 @@ b_end <- "2025-12-31"
 
 ## Genebank monitoring
 
-Notes
-
-- Survivorship (number of frags at end vs. beginning + additions) currently includes diseased frags in total frag number. This makes sense for start number (because that loss wouldn't have been captured in prior quarter) but does it make sense for end number?
-- Rates of infection, bleaching, etc. are currently calculated as the mean of % incidence at each monitoring date across the quarter
+- APAL53 (Cades) and APAL18 (York) had more frags at end of Q than beginning, with nothing recorded as having been added...
+- Survivorship (number of frags at end vs. beginning + additions) currently includes diseased frags in total frag number at both beginning and end. Does this make sense?
+- Rates of infection, bleaching, etc. are currently calculated as the mean of % incidence at each monitoring date across the quarter. Eventually I need to incorporate longer-term performance into genotype tracking sheet.
 
 ```{r}
 # import genotype tracking - genebank data
@@ -76,11 +75,14 @@ gb_perf <- gb_mon %>%
             p_pale = mean(n_pale / n_tot, na.rm = TRUE),
             .groups = "drop")
 
+datatable(gb_perf, 
+          options = list(pageLength = 15),
+          rownames = FALSE)
 ```
 
 ## Nursery stats
 
-*Missing frag counts from TPB shallow table - just included genotypes there for species/genotype counts*
+- Missing frag counts from TPB shallow table - just included genotypes there for species/genotype counts
 
 ```{r}
 nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
@@ -154,7 +156,8 @@ frags_spp <- nurs_gb_mon_last %>%
   select(species, n_genotypes, n_frags = n_tot, p_healthy, p_heatstress, p_diseased)
 
 datatable(frags_spp, 
-          options = list(pageLength = 15))
+          options = list(pageLength = 15),
+          rownames = FALSE)
 ```
 ### By genotype
 
@@ -169,7 +172,7 @@ frags_genotype <- nurs_gb_mon_last %>%
 
 ### By structure
 
-*Could eventually add structure type, but not sure how to automate this based on current nursery map formatting*
+- Could eventually add structure type, but not sure how to automate this based on current nursery map formatting
 ```{r}
 frags_structure <- nurs_gb_mon_last %>%
   group_by(nursery, location) %>%
@@ -177,7 +180,8 @@ frags_structure <- nurs_gb_mon_last %>%
   select(nursery, location, n_frags = n_tot)
 
 datatable(frags_structure,
-          options = list(pageLength = 10))
+          options = list(pageLength = 10),
+          rownames = FALSE)
 ```
 
 
@@ -296,14 +300,16 @@ kable(diff_locations)
 collection <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "collection") %>%
   clean_names() %>%
   mutate(across(everything(), 
-                ~ ifelse(grepl("^(na|n/a)$", ., ignore.case = TRUE), NA, .))) %>%
-  mutate(collection_date = as.Date(as.numeric(date), origin = "1899-12-30"),
+                ~ ifelse(grepl("^(na|n/a)$", ., ignore.case = TRUE), NA, .)),
+         collection_date = as.Date(as.numeric(date), origin = "1899-12-30"),
          site = str_to_title(site),
          species = substr(genotype, 1, 4)) %>%
   rename(collection_site = site,
          collection_lat = lat,
          collection_lon = lon) %>%
-  select(genotype, species, collection_date, collection_site, collection_lat, collection_lon)
+  select(genotype, species, collection_date, collection_site, collection_lat, collection_lon) %>%
+  group_by(genotype) %>%
+  slice_min(collection_date, n = 1)
 ```
 
 ## By species
@@ -313,7 +319,8 @@ collection_spp <- collection %>%
   summarize(colonies = n()) %>%
   adorn_totals("row")
 
-datatable(collection_spp)
+datatable(collection_spp,
+          rownames = FALSE)
 ```
 
 ## By site
@@ -324,7 +331,8 @@ collection_sites <-
   summarize(colonies = n()) %>%
   adorn_totals("row")
 
-datatable(collection_sites)
+datatable(collection_sites,
+          rownames = FALSE)
 ```
 
 # Outplants
@@ -352,7 +360,8 @@ outplant_genotypes <- outplants %>%
   mutate(total = rowSums(across(where(is.numeric)), na.rm = TRUE)) %>%
   adorn_totals("row")
 
-datatable(outplant_genotypes)
+datatable(outplant_genotypes,
+          rownames = FALSE)
 ```
 
 ## Outplant monitoring
@@ -381,7 +390,8 @@ outplant_perf_site <- outplant_monitoring %>%
   adorn_totals("row") %>%
   mutate(survival = n_healthy/n_planted)
 
-datatable(outplant_perf_site)
+datatable(outplant_perf_site,
+          rownames = FALSE)
 ```
 
 ### By species
@@ -393,7 +403,8 @@ outplant_perf_spp <- outplant_monitoring %>%
   adorn_totals("row") %>%
   mutate(survival = n_healthy/n_planted)
 
-datatable(outplant_perf_spp)
+datatable(outplant_perf_spp,
+          rownames = FALSE)
 ```
 
 ### By genotype
@@ -406,7 +417,8 @@ outplant_perf_genotype <- outplant_monitoring %>%
   mutate(survival = n_healthy/n_planted) %>%
   select(genotype, n_outplanted = n_planted, n_outplants = n_healthy, outplant_survival = survival)
 
-datatable(outplant_perf_genotype)
+datatable(outplant_perf_genotype,
+          rownames = FALSE)
 ```
 
 # Genotype tracking
@@ -431,10 +443,11 @@ genotype_tracking <- collection %>%
          productive = if_else(if_all(contains("locations") & -all_of("gb_locations"),  ~ . == "" | is.na(.)),
                               "N", "Y")) %>% # genotypes with frags in nurseries other than genebanks
   arrange(genotype) %>%
-  select(updated, genotype, active, productive, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, cades_locations, gb_locations, n_frags, n_outplanted, n_outplants, outplant_survival)
+  select(updated, genotype, active, productive, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, cades_locations, jumby_locations, gb_locations, n_frags, n_outplanted, n_outplants, outplant_survival)
 
 datatable(genotype_tracking,
-          options = list(pageLength = 20))
+          options = list(pageLength = 20),
+          rownames = FALSE)
 
 write.csv(genotype_tracking, here("restoration_monitoring", "data_outputs", "genotype_tracking.csv"), row.names=FALSE)
 ```
