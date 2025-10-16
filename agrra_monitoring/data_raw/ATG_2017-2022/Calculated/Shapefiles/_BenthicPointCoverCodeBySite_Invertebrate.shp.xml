@@ -1,0 +1,817 @@
+<metadata xml:lang="en">
+	<eainfo>
+		<detailed Name="_BenthicPointCoverCodeBySite_Invertebrate">
+			<enttyp>
+				<enttypl Sync="TRUE">_BenthicPointCoverCodeBySite_Invertebrate</enttypl>
+				<enttypt Sync="TRUE">Feature Class</enttypt>
+				<enttypc Sync="TRUE">32</enttypc>
+			</enttyp>
+			<attr>
+				<attrlabl Sync="TRUE">FID</attrlabl>
+				<attalias Sync="TRUE">FID</attalias>
+				<attrtype Sync="TRUE">OID</attrtype>
+				<attwidth Sync="TRUE">4</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdef Sync="TRUE">Internal feature number.</attrdef>
+				<attrdefs Sync="TRUE">Esri</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Sequential unique whole numbers that are automatically generated.</udom>
+				</attrdomv>
+			</attr>
+			<attr>
+				<attrlabl Sync="TRUE">Shape</attrlabl>
+				<attalias Sync="TRUE">Shape</attalias>
+				<attrtype Sync="TRUE">Geometry</attrtype>
+				<attwidth Sync="TRUE">0</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdef Sync="TRUE">Feature geometry.</attrdef>
+				<attrdefs Sync="TRUE">Esri</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Coordinates defining the features.</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BATCH</attrlabl>
+				<attalias Sync="TRUE">BATCH</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Name of batch</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CODE</attrlabl>
+				<attalias Sync="TRUE">CODE</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Site code</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SITE</attrlabl>
+				<attalias Sync="TRUE">SITE</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Name of site</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DATE</attrlabl>
+				<attalias Sync="TRUE">DATE</attalias>
+				<attrtype Sync="TRUE">DATETIME</attrtype>
+				<attwidth Sync="TRUE">8</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Date of survey</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">LATITUDE</attrlabl>
+				<attalias Sync="TRUE">LATITUDE</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Latitude (in decimal degrees)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">LONGITUDE</attrlabl>
+				<attalias Sync="TRUE">LONGITUDE</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Longitude (in decimal degrees)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ZONE</attrlabl>
+				<attalias Sync="TRUE">ZONE</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Reef zone category</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SUBREGION</attrlabl>
+				<attalias Sync="TRUE">SUBREGION</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Region within country</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SHELF</attrlabl>
+				<attalias Sync="TRUE">SHELF</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Continental/insular shelf unit</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ECOREGION</attrlabl>
+				<attalias Sync="TRUE">ECOREGION</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Marine ecoregional classification</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DEPTH</attrlabl>
+				<attalias Sync="TRUE">DEPTH</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Average depth of survey (meters)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">NT</attrlabl>
+				<attalias Sync="TRUE">NT</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Total number of transects</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">AINVAVG</attrlabl>
+				<attalias Sync="TRUE">AINVAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Uncategorized Aggressive Invertebrate</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">AINVSTD</attrlabl>
+				<attalias Sync="TRUE">AINVSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Uncategorized Aggressive Invertebrate</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ASPOAVG</attrlabl>
+				<attalias Sync="TRUE">ASPOAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Aggressive Sponge</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ASPOSTD</attrlabl>
+				<attalias Sync="TRUE">ASPOSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Aggressive Sponge</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BASBAVG</attrlabl>
+				<attalias Sync="TRUE">BASBAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % <i>Briareum asbestinum</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BASBSTD</attrlabl>
+				<attalias Sync="TRUE">BASBSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % <i>Briareum asbestinum</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BRYOAVG</attrlabl>
+				<attalias Sync="TRUE">BRYOAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Bryozoan</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BRYOSTD</attrlabl>
+				<attalias Sync="TRUE">BRYOSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Bryozoan</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CCARAVG</attrlabl>
+				<attalias Sync="TRUE">CCARAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % <i>Chondrilla caribensis</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CCARSTD</attrlabl>
+				<attalias Sync="TRUE">CCARSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % <i>Chondrilla caribensis</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CDELAVG</attrlabl>
+				<attalias Sync="TRUE">CDELAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % <i>Cliona delitrix</i> (Red/Orange)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CDELSTD</attrlabl>
+				<attalias Sync="TRUE">CDELSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % <i>Cliona delitrix</i> (Red/Orange)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CKOCAVG</attrlabl>
+				<attalias Sync="TRUE">CKOCAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Clionids that Kill & Overgrow Invertebrate/CCA</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CKOCSTD</attrlabl>
+				<attalias Sync="TRUE">CKOCSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Clionids that Kill & Overgrow Invertebrate/CCA</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CLIOAVG</attrlabl>
+				<attalias Sync="TRUE">CLIOAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Clionids that Kill & Overgrow Invertebrate/CCA</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CLIOSTD</attrlabl>
+				<attalias Sync="TRUE">CLIOSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Clionids that Kill & Overgrow Invertebrate/CCA</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CZOOAVG</attrlabl>
+				<attalias Sync="TRUE">CZOOAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Zooxanthellate (Brown/Black) clionid</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CZOOSTD</attrlabl>
+				<attalias Sync="TRUE">CZOOSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Zooxanthellate (Brown/Black) clionid</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ECARAVG</attrlabl>
+				<attalias Sync="TRUE">ECARAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % <i>Erythropodium caribaeorum</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ECARSTD</attrlabl>
+				<attalias Sync="TRUE">ECARSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % <i>Erythropodium caribaeorum</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PCARAVG</attrlabl>
+				<attalias Sync="TRUE">PCARAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % <i>Palythoa caribaeorum</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PCARSTD</attrlabl>
+				<attalias Sync="TRUE">PCARSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % <i>Palythoa caribaeorum</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">RFLOAVG</attrlabl>
+				<attalias Sync="TRUE">RFLOAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % <i>Ricordea florida</i> (Invertebrate)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">RFLOSTD</attrlabl>
+				<attalias Sync="TRUE">RFLOSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % <i>Ricordea florida</i> (Invertebrate)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SZEAAVG</attrlabl>
+				<attalias Sync="TRUE">SZEAAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % <i>Svenzea zeai</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SZEASTD</attrlabl>
+				<attalias Sync="TRUE">SZEASTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % <i>Svenzea zeai</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TSOLAVG</attrlabl>
+				<attalias Sync="TRUE">TSOLAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % <i>Tridedemnum solidum</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TSOLSTD</attrlabl>
+				<attalias Sync="TRUE">TSOLSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % <i>Tridedemnum solidum</i></udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ZOANAVG</attrlabl>
+				<attalias Sync="TRUE">ZOANAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Zoanthid</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ZOANSTD</attrlabl>
+				<attalias Sync="TRUE">ZOANSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Zoanthid</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">OINVAVG</attrlabl>
+				<attalias Sync="TRUE">OINVAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Uncategorized Other (non-aggressive) Invertebrate</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">OINVSTD</attrlabl>
+				<attalias Sync="TRUE">OINVSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Uncategorized Other (non-aggressive) Invertebrate</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ANEMAVG</attrlabl>
+				<attalias Sync="TRUE">ANEMAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Anemone</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ANEMSTD</attrlabl>
+				<attalias Sync="TRUE">ANEMSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Anemone</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CMORAVG</attrlabl>
+				<attalias Sync="TRUE">CMORAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Invertebrate</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CMORSTD</attrlabl>
+				<attalias Sync="TRUE">CMORSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Invertebrate</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">GORGAVG</attrlabl>
+				<attalias Sync="TRUE">GORGAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Gorgonian holdfast (including erect <i>Briarium</i>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">GORGSTD</attrlabl>
+				<attalias Sync="TRUE">GORGSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Gorgonian holdfast (including erect <i>Briarium</i>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">OCTOAVG</attrlabl>
+				<attalias Sync="TRUE">OCTOAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Octocorallian holdfast</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">OCTOSTD</attrlabl>
+				<attalias Sync="TRUE">OCTOSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Octocorallian holdfast</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SPONAVG</attrlabl>
+				<attalias Sync="TRUE">SPONAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Epibenthic Sponge</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SPONSTD</attrlabl>
+				<attalias Sync="TRUE">SPONSTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Epibenthic Sponge</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TUNIAVG</attrlabl>
+				<attalias Sync="TRUE">TUNIAVG</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of % Tunicate</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TUNISTD</attrlabl>
+				<attalias Sync="TRUE">TUNISTD</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of % Tunicate</udom>
+				</attrdomv>
+			</attr>
+			
+		</detailed>
+	</eainfo>
+	<distInfo>
+		<distTranOps>
+			<onLineSrc>
+				<linkage>www.agrra.org</linkage>
+			</onLineSrc>
+			<transSize Sync="TRUE">0.065</transSize>
+		</distTranOps>
+		<distFormat>
+			<formatName Sync="TRUE">Shapefile</formatName>
+		</distFormat>
+	</distInfo>
+	<dataIdInfo>
+		<idCitation>
+			<resTitle></resTitle>
+			<resEd></resEd>
+			<citRespParty>
+				<rpOrgName></rpOrgName>
+				<role>
+					<RoleCd value="006"/>
+				</role>
+			</citRespParty>
+			<presForm>
+				<PresFormCd value="005" Sync="TRUE"/>
+			</presForm>
+		</idCitation>
+		<idAbs></idAbs>
+		<idPurp>The Atlantic and Gulf Rapid Reef Assessment (AGRRA) Program champions coral reef conservation and empowers those who protect these diverse ecosystems. We are an international collaboration of scientists, managers, and supporters aimed at improving the regional condition of reefs in the Western Atlantic and Gulf of Mexico. For 20 years, AGRRA has used an innovative regional approach to examine the condition of reef-building corals, algae and fishes and support the conservation of coral reef ecosystems. We curate and distribute data, research and educational materials that support this mission.<br></br>AGRRA’s Data Explorer houses the largest database on Caribbean coral reef health indicators, with data available from more than 2,000 reef areas in 28 countries throughout the Caribbean. You can explore the data through our database, ready-made spreadsheets and GIS shapefiles.</idPurp>
+		<idCredit>AGRRA. 2025. Atlantic and Gulf Rapid Reef Assessment (AGRRA): An online database of AGRRA coral reef survey data. Available: http://agrra.org. (Accessed: Date [e.g., ]).</idCredit>
+		<idPoC>
+			<rpIndName></rpIndName>
+			<rpCntInfo>
+				<cntPhone>
+					<voiceNum></voiceNum>
+				</cntPhone>
+				<cntInstr></cntInstr>
+			</rpCntInfo>
+			<role>
+				<RoleCd value="007"/>
+			</role>
+		</idPoC>
+		<resConst>
+			<LegConsts>
+				<othConsts></othConsts>
+			</LegConsts>
+		</resConst>
+		<resConst>
+			<Consts>
+				<useLimit>By accessing and using any of the datasets distributed by AGRRA, you acknowledge that you have read, understood, and agree to comply with the terms and conditions contained within the AGRRA data usage agreement provided along with these shapefiles. AGRRA may amend these terms and conditions at any time. Your continued use of this data constitutes acceptance of the terms and conditions stated at the time of your use. You should contact AGRRA to determine the current terms and conditions to which you are bound.</useLimit>
+			</Consts>
+		</resConst>
+	</dataIdInfo>
+</metadata>

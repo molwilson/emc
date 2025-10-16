@@ -4,28 +4,33 @@ author: "Molly Wilson"
 date: "2025-06-10"
 output: 
   html_document:
+    toc: true
+    toc_float: true
     code_folding: hide
+    theme: cerulean
+    highlight: haddock
 ---
 
 ```{r, message = F, warning = F, echo = F}
 library(tidyverse)
 library(here) 
 library(readxl) 
+library(DT)
 library(janitor)
 library(stringr)
 library(lubridate)
+library(lme4) # mixed effects models
+library(lmerTest) # for p values in mixed effect models
+library(performance) # for collinearity and R2
+library(DHARMa) # might not need this without GLMM
+library(see) # might not need this without GLMM
 
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
-Steps:
+# Data processing
 
-1a. Calculate changes in buoyant weights
-1b. Test for differences in growth rates across groups
-2a. Calculate survival rates
-2b. Test for differences in survival rates
-
-# Import data
+Generating dataframe to determine growth rates and survival for each fragment
 
 ```{r}
 weights <- read_excel(here("spp_interaction_exp", "data_raw", "Species interaction data.xlsx"), 
@@ -33,94 +38,212 @@ weights <- read_excel(here("spp_interaction_exp", "data_raw", "Species interacti
   clean_names() %>%
   mutate(type = case_when(table %in% c("C1", "C2") ~ "Control",
                           table %in% c("T1", "T2") ~ "Treatment"))
-```
 
+performance <- weights %>%
+  filter(is.na(partial_death) | partial_death != "with") %>% # remove measurements that include dead tissue weight
+  filter(!is.na(id)) %>%
+  mutate(buoy_wght_g = rowMeans(across(starts_with("buoy_wght_")), na.rm = TRUE), # taking mean of measurements
+         adj_wght_g = buoy_wght_g/(1-density_seawater_kg_m3/1000/2.94), # calculating adjusted masses
+         month = round(time_length(interval(ymd("2025-02-27"), ymd(date)), "months"))) %>% # creating variable for number of months since inception
+  group_by(id, month) %>%
+  slice_max(date, n = 1, with_ties = FALSE) %>% # keeping the most recent measurement set within each month (some fragments were replaced during initial month so had multiple measurements)
+  ungroup() %>%
+  select(id, month, condition, adj_wght_g) %>%
+  pivot_wider(id_cols = id,
+              names_from = month,
+              values_from = c(adj_wght_g, condition),
+              names_sep = "_mo") %>%
+  mutate(across(starts_with("adj"), ~ ifelse(is.nan(.), NA, .)),
+         across(starts_with("condition"), ~ ifelse(is.na(.), "dead", .)), # any absent values are considered dead unless specified otherwise
+         growth_rate_mo3 = (adj_wght_g_mo3 - adj_wght_g_mo0) / adj_wght_g_mo0, # growth rate from month 0 to 3
+         growth_rate_mo7 = (adj_wght_g_mo7 - adj_wght_g_mo0) / adj_wght_g_mo0, # growth rate from month 0 to 7
+         survival_mo3 = if_else(condition_mo3 == "alive", 1, 0), # survival (binary) at month 3
+         survival_mo7 = if_else(condition_mo7 == "alive", 1, 0), # survival (binary) at month 7
+         treatment = case_when(substr(id, 1, 1) == "C" ~ "Control",
+                          substr(id, 1, 1) == "T" ~ "Treatment"),
+         table = substr(id, 1, 2),
+         genotype = substr(id, 4, 5)) %>% 
+  filter(!if_any(starts_with("condition"), ~ str_detect(., "missing"))) %>% # exclude any explicitly missing fragments
+  select(id, treatment, table, genotype, wght_mo0 = adj_wght_g_mo0, growth_rate_mo3, growth_rate_mo7, survival_mo3, survival_mo7)
+
+# look for outliers
+# ggplot(performance, aes(x = growth_rate_mo7)) +
+#   geom_histogram()
+
+# remove outliers
+performance <- performance %>%
+  filter(growth_rate_mo7 < 2.5 | is.na(growth_rate_mo7))
+
+datatable(performance,
+          rownames = FALSE)
+```
 
 # Growth rates
-1. Remove NAs
-2. Calculate adjusted masses
-3. Get mean adjusted mass
+
+* Tested both growth rates at midpoint and end point, models of end point had higher predictive power
+
+## Visualization
+
 
 ```{r}
-
-growth <- weights %>%
-  filter(date != as.Date("2025-06-06")) %>% # remove intermediate sampling date to look at long term growth
-  filter(is.na(partial_death) | partial_death != "with") %>% # remove measurements that include dead tissue weight
-  select("id", "date", starts_with("buoy_wght_"), "density_seawater_kg_m3") %>%
-  na.omit() %>%
-  pivot_longer(
-    cols = starts_with("buoy_wght_"),
-    names_to = "replicate",
-    values_to = "buoy_wght_g"
-  ) %>%
-  mutate(adj_wght_g = buoy_wght_g/(1-density_seawater_kg_m3/1000/2.94)) %>%
-  group_by(id, date) %>%
-  summarize(adj_wght_g = mean(adj_wght_g)) %>%
-  group_by(id) %>%
-  mutate(growth_rate = (adj_wght_g - lag(adj_wght_g)) / lag(adj_wght_g)) %>%
-  ungroup() %>%
-  na.omit() %>%
-  mutate(treatment = case_when(substr(id, 1, 1) == "C" ~ "Control",
-                          substr(id, 1, 1) == "T" ~ "Treatment"),
-         table = substr(id, 1, 2),
-         genotype = substr(id, 4, 5)
-         ) 
-
-ggplot(growth, aes(x = treatment, y = growth_rate, fill = genotype)) +
+ggplot(performance %>% 
+         filter(survival_mo7 == "1"), 
+       aes(x = treatment, y = growth_rate_mo7, fill = genotype)) +
   geom_violin(position = position_dodge(width = 0.8), trim = FALSE) +
   geom_boxplot(width = 0.1, position = position_dodge(width = 0.8), outlier.shape = NA, color = "black", alpha = 0.3) +
-  labs(
-    x = "Treatment",
-    y = "Growth rate",
-    fill = "Genotype"
-  ) +
+  labs(x = "Treatment",
+       y = "Growth rate",
+       fill = "Genotype") +
   theme_classic(base_size = 14)
-
-ggplot(growth, aes(x = treatment, y = growth_rate, fill = table)) +
-  geom_violin(position = position_dodge(width = 0.8), trim = FALSE) +
-  geom_boxplot(width = 0.1, position = position_dodge(width = 0.8), outlier.shape = NA, color = "black", alpha = 0.3) +
-  labs(
-    x = "Treatment",
-    y = "Growth rate",
-    fill = "Table"
-  ) +
-  theme_classic(base_size = 14)
-
-sample_sizes <- growth %>%
-  group_by(treatment, table, genotype) %>%
-  summarize(n = n())
-
-model_growth1 <- lm(growth_rate ~ treatment + table + genotype, data = growth)
-summary(model_growth1)
-model_growth2 <- lm(growth_rate ~ treatment + genotype, data = growth)
-summary(model_growth2)
-
-# check normality?
 ```
+
+## Models
+
+#### Structure
+
+Using mixed effects model with treatment and genotype as fixed effects and table as nested random effect (because table is a replicate within treatment)
+```{r}
+m_growth_mo7 <- lmer(growth_rate_mo7 ~ treatment + wght_mo0 + genotype + (1 | table), data = performance)
+```
+**Model:** `r deparse(formula(m_growth_mo7))`
+
+
+#### Performance
+
+```{r}
+anova(m_growth_mo7)
+```
+Start weight is statistically significant predictors
+
+```{r}
+performance::r2_nakagawa(m_growth_mo7)  # marginal/conditional R2 (conditional is without random effects)
+```
+Not great but not bad in terms of total predictive strength
+
+
+#### Validity
+```{r}
+performance::check_collinearity(m_growth_mo7) # collinearity check for fixed effects
+```
+Good - no collinearity among predictor variables
+
 
 # Survival rates
-1. Create df with condition (alive/dead) per individual
-2. Determine predictors of condition (alive or dead)
+
+## Month 3
+
+### Visualization
 
 ```{r}
-# do I have intermediate death data somewhere? Check distinction between dead vs missing
-survival <- weights %>%
-  group_by(id) %>%
-  filter(date == max(date)) %>%
-  ungroup() %>%
-  select(id, condition) %>%
-  filter(condition != "missing original") %>%
-  mutate(treatment = case_when(substr(id, 1, 1) == "C" ~ "Control",
-                          substr(id, 1, 1) == "T" ~ "Treatment"),
-         table = substr(id, 1, 2),
-         genotype = substr(id, 4, 5)
-         ) %>%
-  mutate(condition = factor(condition, levels = c("alive", "dead"))) # for model
+# double check for intermediate survival data
+se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+survival_mo3 <- performance %>%
+  group_by(treatment, genotype) %>%
+  summarise(survival_rate = mean(survival_mo3),
+            survival_se = se(survival_mo3))
 
-model_survival <- glm(condition ~ treatment + table + genotype, 
-             data = survival, 
-             family = binomial)
-
-summary(model_survival) # no statistically significant differences
+ggplot(data = survival_mo3, aes(x = treatment, y = survival_rate, fill = genotype)) +
+  geom_col(position = position_dodge()) +
+  geom_errorbar(aes(ymin = survival_rate - survival_se, ymax = survival_rate + survival_se), width = .2,
+                 position = position_dodge(.9)) +
+  ylim(0, 1) +
+  labs(y = "Survival Rate (Month 3)", x = "Treatment") +
+  theme_minimal()
 ```
 
+### Models
+
+#### Structure
+
+```{r}
+m_survival_mo3 <- glmer(survival_mo3 ~ treatment + genotype + (1 | table),
+             data = performance, family = binomial)
+```
+**Model:** `r deparse(formula(m_survival_mo3))`
+
+#### Performance
+
+```{r}
+car::Anova(m_survival_mo3, type = 3)
+```
+No statistically significant predictors
+
+```{r}
+performance::r2_nakagawa(m_survival_mo3)# marginal/conditional R2 (conditional is without random effects)
+```
+Not bad, but not great predictive power
+
+#### Validity
+
+```{r}
+performance::check_collinearity(m_survival_mo3) # collinearity check for fixed effects
+```
+Good - no collinearity
+
+```{r}
+performance::check_singularity(m_survival_mo3) # check if random effects are identifiable
+```
+Good - false means random-effects structure is stable
+
+```{r}
+performance::check_model(m_survival_mo3) # diagnostic panel
+```
+
+## Month 7
+
+### Visualization
+
+```{r}
+# double check for intermediate survival data
+se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+survival_mo7 <- performance %>%
+  group_by(treatment, genotype) %>%
+  summarise(survival_rate = mean(survival_mo7),
+            survival_se = se(survival_mo7))
+
+ggplot(data = survival_mo7, aes(x = treatment, y = survival_rate, fill = genotype)) +
+  geom_col(position = position_dodge()) +
+  geom_errorbar(aes(ymin = survival_rate - survival_se, ymax = survival_rate + survival_se), width = .2,
+                 position = position_dodge(.9)) +
+  ylim(0, 1) +
+  labs(y = "Survival Rate (Month 7)", x = "Treatment") +
+  theme_minimal()
+```
+
+### Models
+
+#### Structure
+
+```{r}
+m_survival_mo7 <- glmer(survival_mo7 ~ treatment + genotype + (1 | table),
+             data = performance, family = binomial)
+```
+**Model:** `r deparse(formula(m_survival_mo7))`
+
+#### Performance
+
+```{r}
+car::Anova(m_survival_mo7, type = 3) # Type I/II/III tests available via lmerTest
+```
+No statistically significant predictors
+
+```{r}
+performance::r2_nakagawa(m_survival_mo7)  # marginal/conditional R2 (conditional is without random effects)
+```
+Poor model performance (much worse than at month 3, likely due to high death rate after midpoint buoyant weights). No conditional R2 with binary dependent variable here.
+
+#### Validity
+
+```{r}
+performance::check_collinearity(m_survival_mo7) # collinearity check for fixed effects
+```
+Good - no collinearity
+
+```{r}
+performance::check_singularity(m_survival_mo7) # check if random effects are identifiable
+```
+Good - false means random-effects structure is stable
+
+```{r}
+performance::check_model(m_survival_mo7) # diagnostic panel
+```

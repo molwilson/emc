@@ -1,0 +1,947 @@
+<metadata xml:lang="en">
+	<eainfo>
+		<detailed Name="_FishBiomassBySite">
+			<enttyp>
+				<enttypl Sync="TRUE">_FishBiomassBySite</enttypl>
+				<enttypt Sync="TRUE">Feature Class</enttypt>
+				<enttypc Sync="TRUE">46</enttypc>
+			</enttyp>
+			<attr>
+				<attrlabl Sync="TRUE">FID</attrlabl>
+				<attalias Sync="TRUE">FID</attalias>
+				<attrtype Sync="TRUE">OID</attrtype>
+				<attwidth Sync="TRUE">4</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdef Sync="TRUE">Internal feature number.</attrdef>
+				<attrdefs Sync="TRUE">Esri</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Sequential unique whole numbers that are automatically generated.</udom>
+				</attrdomv>
+			</attr>
+			<attr>
+				<attrlabl Sync="TRUE">Shape</attrlabl>
+				<attalias Sync="TRUE">Shape</attalias>
+				<attrtype Sync="TRUE">Geometry</attrtype>
+				<attwidth Sync="TRUE">0</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdef Sync="TRUE">Feature geometry.</attrdef>
+				<attrdefs Sync="TRUE">Esri</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Coordinates defining the features.</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BATCH</attrlabl>
+				<attalias Sync="TRUE">BATCH</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Name of batch</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CODE</attrlabl>
+				<attalias Sync="TRUE">CODE</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Site code</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SITE</attrlabl>
+				<attalias Sync="TRUE">SITE</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Name of site</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DATE</attrlabl>
+				<attalias Sync="TRUE">DATE</attalias>
+				<attrtype Sync="TRUE">DATETIME</attrtype>
+				<attwidth Sync="TRUE">8</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Date of survey</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">LATITUDE</attrlabl>
+				<attalias Sync="TRUE">LATITUDE</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Latitude (in decimal degrees)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">LONGITUDE</attrlabl>
+				<attalias Sync="TRUE">LONGITUDE</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Longitude (in decimal degrees)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ZONE</attrlabl>
+				<attalias Sync="TRUE">ZONE</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Reef zone category</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SUBREGION</attrlabl>
+				<attalias Sync="TRUE">SUBREGION</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Region within country</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SHELF</attrlabl>
+				<attalias Sync="TRUE">SHELF</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Continental/insular shelf unit</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ECOREGION</attrlabl>
+				<attalias Sync="TRUE">ECOREGION</attalias>
+				<attrtype Sync="TRUE">STRING</attrtype>
+				<attwidth Sync="TRUE">255</attwidth>
+				<atprecis Sync="TRUE">255</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Marine ecoregional classification</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DEPTH</attrlabl>
+				<attalias Sync="TRUE">DEPTH</attalias>
+				<attrtype Sync="TRUE">REAL</attrtype>
+				<attwidth Sync="TRUE">24</attwidth>
+				<atprecis Sync="TRUE">15</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Average depth of survey (meters)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">NT</attrlabl>
+				<attalias Sync="TRUE">NT</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Total number of transects</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TAVG</attrlabl>
+				<attalias Sync="TRUE">TAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Total (all species) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TSTD</attrlabl>
+				<attalias Sync="TRUE">TSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Total (all species) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">HAVG</attrlabl>
+				<attalias Sync="TRUE">HAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Herbivore biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">HSTD</attrlabl>
+				<attalias Sync="TRUE">HSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Herbivore biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">IAVG</attrlabl>
+				<attalias Sync="TRUE">IAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Invertivore biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ISTD</attrlabl>
+				<attalias Sync="TRUE">ISTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Invertivore biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PAVG</attrlabl>
+				<attalias Sync="TRUE">PAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Piscivore biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PSTD</attrlabl>
+				<attalias Sync="TRUE">PSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Piscivore biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CSAVG</attrlabl>
+				<attalias Sync="TRUE">CSAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Commercially Significant species biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CSSTD</attrlabl>
+				<attalias Sync="TRUE">CSSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Commercially Significant species biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DPAVG</attrlabl>
+				<attalias Sync="TRUE">DPAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Diadema Predator species biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DPSTD</attrlabl>
+				<attalias Sync="TRUE">DPSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Diadema Predator species biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">AOAVG</attrlabl>
+				<attalias Sync="TRUE">AOAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Aquarium Ornamental species biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">AOSTD</attrlabl>
+				<attalias Sync="TRUE">AOSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Aquarium Ornamental species biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ANGEAVG</attrlabl>
+				<attalias Sync="TRUE">ANGEAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Angelfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">ANGESTD</attrlabl>
+				<attalias Sync="TRUE">ANGESTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Angelfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BARRAVG</attrlabl>
+				<attalias Sync="TRUE">BARRAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Barracudas (only Great Barracuda) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BARRSTD</attrlabl>
+				<attalias Sync="TRUE">BARRSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Barracudas (only Great Barracuda) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BOXFAVG</attrlabl>
+				<attalias Sync="TRUE">BOXFAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Boxfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BOXFSTD</attrlabl>
+				<attalias Sync="TRUE">BOXFSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Boxfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BUTTAVG</attrlabl>
+				<attalias Sync="TRUE">BUTTAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Butterflyfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">BUTTSTD</attrlabl>
+				<attalias Sync="TRUE">BUTTSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Butterflyfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CHUBAVG</attrlabl>
+				<attalias Sync="TRUE">CHUBAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Chubs (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">CHUBSTD</attrlabl>
+				<attalias Sync="TRUE">CHUBSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Chubs (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DAMSAVG</attrlabl>
+				<attalias Sync="TRUE">DAMSAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Damselfishes (only Threespot and Yellowtail Damselfish) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">DAMSSTD</attrlabl>
+				<attalias Sync="TRUE">DAMSSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Damselfishes (only Threespot and Yellowtail Damselfish) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">FILEAVG</attrlabl>
+				<attalias Sync="TRUE">FILEAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Filefishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">FILESTD</attrlabl>
+				<attalias Sync="TRUE">FILESTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Filefishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">GROUAVG</attrlabl>
+				<attalias Sync="TRUE">GROUAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Groupers (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">GROUSTD</attrlabl>
+				<attalias Sync="TRUE">GROUSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Groupers (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">GRUNAVG</attrlabl>
+				<attalias Sync="TRUE">GRUNAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Grunts (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">GRUNSTD</attrlabl>
+				<attalias Sync="TRUE">GRUNSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Grunts (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">JACKAVG</attrlabl>
+				<attalias Sync="TRUE">JACKAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Jacks (only Bar Jack and Permit) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">JACKSTD</attrlabl>
+				<attalias Sync="TRUE">JACKSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Jacks (only Bar Jack and Permit) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">MORAAVG</attrlabl>
+				<attalias Sync="TRUE">MORAAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Morays (only Goldentail, Green, and Spotted) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">MORASTD</attrlabl>
+				<attalias Sync="TRUE">MORASTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Morays (only Goldentail, Green, and Spotted) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PARRAVG</attrlabl>
+				<attalias Sync="TRUE">PARRAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Parrotfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PARRSTD</attrlabl>
+				<attalias Sync="TRUE">PARRSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Parrotfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PORCAVG</attrlabl>
+				<attalias Sync="TRUE">PORCAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Porcupinefishes (only Balloonfish and Porcupinefish) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PORCSTD</attrlabl>
+				<attalias Sync="TRUE">PORCSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Porcupinefishes (only Balloonfish and Porcupinefish) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PORGAVG</attrlabl>
+				<attalias Sync="TRUE">PORGAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Porgies (only Jolthead, Saucereye, Sheepshead and Pluma) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PORGSTD</attrlabl>
+				<attalias Sync="TRUE">PORGSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Porgies (only Jolthead, Saucereye, Sheepshead and Pluma) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PUFFAVG</attrlabl>
+				<attalias Sync="TRUE">PUFFAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Porcupinefishes (only Bandtail Puffer) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">PUFFSTD</attrlabl>
+				<attalias Sync="TRUE">PUFFSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Porcupinefishes (only Bandtail Puffer) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SCORAVG</attrlabl>
+				<attalias Sync="TRUE">SCORAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Scorpionfishes (only exotic Lionfish) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SCORSTD</attrlabl>
+				<attalias Sync="TRUE">SCORSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Scorpionfishes (only exotic Lionfish) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SNAPAVG</attrlabl>
+				<attalias Sync="TRUE">SNAPAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Snappers (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SNAPSTD</attrlabl>
+				<attalias Sync="TRUE">SNAPSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Snappers (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SURGAVG</attrlabl>
+				<attalias Sync="TRUE">SURGAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Surgeonfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">SURGSTD</attrlabl>
+				<attalias Sync="TRUE">SURGSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Surgeonfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TRIGAVG</attrlabl>
+				<attalias Sync="TRUE">TRIGAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Triggerfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">TRIGSTD</attrlabl>
+				<attalias Sync="TRUE">TRIGSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Triggerfishes (all species in family) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">WRASAVG</attrlabl>
+				<attalias Sync="TRUE">WRASAVG</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Average of Wrasse (only Hogfish, Spanish Hogfish, Slippery Dick, Yellowhead Wrasse, and Puddingwife) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+			<attr>
+				<attrlabl Sync="TRUE">WRASSTD</attrlabl>
+				<attalias Sync="TRUE">WRASSTD</attalias>
+				<attrtype Sync="TRUE">INTEGER</attrtype>
+				<attwidth Sync="TRUE">10</attwidth>
+				<atprecis Sync="TRUE">0</atprecis>
+				<attscale Sync="TRUE">0</attscale>
+				<attrdefs Sync="TRUE">AGRRA</attrdefs>
+				<attrdomv>
+					<udom Sync="TRUE">Transect Std. Deviation of Wrasse (only Hogfish, Spanish Hogfish, Slippery Dick, Yellowhead Wrasse, and Puddingwife) biomass (grams/100m<sup>2</sup>)</udom>
+				</attrdomv>
+			</attr>
+			
+		</detailed>
+	</eainfo>
+	<distInfo>
+		<distTranOps>
+			<onLineSrc>
+				<linkage>www.agrra.org</linkage>
+			</onLineSrc>
+			<transSize Sync="TRUE">0.065</transSize>
+		</distTranOps>
+		<distFormat>
+			<formatName Sync="TRUE">Shapefile</formatName>
+		</distFormat>
+	</distInfo>
+	<dataIdInfo>
+		<idCitation>
+			<resTitle></resTitle>
+			<resEd></resEd>
+			<citRespParty>
+				<rpOrgName></rpOrgName>
+				<role>
+					<RoleCd value="006"/>
+				</role>
+			</citRespParty>
+			<presForm>
+				<PresFormCd value="005" Sync="TRUE"/>
+			</presForm>
+		</idCitation>
+		<idAbs>Biomass estimates from size class and length-weight formulas for each surveyed species are summarized by family, diet, fishery importance and total (all AGRRA fishes).</idAbs>
+		<idPurp>The Atlantic and Gulf Rapid Reef Assessment (AGRRA) Program champions coral reef conservation and empowers those who protect these diverse ecosystems. We are an international collaboration of scientists, managers, and supporters aimed at improving the regional condition of reefs in the Western Atlantic and Gulf of Mexico. For 20 years, AGRRA has used an innovative regional approach to examine the condition of reef-building corals, algae and fishes and support the conservation of coral reef ecosystems. We curate and distribute data, research and educational materials that support this mission.<br></br>AGRRA’s Data Explorer houses the largest database on Caribbean coral reef health indicators, with data available from more than 2,000 reef areas in 28 countries throughout the Caribbean. You can explore the data through our database, ready-made spreadsheets and GIS shapefiles.</idPurp>
+		<idCredit>AGRRA. 2025. Atlantic and Gulf Rapid Reef Assessment (AGRRA): An online database of AGRRA coral reef survey data. Available: http://agrra.org. (Accessed: Date [e.g., ]).</idCredit>
+		<idPoC>
+			<rpIndName></rpIndName>
+			<rpCntInfo>
+				<cntPhone>
+					<voiceNum></voiceNum>
+				</cntPhone>
+				<cntInstr></cntInstr>
+			</rpCntInfo>
+			<role>
+				<RoleCd value="007"/>
+			</role>
+		</idPoC>
+		<resConst>
+			<LegConsts>
+				<othConsts></othConsts>
+			</LegConsts>
+		</resConst>
+		<resConst>
+			<Consts>
+				<useLimit>By accessing and using any of the datasets distributed by AGRRA, you acknowledge that you have read, understood, and agree to comply with the terms and conditions contained within the AGRRA data usage agreement provided along with these shapefiles. AGRRA may amend these terms and conditions at any time. Your continued use of this data constitutes acceptance of the terms and conditions stated at the time of your use. You should contact AGRRA to determine the current terms and conditions to which you are bound.</useLimit>
+			</Consts>
+		</resConst>
+	</dataIdInfo>
+</metadata>
