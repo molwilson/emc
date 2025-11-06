@@ -18,15 +18,32 @@ output:
 library(tidyverse)
 library(here) # for accessing files within directory
 library(readxl) # for reading indv. sheets within excel files
+library(purrr) # for joining multiple sheets successively
 library(janitor) # for cleaning variable names so they have consistent capitalization etc.
+library(scales) # for plotting percentages
 library(fmsb) # for radar plots
 library(vegan) # for NMDS
+library(broom) # for visualizing variances
 
 # Define settings
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 
 # Define functions
-se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+
+###### fixing issues with names (e.g. tAPALmean -> t_apa_lmean) #################
+fix_names <- function(x) {
+  x %>%
+    gsub(" ", "_", .) %>%                        # spaces → underscores
+    gsub("([a-z])([A-Z])", "\\1_\\2", .) %>%     # split camelCase
+    gsub("^t([A-Z]{4})(avg|med|std)$", "t_\\1_\\2", ., perl = TRUE) %>% # tACANavg → t_ACAN_avg
+    gsub("(.*?)(avg|med|std)$", "\\1_\\2", ., perl = TRUE) %>%          # ensure _ before suffix
+     gsub("^t([A-Z]{4})(large|small|total)$", "t_\\1_\\2", ., perl = TRUE) %>% 
+    gsub("(.*?)(large|small|total)$", "\\1_\\2", ., perl = TRUE) %>%
+    tolower()
+}
+
+
+# se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
 ```
 
 # Benthic
@@ -38,21 +55,31 @@ se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
 ### Import + wrangle data
 
 ```{r}
+benthic_var <- c("lc", "cca", "ta", "tas", "fma", "cyan", "ainv", "peys")
+
 benthic_cover_trans <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "BenthicPointCoverScaled", "BenthicPointCoverScaledByTransect.xlsx"), sheet = "Data") %>% 
   clean_names() %>%
   mutate(year = year(date),
-         trans = as.character(trans) # to bind with NPA data - some trans numbers include surveyor initials
-         ) %>% 
-  select(site, year, trans, t_lc = lc, t_cca = cca, t_ta = ta, t_fma = fma, t_cyan = cyan, t_ainv = ainv, t_pey = peys) %>%
-  mutate(across(contains("t_"), ~ . / 100)) %>%
+         trans = as.character(trans), # to bind with NPA data - some trans numbers include surveyor initials
+         t_tas = tas + tam) %>% 
+  select(site, year, trans, benthic_var) %>%
+  mutate(across(benthic_var, ~ . / 100)) %>%
   bind_rows(
     bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "Overall") %>%
-                mutate(`Transect Name` = as.character(`Transect Name`)), # to match NPA with surveyor initials
-              read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "Overall")) %>% 
-      clean_names() %>%
+                clean_names() %>%
+                mutate(`transect_name` = as.character(`transect_name`)) %>%  # to match NPA with surv initials
+                left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "tTA") %>%
+                            clean_names() %>%
+                            select(transect_id, ta, sta, tas, tam)),
+              read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "Overall") %>%
+                clean_names() %>%
+                left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "tTA") %>%
+                            clean_names() %>%
+                            select(transect_id, ta, sta, tas, tam))) %>%
       mutate(year = 2025,
-             survey_name = if_else(survey_name == "Little Bird Patch", "Little Bird Backreef", survey_name)) %>%
-      select(site = survey_name, year, trans = transect_name, t_lc = t_coral, t_cca, t_ta, t_fma, t_cyan, t_ainv, t_pey)) %>%
+             survey_name = if_else(survey_name == "Little Bird Patch", "Little Bird Backreef", survey_name),
+             tas_sum = tas + sta + tam) %>%
+      select(site = survey_name, year, trans = transect_name, lc = t_coral, cca = t_cca, ta, tas = tas_sum, fma = t_fma, cyan = t_cyan, ainv = t_ainv, peys = t_pey)) %>%
   mutate(site = if_else(str_detect(site, "^Site \\d+"), 
                         str_extract(site, "^Site \\d+"), 
                         site), # dealing with NPA sites that have site numbers with different name variations afterwards
@@ -67,9 +94,9 @@ benthic_cover_trans <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017
 benthic_cover_site <- benthic_cover_trans %>%
   group_by(site, site_cat, year) %>%
   rename_with(~ str_remove(.x, "t_")) %>%
-  summarise(across(c(lc, cca, ta, fma, cyan, ainv, pey),
+  summarise(across(c(benthic_var),
                    list(mean = ~ mean(.x, na.rm = TRUE),
-                        se   = ~ se(.x)),
+                        sd   = ~ sd(.x)),
                    .names = "{.col}_{.fn}")) %>%
   ungroup()
 
@@ -77,11 +104,13 @@ benthic_cover_year <- benthic_cover_site %>%
   select(!contains("_se")) %>%
   rename_with(~ str_remove(.x, "_mean")) %>%
   group_by(year, site_cat) %>%
-  summarise(across(c(lc, cca, ta, fma, cyan, ainv, pey),
+  summarise(across(c(benthic_var),
                    list(mean = ~ mean(.x, na.rm = TRUE),
-                        se   = ~ se(.x)),
+                        sd   = ~ sd(.x)),
                    .names = "{.col}_{.fn}")) %>%
   ungroup()
+
+# write.csv(benthic_cover_year, here("agrra_monitoring", "data_outputs", "benthic_cover_year.csv"))
 ```
 
 
@@ -92,20 +121,52 @@ ggplot(benthic_cover_site, aes(x = year, y = lc_mean, group = site, shape = site
   geom_point() +
   scale_shape_manual(values = 0:35) +
   geom_line() +
-  labs(x = "Year", y = "Live Coral Cover (percent)", color = "Site", group = "Site") +
+  scale_y_continuous(labels = label_percent()) +
+  labs(x = "Year", y = "Live Coral Cover", color = "Site", group = "Site") +
   theme_minimal()
 
 ggplot(benthic_cover_site, aes(x = year, y = fma_mean, group = site, shape = site)) +
   geom_point() +
   scale_shape_manual(values = 0:35) +
   geom_line() +
-  labs(x = "Year", y = "FMA Cover (percent)", color = "Site", group = "Site") +
+  scale_y_continuous(labels = label_percent()) +
+  labs(x = "Year", y = "FMA Cover", color = "Site", group = "Site") +
+  theme_minimal()
+
+ggplot(benthic_cover_site, aes(x = year, y = ta_mean, group = site, shape = site)) +
+  geom_point() +
+  scale_shape_manual(values = 0:35) +
+  geom_line() +
+  scale_y_continuous(labels = label_percent()) +
+  labs(x = "Year", y = "TA Cover", color = "Site", group = "Site") +
+  theme_minimal()
+
+ggplot(benthic_cover_site, aes(x = year, y = tas_mean, group = site, shape = site)) +
+  geom_point() +
+  scale_shape_manual(values = 0:35) +
+  geom_line() +
+  scale_y_continuous(labels = label_percent()) +
+  labs(x = "Year", y = "TA/Sediment Cover", color = "Site", group = "Site") +
   theme_minimal()
 ```
 
-### Radar plots
+### Bar plots
 
-Having issues adding the legend within an rmarkdown script, but red is 2017 and blue is 2025
+```{r}
+ggplot(benthic_cover_year %>%
+         group_by(site_cat) %>%
+         mutate(year = factor(year, levels = c("2017", "2019", "2025"))), 
+       aes(x = year, y = lc_mean)) +
+  geom_col(fill = "coral", color = "black", alpha = 0.8) +
+  geom_errorbar(aes(ymin = lc_mean - lc_sd, ymax = lc_mean + lc_sd), width = .2) +
+  scale_y_continuous(labels = label_percent()) +
+  facet_wrap(~ site_cat, scales = "free_x") +
+  labs(x = "Year", y = "Live Coral Cover") +
+  theme_minimal()
+```
+
+
+### Radar plots
 
 #### NEMMA
 ```{r}
@@ -203,8 +264,9 @@ legend(
 ```{r}
 benthic_nmds <- benthic_cover_site %>%
   filter(site_cat == "NEMMA") %>%
-  select(!site_cat) %>%
-  select(!contains("_se")) %>%
+  select(-site_cat, 
+         -contains("_sd"), 
+         -contains("cyan")) %>%
   rename_with(~ gsub("_mean", "", .x)) %>%
   mutate(year = as.character(year))
 
@@ -243,7 +305,7 @@ pc_scores_scaled <- pc_scores_scaled %>%
   )
 
 ## plot
-ggplot(site_scores, aes(x = NMDS1, y = NMDS2, color = year, shape = site)) +
+ggplot(site_scores, aes(x = NMDS1, y = NMDS2, color = year)) +
   geom_point(size = 4) +
   scale_shape_manual(values = 0:25) +
   stat_ellipse(aes(group = year), type = "t", linetype = 2) +
@@ -275,8 +337,9 @@ print(adonis_res)
 ```{r}
 benthic_nmds <- benthic_cover_site %>%
   filter(site_cat == "NDNP") %>%
-  select(!site_cat) %>%
-  select(!contains("_se")) %>%
+  select(-site_cat, 
+         -contains("_sd"), 
+         -contains("cyan")) %>%
   rename_with(~ gsub("_mean", "", .x)) %>%
   mutate(year = as.character(year))
 
@@ -315,7 +378,7 @@ pc_scores_scaled <- pc_scores_scaled %>%
   )
 
 ## plot
-ggplot(site_scores, aes(x = NMDS1, y = NMDS2, color = year, shape = site)) +
+ggplot(site_scores, aes(x = NMDS1, y = NMDS2, color = year)) +
   geom_point(size = 4) +
   stat_ellipse(aes(group = year), type = "t", linetype = 2) +
   geom_segment(data = pc_scores_scaled,
@@ -341,27 +404,375 @@ adonis_res <- adonis2(benthic_pc ~ year,
 print(adonis_res)
 
 ```
+
+Site 12 is skewing this quite a bit - but don't see reason to omit?
+
+
 ## Coral species composition
 
 Data overview:
 
-- "BenthicCoralCoverScaledByTransect.xlsx" - gives percent cover by family, then within separate sheets per family it gives percent cover by species (inconvenient format... but could bind all sheets to get species-level data, or work with raw data, or work by genotype first)
-- Still waiting to confirm historical data format
+- 2017: "CoralCoverSpeciesScaledBySite"
+  - One sheet ('Data') with percent cover by species
+- 2025: BenthicCoralCoverScaledByTransect.xlsx" 
+  - Separate sheets per family give percent cover by species - inconvenient format, need to bind all together
 
 ### Import + wrangle data 
 ```{r}
-coral_meta <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoralCoverScaledByTransect.xlsx"), sheet = "Metadata") %>% 
+# metadata for species - family matching
+coral_meta <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoralCoverScaled.xlsx"), sheet = "Metadata") %>% 
   clean_names() %>%
-  fill(scaled_coral_cover_by_transect, column_header) 
-
-coral_meta_spp <- coral_meta %>%
-  filter(str_starts(scaled_coral_cover_by_transect, "t") | scaled_coral_cover_by_transect == "UNKN") %>%
-  select(family = scaled_coral_cover_by_transect, species = column_header)
+  fill(scaled_coral_cover, column_header) 
 
 coral_meta_fam <- coral_meta %>%
   filter(str_starts(column_header, "t") | column_header == "UNKN") %>%
-  select(species = column_header, definition)
+  select(family_code = column_header, family = definition) %>%
+  mutate(family = gsub("\\s*\\([^\\)]+\\)", "", family)) %>% # removing fluff
+  distinct() # removing UNKN duplicate
+
+coral_meta_spp <- coral_meta %>%
+  filter(str_starts(scaled_coral_cover, "t") | scaled_coral_cover == "UNKN") %>%
+  select(species_code = column_header, family_code = scaled_coral_cover, species = definition) %>%
+  left_join(coral_meta_fam, by = "family_code") %>%
+  mutate(genus = sub(" .*", "", species),
+         family_code = str_remove(family_code, "^t"),
+         across(c(species, family), ~ str_replace(., "Unknown sp. of Live Coral", "Unknown spp.")))
+
+# historical data
+coral_spp_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "CoralCoverSpeciesScaled", "CoralCoverSpeciesScaledBySite.xlsx"), sheet = "Data") %>% 
+  rename_with(fix_names) %>%
+  mutate(year = year(date)) %>%
+  filter(year %in% c(2017, 2019)) %>% # 2022 was incomplete NPA year
+  pivot_longer(
+    cols = matches("^[a-z]{4}_(avg|std)$"),   # all columns like acer_ave, apal_std, etc.
+    names_to = c("species_code", ".value"),        # split into species and measurement type
+    names_sep = "_"
+  ) %>%
+  mutate(across(c(avg, std), ~ .x / 100)) %>% # to match 2025 format (fraction of 1)
+  select(site, year, species_code, avg, std) 
+
+# 2025 data
+file_coral_nemma <- here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoralCoverScaled.xlsx")
+file_coral_npa <- here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoralCoverScaled.xlsx")
+
+clean_excel_coral <- function(file_path) {
+  sheets <- excel_sheets(file_path)
+  sheets_to_join <- setdiff(sheets, c("TermsOfUse", "Metadata", "Overall"))  # exclude
+
+  sheets_list <- map(sheets_to_join, ~ read_excel(file_path, sheet = .x) %>%
+                       rename_with(~ gsub("^(t)([A-Za-z]{4})(avg|med|std)$", "\\1_\\2_\\3", .x, ignore.case = TRUE)) %>%
+                       rename_with(~ gsub("([A-Za-z]{4})(avg|med|std)$", "\\1_\\2", .x, ignore.case = TRUE)) %>%
+                       clean_names())
+
+  reduce(sheets_list, left_join, by = c("survey_id", "code", "name", "nt"))
+}
+
+coral_spp_2025 <- clean_excel_coral(file_coral_npa) %>%
+  bind_rows(clean_excel_coral(file_coral_nemma)) %>%
+  mutate(year = 2025) %>%
+  rename(site = name) %>%
+  pivot_longer(
+    cols = matches("^[a-z]{4}_(avg|std)$"),   # all columns like acer_ave, apal_std, etc.
+    names_to = c("species_code", ".value"),        # split into species and measurement type
+    names_sep = "_"
+  ) %>%
+  select(site, year, species_code, avg, std)
+
+# merge for complete df
+coral_spp_site <- bind_rows(coral_spp_hist, coral_spp_2025) %>%
+  mutate(site_cat = if_else(str_detect(site, "^Site \\d+"), "NDNP",
+                            if_else(str_detect(site, "Redonda"), "Redonda",
+                                    "NEMMA")),
+         site = if_else(str_detect(site, "^Site \\d+"), 
+                        str_extract(site, "^Site \\d+"), 
+                        site)) %>%
+  mutate(species_code = toupper(species_code),
+         site = if_else(site == "Little Bird Patch", "Little Bird Backreef", site)) %>%
+  left_join(coral_meta_spp, by = "species_code")  %>%
+  group_by(site) %>%
+  filter(n_distinct(year) > 1) %>% # only keeping sites with over time comparisons
+  ungroup()
+
+coral_spp_year <- coral_spp_site %>%
+  group_by(year, site_cat, family, genus, species_code, species) %>%
+  summarize(mean = mean(avg), 
+            sd = sd(avg)) %>%
+  group_by(year, site_cat) %>%
+  mutate(rel_mean = mean / sum(mean)) %>%
+  group_by(year, site_cat, species) %>%
+  filter(sum(mean) > 0) %>% # removing species that were 0 in all years/site_cats
+  ungroup()
+
+coral_fam_year <- coral_spp_year %>%
+  group_by(year, site_cat, family) %>%
+  summarize(mean = sum(mean)) %>%
+  group_by(year, site_cat) %>%
+  mutate(rel_mean = mean/sum(mean)) %>%
+  group_by(year, site_cat) %>%
+  complete(
+    family = unique(coral_spp_year$family),
+    fill = list(mean = 0, rel_mean = 0)
+  ) %>%
+  ungroup()
+
+coral_fam_year_wide <- coral_fam_year %>%
+  pivot_wider(names_from = family,
+              values_from = c(mean, rel_mean),
+              names_glue = "{family}_{.value}")
 ```
+
+### Line plots
+```{r}
+chk <- coral_fam_year %>%
+  group_by(year, site_cat) %>%
+  summarize(tot = sum(rel_mean))
+
+ggplot(coral_fam_year, aes(x = year, y = mean, group = site_cat, color = site_cat)) +
+  geom_point() +
+  geom_line() + 
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Year", y = "Mean percent cover", color = "Location") +
+  facet_wrap(~ family) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(coral_fam_year, aes(x = year, y = rel_mean, group = site_cat, color = site_cat)) +
+  geom_point() +
+  geom_line() + 
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Year", y = "Relative proportion", color = "Location") +
+  facet_wrap(~ family) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Radar plots
+
+#### NEMMA
+```{r}
+max_pc <- coral_fam_year_wide %>%
+  filter(site_cat == "NEMMA") %>%
+  select(contains("_mean") & 
+           !contains("rel_mean") & 
+           !contains("Unknown spp.") &
+           where(~ any(. >= 0.001))) %>%
+  unlist() %>%
+  max(na.rm = TRUE)
+
+ncol_pc <- ncol(coral_fam_year_wide %>%
+                  filter(site_cat == "NEMMA") %>%
+                  select(contains("_mean") & 
+                           !contains("rel_mean") & 
+                           !contains("Unknown spp.") &
+                           where(~ any(. >= 0.001)))
+)
+
+coral_rdr <- 
+  rbind(rep(max_pc, ncol_pc), 
+        rep(0, ncol_pc), 
+        coral_fam_year_wide %>%
+          filter(site_cat == "NEMMA") %>%
+          column_to_rownames(var = "year") %>%
+          select(contains("_mean") & 
+                   !contains("rel_mean") & 
+                   !contains("Unknown spp.") &
+                   where(~ any(. >= 0.001))) %>%
+          rename_with(~ gsub("_mean", "", .x))
+        )
+  
+line_colors <- c("coral", "skyblue4")
+fill_colors <- alpha(line_colors, 0.5)
+
+radarchart(coral_rdr,
+           pcol = line_colors,
+           pfcol = fill_colors,
+           cglcol = "grey")
+
+# doesn't like adding legend within rmarkdown - but can try within knit document
+legend(
+  x = "topright",
+  legend = rownames(coral_rdr)[3:4],  # skip max/min rows
+  col = line_colors,
+  lty = 1,
+  lwd = 2,
+  bty = "n",                   # no box
+  cex = 0.8,
+  pt.cex = 1.5,
+  fill = fill_colors            # show fill colors in legend
+)
+```
+
+#### NDNP
+```{r}
+max_pc <- coral_fam_year_wide %>%
+  filter(site_cat == "NDNP") %>%
+  select(contains("_mean") & 
+           !contains("rel_mean") & 
+           !contains("Unknown spp.") &
+           where(~ any(. >= 0.001))) %>%
+  unlist() %>%
+  max(na.rm = TRUE)
+
+ncol_pc <- ncol(coral_fam_year_wide %>%
+                  filter(site_cat == "NDNP") %>%
+                  select(contains("_mean") & 
+                           !contains("rel_mean") & 
+                           !contains("Unknown spp.") &
+                           where(~ any(. >= 0.001)))
+)
+
+coral_rdr <- 
+  rbind(rep(max_pc, ncol_pc), 
+        rep(0, ncol_pc), 
+        coral_fam_year_wide %>%
+          filter(site_cat == "NDNP") %>%
+          column_to_rownames(var = "year") %>%
+          select(contains("_mean") & 
+                   !contains("rel_mean") & 
+                   !contains("Unknown spp.") &
+                   where(~ any(. >= 0.001))) %>%
+          rename_with(~ gsub("_mean", "", .x))
+        )
+  
+line_colors <- c("coral", "skyblue4")
+fill_colors <- alpha(line_colors, 0.5)
+
+radarchart(coral_rdr,
+           pcol = line_colors,
+           pfcol = fill_colors,
+           cglcol = "grey")
+
+# doesn't like adding legend within rmarkdown - but can try within knit document
+legend(
+  x = "topright",
+  legend = rownames(coral_rdr)[3:4],  # skip max/min rows
+  col = line_colors,
+  lty = 1,
+  lwd = 2,
+  bty = "n",                   # no box
+  cex = 0.8,
+  pt.cex = 1.5,
+  fill = fill_colors            # show fill colors in legend
+)
+```
+
+## Coral recruits
+
+Data overview:
+- Historical: CoralRecruitsBySite.xlsx
+  - family level
+  - remove "DICH" code (not in 2025)
+- 2025: BenthicCoralRecruis.xlxs
+  - species level
+  - missing site-level standard deviation in data
+
+### Import + wrangle data
+
+```{r}
+# using coral_meta_spp key generated in prev. section
+
+# historical data
+
+recruits_hist_sized <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "CoralRecruits", "CoralRecruitsBySite.xlsx"), sheet = "Small") %>% 
+  mutate (size = "small") %>%
+  rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "CoralRecruits", "CoralRecruitsBySite.xlsx"), sheet = "Large") %>% 
+          mutate (size = "large")) %>%
+  rename_with(fix_names) %>%
+  mutate(year = year(date)) %>%
+  filter(year %in% c(2017, 2019)) %>% # 2022 was incomplete NPA year
+  pivot_longer(
+    cols = matches(".*_(avg|std)$"),   # all columns ending in avg or std
+    names_to = c("family_code", ".value"),        # split into species and measurement type
+    names_sep = "_"
+  ) %>%
+  select(site, year, family_code, size, avg) 
+
+# adding totals because above is only small vs. large
+recruits_hist_tot <- recruits_hist_sized %>%
+  group_by(site, year, family_code) %>%
+  summarize(
+    avg = sum(avg, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(size = "total") %>%
+  select(site, year, family_code, size, avg) 
+
+recruits_hist <- bind_rows(recruits_hist_tot, recruits_hist_sized)
+
+# 2025 data - switch to "Overall" sheet #########
+
+recruits_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoralRecruits.xlsx"), sheet = "Overall") %>%
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoralRecruits.xlsx"), sheet = "Overall")) %>%
+  rename_with(fix_names) %>%
+  mutate(year = 2025) %>%
+  rename(site = name) %>%
+  select(year, site, matches("_(small|large|total)$")) %>%
+  pivot_longer(
+    cols = matches("_(small|large|total)$"),
+    names_to = c("family_code", "size"),
+    names_pattern = "^(.*?)_(small|large|total)$",
+    values_to = "avg"
+  ) %>%
+  select(site, year, family_code, size, avg) %>%
+  mutate(family_code = str_remove(family_code, "^t_"))
+# no SD for 2025
+
+# merge for complete df
+recruits_fam_site <- bind_rows(recruits_hist, recruits_2025) %>%
+  mutate(site_cat = if_else(str_detect(site, "^Site \\d+"), "NDNP",
+                            if_else(str_detect(site, "Redonda"), "Redonda",
+                                    "NEMMA")),
+         site = if_else(str_detect(site, "^Site \\d+"), 
+                        str_extract(site, "^Site \\d+"), 
+                        site),
+         site = if_else(site == "Little Bird Patch", "Little Bird Backreef", site),
+         family_code = toupper(family_code)) %>%
+  left_join(coral_meta_spp %>%
+              select(family_code, family) %>%
+              distinct(), 
+            by = "family_code") %>%
+  mutate(family = if_else(family_code == "ALL", "All species", family)) %>%
+  filter(family_code != "DICH") %>% # in historical data only, none present  
+  group_by(site) %>%
+  filter(n_distinct(year) > 1) %>% # only keeping sites with over time comparisons
+  ungroup()
+  
+
+recruits_fam_year <- recruits_fam_site %>%
+  group_by(year, site_cat, family_code, family, size) %>%
+  summarize(mean = mean(avg), 
+            sd = sd(avg)) %>%
+  group_by(year, site_cat) %>%
+  mutate(rel_mean = mean / sum(mean)) %>%
+  group_by(year, site_cat, family_code, family, size) %>%
+  filter(sum(mean) > 0) %>% # removing species that were 0 in all years/site_cats
+  ungroup()
+```
+
+### Line plots
+
+```{r}
+ggplot(recruits_fam_site %>%
+         filter(family_code %in% c("ALL") & size == "total"), 
+       aes(x = year, y = avg, color = site)) +
+  geom_point() +
+  geom_line() + 
+  labs(x = "Year", y = "Recruit density (indv/m2)", color = "Location") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(recruits_fam_site %>%
+         filter(family_code != "ALL" & size == "total"), 
+       aes(x = year, y = avg, color = site)) +
+  geom_point() +
+  geom_line() + 
+  labs(x = "Year", y = "Recruit density (indv/m2)", color = "Location") +
+  facet_wrap(~ family) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
 
 # Fish
 
@@ -384,81 +795,247 @@ Data overview:
 ### Import + wrangle data
 
 ```{r}
-fish_bm_trans <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "FishBiomass", "FishBiomassByTransect.xlsx"), sheet = "Data") %>% 
+# create compatible family key by merging metadata
+fish_fam_hist_temp <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "FishBiomass", "FishBiomassBySite.xlsx"), sheet = "Key") %>% 
   clean_names() %>%
-  filter(!is.na(site)) %>%
-  mutate(year = year(date)) %>% 
-  select(site, year, transect = trans, t_tot = t, t_scar = parr, t_acan = surg, t_serr = grou) %>%
-  rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "FishBiomassByTransect.xlsx"), sheet = "Overall") %>% 
-          clean_names() %>%
-          mutate(year = year(surveyed),
-                 survey_name = if_else(survey_name == "Little Bird Patch", "Little Bird Backreef", survey_name)) %>% # inconsistency in site name between 2017 and 2025
-          select(site = survey_name, year, transect = transect_name, t_tot = all, t_scar, t_acan, t_serr)) %>%
-  rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "FishBiomassByTransect.xlsx"), sheet = "Overall") %>% 
-          clean_names() %>%
-          mutate(year = year(surveyed)) %>%
-          select(site = survey_name, year, transect = transect_name, t_tot = all, t_scar, t_acan, t_serr)) %>%
-  mutate(site = if_else(str_detect(site, "^Site \\d+"), 
+  slice(21:40) %>%
+  select(code_com = 1,
+         definition = 2) %>%
+  mutate(family = str_remove(word(definition, 1), ":"),
+         family = if_else(family == "Wrasse", "Wrasses", 
+                          if_else(code_com == "PUFF", "Pufferfishes", family))) %>%
+  select(-definition)
+
+fish_fam_2025_temp <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "FishBiomass.xlsx"), sheet = "Metadata") %>% 
+  clean_names() %>%
+  slice(23:42) %>%
+  select(code_lat = 2,
+         definition = 3) %>%
+  mutate(family = str_remove(word(definition, 1), ":")) %>%
+  select(-definition)
+
+fish_fam_key <- full_join(fish_fam_hist_temp, fish_fam_2025_temp, by = "family") %>%
+  mutate(code_lat = tolower(gsub("^t", "", code_lat)),
+         code_com = tolower(code_com)) %>%
+  select(code_com, code_lat, family) %>%
+  bind_rows(
+    tibble(code_com = "t",
+           code_lat = "all",
+           family   = "Total"))
+
+# import data
+fish_bm_hist_temp <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "FishBiomass", "FishBiomassBySite.xlsx"), sheet = "Data") %>% 
+  rename_with(fix_names) %>%
+  mutate(year = year(date)) %>%
+  filter(nt >= 8) %>% # keeping only sites with 8 or more transects
+  select(site, year, contains("avg"), contains("std")) %>%
+  pivot_longer(
+    cols = -c(site, year),  
+    names_to = "family_stat",      
+    values_to = "value"                 
+  ) %>%
+  separate(family_stat, into = c("code_com", "stat"), sep = "_(?=[^_]+$)") %>%
+  left_join(fish_fam_key, by = "code_com") %>%
+  select(site, year, code = code_lat, family, stat, value)
+
+fish_bm_2025_temp <- rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "FishBiomass.xlsx"), sheet = "Overall"),
+                      read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "FishBiomass.xlsx"), sheet = "Overall")) %>%
+  # deal with weird capitalization in species col names
+  rename_with(fix_names) %>%
+  filter(nt >= 8) %>% # keeping only sites with 8 or more transects
+  mutate(year = 2025,
+         site = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
+  select(site, year, contains("avg"), contains("std")) %>%
+  rename_with(~ gsub("^t_", "", .x), .cols = -c(site, year)) %>%
+  pivot_longer(
+    cols = -c(site, year),  
+    names_to = "family_stat",      
+    values_to = "value"                 
+  ) %>%
+  separate(family_stat, into = c("code_lat", "stat"), sep = "_(?=[^_]+$)") %>%
+  left_join(fish_fam_key, by = "code_lat") %>%
+  select(site, year, code = code_lat, family, stat, value)
+
+# merge datasets
+fish_bm_site_temp <- rbind(fish_bm_hist_temp, fish_bm_2025_temp) %>%
+ mutate(site = if_else(str_detect(site, "^Site \\d+"), 
                         str_extract(site, "^Site \\d+"), 
-                        site), # dealing with NPA sites that have site numbers with different name variations afterwards
+                        site), # dealing with NPA site inconsistencies
          site_cat = if_else(str_detect(site, "^Site \\d+"), "NDNP",
                             if_else(str_detect(site, "Redonda"), "Redonda",
                             "NEMMA"))) %>%
-  mutate(year = if_else(year == 2024, 2025, year)) %>% # Site 11 had one erroneous 2024 date
-  filter(year != 2022) %>% # 2022 was an incomplete data collection year for NPA
-  group_by(site, year) %>%
-  filter(n_distinct(transect) >= 8) %>% # keeping only sites with at least 8 transects per year
+  mutate(year = if_else(year == 2024, 2025, year)) %>% # one erroneous 2024 date
+  filter(year != 2022,
+         !is.na(family)) %>% # 2022 was an incomplete data collection year for NPA
   group_by(site) %>%
   filter(n_distinct(year) > 1) %>% # keeping only sites with over time comparisons
   ungroup()
 
-fish_bm_site <- fish_bm_trans %>%
-  group_by(site, site_cat, year) %>%
-  rename_with(~ str_remove(.x, "t_")) %>%
-  summarise(across(c(tot, scar, acan, serr),
-                   list(mean = ~ mean(.x, na.rm = TRUE),
-                        se   = ~ se(.x)),
-                   .names = "{.col}_{.fn}")) %>%
-  ungroup()
+herb_bm_site_temp <- fish_bm_site_temp %>%
+  filter(code %in% c("scar", "acan")) %>%
+  group_by(site, site_cat, year, stat) %>%
+  summarise(
+    value = if_else(stat == "avg", sum(value, na.rm = TRUE), 
+                    sqrt(sum(value^2, na.rm = TRUE))), # for std
+    .groups = "drop"
+  ) %>%
+  mutate(family = "Herbivores", code = "herb") %>%
+  distinct()
+
+fish_bm_site <- rbind(fish_bm_site_temp, herb_bm_site_temp) %>%
+  pivot_wider(
+    names_from = stat,   # use 'avg' and 'std' as new column names
+    values_from = value  # fill those columns with the numeric values
+  ) %>%
+  unnest(c(avg, std)) # make numeric instead of list
+# wide version in benthic ~ fish section
 
 fish_bm_year <- fish_bm_site %>%
-  select(!contains("_se")) %>%
-  rename_with(~ str_remove(.x, "_mean")) %>%
-  group_by(site_cat, year) %>%
-  summarise(across(c(tot, scar, acan, serr),
-                   list(mean = ~ mean(.x, na.rm = TRUE),
-                        se   = ~ se(.x)),
-                   .names = "{.col}_{.fn}")) %>%
+  group_by(year, site_cat, family, code) %>%
+  summarize(mean = mean(avg)) %>%
+  # relative mean doesn't work when total and herbivores are included
+  # group_by(year, site_cat) %>%
+  # mutate(rel_mean = mean/sum(mean)) %>%
+  # group_by(year, site_cat) %>%
+  complete(
+    family = unique(fish_bm_site$family),
+    fill = list(mean = 0, rel_mean = 0)
+  ) %>%
   ungroup()
+
+# wide format for graphing purposes
+fish_bm_year_wide <- fish_bm_year %>%
+  select(-code) %>%
+  pivot_wider(names_from = family,
+              values_from = c(mean, std),
+              names_glue = "{family}_{.value}")
+
+# clean environment and export
+# rm(list = ls(pattern = "_temp$"))
+write.csv(fish_bm_year, here("agrra_monitoring", "data_outputs", "fish_bm_year.csv"))
 ```
 
 ### Line plots
 
 ```{r}
-ggplot(fish_bm_site, aes(x = year, y = tot_mean, group = site, color = site)) +
+ggplot(fish_bm_site %>% filter(code == "all"), 
+       aes(x = year, y = avg, group = site, color = site)) +
   geom_point() +
   geom_line() +
   labs(x = "Year", y = "Total fish biomass (g/100m2)", color = "Site", group = "Site") +
   theme_minimal()
 
-ggplot(fish_bm_site, aes(x = year, y = scar_mean, group = site, color = site)) +
+ggplot(fish_bm_site %>% filter(code == "scar"), 
+       aes(x = year, y = avg, group = site, color = site)) +
   geom_point() +
   geom_line() +
   labs(x = "Year", y = "Scarid biomass (g/100m2)", color = "Site", group = "Site") +
   theme_minimal()
 
-ggplot(fish_bm_site, aes(x = year, y = acan_mean, group = site, color = site)) +
+ggplot(fish_bm_site %>% filter(code == "acan"), 
+       aes(x = year, y = avg, group = site, color = site)) +
   geom_point() +
   geom_line() +
   labs(x = "Year", y = "Acanthurid biomass (g/100m2)", color = "Site", group = "Site") +
   theme_minimal()
 
-ggplot(fish_bm_site, aes(x = year, y = serr_mean, group = site, color = site)) +
+ggplot(fish_bm_site %>% filter(code == "serr"), 
+       aes(x = year, y = avg, group = site, color = site)) +
   geom_point() +
   geom_line() +
   labs(x = "Year", y = "Serranid biomass (g/100m2)", color = "Site", group = "Site") +
   theme_minimal()
 ```
+
+### Radar plots
+
+#### NEMMA
+```{r}
+data <- fish_bm_year_wide %>%
+  filter(site_cat == "NEMMA") %>%
+  column_to_rownames(var = "year") %>%
+  select(contains("_mean") & 
+           !contains("rel_mean") & 
+           !contains(c("Total", "Herbivores")) &
+           where(~ any(. >= 100))) %>%
+  rename_with(~ gsub("_mean", "", .x))
+
+max <- data %>%
+  unlist() %>%
+  max(na.rm = TRUE)
+
+ncol <- ncol(data)
+
+rdr <- 
+  rbind(rep(max, ncol), 
+        rep(0, ncol), 
+        data)
+  
+line_colors <- c("coral", "skyblue4")
+fill_colors <- alpha(line_colors, 0.5)
+
+radarchart(rdr,
+           pcol = line_colors,
+           pfcol = fill_colors,
+           cglcol = "grey")
+
+# doesn't like adding legend within rmarkdown - but can try within knit document
+legend(
+  x = "topright",
+  legend = rownames(rdr)[3:4],  # skip max/min rows
+  col = line_colors,
+  lty = 1,
+  lwd = 2,
+  bty = "n",                   # no box
+  cex = 0.8,
+  pt.cex = 1.5,
+  fill = fill_colors            # show fill colors in legend
+)
+```
+
+#### NDNP
+```{r}
+data <- fish_bm_year_wide %>%
+  filter(site_cat == "NDNP") %>%
+  column_to_rownames(var = "year") %>%
+  select(contains("_mean") & 
+           !contains("rel_mean") & 
+           !contains(c("Total", "Herbivores")) &
+           where(~ any(. >= 100))) %>% # at least one mean bm value must be over 100
+  rename_with(~ gsub("_mean", "", .x))
+
+max <- data %>%
+  unlist() %>%
+  max(na.rm = TRUE)
+
+ncol <- ncol(data)
+
+rdr <- 
+  rbind(rep(max, ncol), 
+        rep(0, ncol), 
+        data)
+  
+line_colors <- c("coral", "skyblue4")
+fill_colors <- alpha(line_colors, 0.5)
+
+radarchart(rdr,
+           pcol = line_colors,
+           pfcol = fill_colors,
+           cglcol = "grey")
+
+legend(
+  x = "topright",
+  legend = rownames(rdr)[3:4],  # skip max/min rows
+  col = line_colors,
+  lty = 1,
+  lwd = 2,
+  bty = "n",                   # no box
+  cex = 0.8,
+  pt.cex = 1.5,
+  fill = fill_colors            # show fill colors in legend
+)
+```
+
 
 ## Length
 
@@ -531,14 +1108,14 @@ scar_length_trans <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2
   ungroup()
 
 # check that all transects are present even if no fish per family were recorded - should have 0 entries if all is well
-chk <- full_join(scar_length_trans %>%
-                   group_by(year, site) %>%
-                   summarize(count = n()), 
-                 fish_bm_trans %>%
-                   group_by(year, site) %>%
-                   summarize(count = n()), 
-                 by = c("year", "site"), suffix = c("_length", "_bm")) %>%
-  filter(count_length != count_bm | is.na(count_length) | is.na(count_bm))
+# chk <- full_join(scar_length_trans %>%
+#                    group_by(year, site) %>%
+#                    summarize(count = n()), 
+#                  fish_bm_trans %>%
+#                    group_by(year, site) %>%
+#                    summarize(count = n()), 
+#                  by = c("year", "site"), suffix = c("_length", "_bm")) %>%
+#   filter(count_length != count_bm | is.na(count_length) | is.na(count_bm))
 
 # transform data for summaries
 scar_length_long <- scar_length_trans %>%
@@ -669,6 +1246,8 @@ mosaicplot(mat,
 ```
 
 #### Phase changes
+
+Currently only 2025 data, because appears that 2017/2019 have no phase data...?
 
 ```{r}
 
@@ -822,14 +1401,14 @@ serr_length_trans <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2
   ungroup()
 
 # check that all transects are present even if no fish per family were recorded - should have 0 entries if all is well
-chk <- full_join(serr_length_trans %>%
-                   group_by(year, site) %>%
-                   summarize(count = n()), 
-                 fish_bm_trans %>%
-                   group_by(year, site) %>%
-                   summarize(count = n()), 
-                 by = c("year", "site"), suffix = c("_length", "_bm")) %>%
-  filter(count_length != count_bm | is.na(count_length) | is.na(count_bm))
+# chk <- full_join(serr_length_trans %>%
+#                    group_by(year, site) %>%
+#                    summarize(count = n()), 
+#                  fish_bm_trans %>%
+#                    group_by(year, site) %>%
+#                    summarize(count = n()), 
+#                  by = c("year", "site"), suffix = c("_length", "_bm")) %>%
+#   filter(count_length != count_bm | is.na(count_length) | is.na(count_bm))
 
 # transform data for summaries
 serr_length_long <- serr_length_trans %>%
@@ -870,6 +1449,130 @@ ggplot(serr_length_year %>%
   theme_minimal()
 ```
 
+# Benthic ~ Fish
+
+## Integrate datasets
+
+```{r}
+benth_fish_site <- fish_bm_site %>%
+  select(-family) %>%
+  rename(mean = avg) %>%
+  pivot_wider(names_from = code,
+              values_from = c(mean, std),
+              names_glue = "{code}_{.value}") %>%
+  left_join(benthic_cover_site, by = c("site", "site_cat", "year"))
+```
+
+## Exploratory models and plots
+
+No statistically significant relationships found (including when scarid and acanthurids are aggregated)
+```{r}
+mod <- lm(fma_mean ~ scar_mean, data = benth_fish_site)
+summary(mod)
+r2 <- summary(mod)$r.squared
+pval <- summary(mod)$coefficients[2,4]
+
+ggplot(benth_fish_site, aes(x = scar_mean, y = fma_mean)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "steelblue") +
+  labs(x = "Scarid biomass", y = "FMA cover") +
+  annotate("text", x = Inf, y = Inf,
+           label = paste0("R² = ", round(r2, 2), 
+                          "\nP = ", signif(pval, 2)),
+           hjust = 1.1, vjust = 1.2, size = 4) +
+  theme_bw()
+
+
+mod <- lm(fma_mean ~ herb_mean, data = benth_fish_site)
+summary(mod)
+r2 <- summary(mod)$r.squared
+pval <- summary(mod)$coefficients[2,4]
+
+ggplot(benth_fish_site, aes(x = herb_mean, y = fma_mean)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "steelblue") +
+  labs(x = "Herbivore biomass", y = "FMA cover") +
+  annotate("text", x = Inf, y = Inf,
+           label = paste0("R² = ", round(r2, 2), 
+                          "\nP = ", signif(pval, 2)),
+           hjust = 1.1, vjust = 1.2, size = 4) +
+  theme_bw()
+
+mod <- lm(lc_mean ~ scar_mean, data = benth_fish_site)
+summary(mod)
+r2 <- summary(mod)$r.squared
+pval <- summary(mod)$coefficients[2,4]
+
+ggplot(benth_fish_site, aes(x = scar_mean, y = lc_mean)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "steelblue") +
+  labs(x = "Scarid biomass", y = "Live coral cover") +
+  annotate("text", x = Inf, y = Inf,
+           label = paste0("R² = ", round(r2, 2), 
+                          "\nP = ", signif(pval, 2)),
+           hjust = 1.1, vjust = 1.2, size = 4) +
+  theme_bw()
+
+
+mod <- lm(lc_mean ~ herb_mean, data = benth_fish_site)
+summary(mod)
+r2 <- summary(mod)$r.squared
+pval <- summary(mod)$coefficients[2,4]
+
+ggplot(benth_fish_site, aes(x = herb_mean, y = lc_mean)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "steelblue") +
+  labs(x = "Herbivore biomass", y = "Live coral cover") +
+  annotate("text", x = Inf, y = Inf,
+           label = paste0("R² = ", round(r2, 2), 
+                          "\nP = ", signif(pval, 2)),
+           hjust = 1.1, vjust = 1.2, size = 4) +
+  theme_bw()
+
+```
+
+## Correlation tests
+
+Testing correlation between scarid biomass and benthic variables - nothing is notably strong
+
+```{r}
+benth_vars <- benth_fish_site %>%
+  select(lc_mean, cca_mean, ta_mean, tas_mean, fma_mean, cyan_mean, ainv_mean, peys_mean)
+
+cor_results <- cor(benth_vars, benth_fish_site$scar_mean, use = "pairwise.complete.obs")
+cor_results
+
+```
+
+## Multivariate tests (PERMANOVA)
+
+```{r}
+benth_mat <- benth_fish_site %>%
+  select(lc_mean, cca_mean, ta_mean, tas_mean, fma_mean)
+
+adonis2(benth_mat ~ scar_mean + site_cat + year,
+        data = benth_fish_site,
+        method = "bray",
+        permutations = 999,
+        by = "term")
+
+res <- adonis2(benth_mat ~ scar_mean + site_cat + year,
+               data = benth_fish_site,
+               method = "bray",
+               permutations = 999,
+               by = "term")
+
+res_df <- broom::tidy(res)
+
+ggplot(res_df, aes(x = reorder(term, R2), y = R2)) +
+  geom_col(fill = "skyblue") +
+  coord_flip() +
+  labs(x = "Predictor", y = "Proportion of variation explained (R²)") +
+  theme_bw()
+
+```
+
+
 # Archive
 ```{r, eval = F}
 access_meta_trans <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Raw", "MSAccess-Metadata.xlsx"), sheet = "Transect") %>%
@@ -881,5 +1584,85 @@ access_meta_trans <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2
   
 
 
+# checking percent that are unknown
+chk <- coral_spp_hist %>%
+  mutate(category = if_else(species == "unkn", "unknown", "known")) %>%
+  group_by(site, year, category) %>%
+  summarize(cover = sum(avg))
+
+# old biomass import code - holding for now
+fish_bm_trans <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "FishBiomass", "FishBiomassByTransect.xlsx"), sheet = "Data") %>% 
+  clean_names() %>%
+  filter(!is.na(site)) %>%
+  mutate(year = year(date)) %>% 
+  select(site, year, transect = trans, t_tot = t, t_scar = parr, t_acan = surg, t_serr = grou) %>%
+  rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "FishBiomassByTransect.xlsx"), sheet = "Overall") %>% 
+          clean_names() %>%
+          mutate(year = year(surveyed),
+                 survey_name = if_else(survey_name == "Little Bird Patch", "Little Bird Backreef", survey_name)) %>% # inconsistency in site name between 2017 and 2025
+          select(site = survey_name, year, transect = transect_name, t_tot = all, t_scar, t_acan, t_serr)) %>%
+  rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "FishBiomassByTransect.xlsx"), sheet = "Overall") %>% 
+          clean_names() %>%
+          mutate(year = year(surveyed)) %>%
+          select(site = survey_name, year, transect = transect_name, t_tot = all, t_scar, t_acan, t_serr)) %>%
+  mutate(t_herb = t_scar + t_acan,
+         site = if_else(str_detect(site, "^Site \\d+"), 
+                        str_extract(site, "^Site \\d+"), 
+                        site), # dealing with NPA sites that have site numbers with different name variations afterwards
+         site_cat = if_else(str_detect(site, "^Site \\d+"), "NDNP",
+                            if_else(str_detect(site, "Redonda"), "Redonda",
+                            "NEMMA"))) %>%
+  mutate(year = if_else(year == 2024, 2025, year)) %>% # Site 11 had one erroneous 2024 date
+  filter(year != 2022) %>% # 2022 was an incomplete data collection year for NPA
+  group_by(site, year) %>%
+  filter(n_distinct(transect) >= 8) %>% # keeping only sites with at least 8 transects per year
+  group_by(site) %>%
+  filter(n_distinct(year) > 1) %>% # keeping only sites with over time comparisons
+  ungroup()
+
+fish_bm_site <- fish_bm_trans %>%
+  group_by(site, site_cat, year) %>%
+  rename_with(~ str_remove(.x, "t_")) %>%
+  summarise(across(c(tot, herb, scar, acan, serr),
+                   list(mean = ~ mean(.x, na.rm = TRUE),
+                        se   = ~ se(.x)),
+                   .names = "{.col}_{.fn}")) %>%
+  ungroup()
+
+fish_bm_year <- fish_bm_site %>%
+  select(!contains("_se")) %>%
+  rename_with(~ str_remove(.x, "_mean")) %>%
+  group_by(site_cat, year) %>%
+  summarise(across(c(tot, herb, scar, acan, serr),
+                   list(mean = ~ mean(.x, na.rm = TRUE),
+                        se   = ~ se(.x)),
+                   .names = "{.col}_{.fn}")) %>%
+  ungroup()
+
+# importing and merging coral spp sheets for 2025
+sheets <- excel_sheets(file_coral)
+sheets_to_join <- setdiff(sheets, c("TermsOfUse", "Metadata", "Overall")) # exclude two sheets before merging remainder
+sheets_list <- map(sheets_to_join, ~ read_excel(file_coral, sheet = .x) %>%
+                     rename_with(~ gsub("([A-Za-z]{4})(avg|med|std)$", "\\1_\\2", .x)) %>% 
+                     rename_with(~ gsub("^(t)([A-Za-z]{4})(ave|med|std)$", "\\1_\\2_\\3", .x)) %>% 
+                     clean_names())
+
+coral_spp_2025 <- reduce(sheets_list, left_join, by = c("survey_id", "code", "name", "nt"))
+
+
+# benthic ~ fish by year
+benth_fish_year <- benth_fish_site %>%
+  select(-contains("_se")) %>%
+  rename_with(~ str_remove(.x, "_mean$")) %>%
+  group_by(year, site_cat) %>%
+  summarise(
+    across(
+      where(is.numeric),
+      list(mean = ~mean(.x, na.rm = TRUE),
+           se   = ~se(.x)),
+      .names = "{.col}_{.fn}"
+    ),
+    .groups = "drop"
+  )
 ```
 
