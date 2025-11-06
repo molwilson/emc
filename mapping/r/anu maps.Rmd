@@ -13,7 +13,7 @@ library(janitor)
 library(ggplot2)
 library(sf)
 #library(ggmap) # do I need this anymore?
-#library(ggspatial) # do I need this anymore?
+library(ggspatial)
 library(ggrepel)
 
 knitr::opts_chunk$set(echo = TRUE)

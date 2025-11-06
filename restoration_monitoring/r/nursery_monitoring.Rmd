@@ -174,7 +174,7 @@ ggsave(here("restoration_monitoring", "figs", "frag_status_nursery_Jan2025.png")
 # establish date references
 
 pre_bleaching_baseline_2024 <- ymd("2024-07-01")
-post_bleaching_2024 <- last(nursery_mon$date_floor) # eventually cap this when bleaching subsides
+post_bleaching_2024 <- ymd("2025-01-01") # eventually cap this when bleaching subsides
 
 # import fragment adjustments based on nursery activities between July - Dec 2024
 
@@ -206,6 +206,7 @@ lab_frags <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.
          date_floor = floor_date(ymd(date), unit = "month"))
 
 nursery_mon_bleaching_2024 <- nursery_mon %>%
+  filter(date <= as.Date("2025-01-01")) %>%
   bind_rows(lab_frags, outplant_adjustments) %>%
   mutate_at(c('n_healthy', 'n_dead', 'n_bleached', 'n_pale', 'n_diseased', 'n_other'), ~replace_na(.,0))
 
@@ -277,7 +278,7 @@ ggplot(status_nursery_post_bleaching_2024 %>%
   theme_bw() +
   theme(plot.title = element_text(hjust=0.5))
 
-ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_nursery.png"), width = 10, height = 5)
+# ggsave(here("restoration_monitoring", "figs", "bleaching_outcomes_2024_nursery.png"), width = 10, height = 5)
 ```
 
 ### Comparing 2024 outcomes to 2023
