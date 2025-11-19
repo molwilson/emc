@@ -1,0 +1,431 @@
+---
+title: "Shark tagging"
+author: "Molly Wilson"
+date: "2025-11-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(here)
+library(purrr)
+library(lubridate)
+library(janitor)
+library(sf)
+library(ggplot2)
+library(ggspatial)
+library(gganimate)
+library(patchwork)
+```
+
+# Import + format raw ARGOS data
+
+- each shark has inividual sheet
+- each sheet has multiple data types with different header rows bound together
+- function below splits data types within each sheet and then binds sheets together into one df
+```{r}
+
+file_path <- here("tagging", "data_raw", "DataRw.xlsx")
+sheets <- excel_sheets(file_path)
+
+process_sheet_split <- function(sheet_name) {
+  raw <- read_excel(file_path, sheet = sheet_name, col_names = FALSE)
+  
+  type_rows <- which(raw[[1]] %in% c("DTPNG", "DTTEMP", "DTDPT"))
+  header_rows <- which(raw[[1]] == "PTTID")
+  
+  if(length(type_rows) == 0 | length(header_rows) == 0) return(NULL)
+  
+  extract_block <- function(i) {
+    type_row <- type_rows[i]
+    header_row <- header_rows[i]
+    end_row <- if(i < length(type_rows)) type_rows[i+1]-1 else nrow(raw)
+    
+    header <- as.character(unlist(raw[header_row, ]))
+    data <- raw[(header_row+1):end_row, ]
+    
+    # Clean names
+    header[is.na(header) | header==""] <- paste0("col_", seq_len(sum(is.na(header) | header=="")))
+    names(data) <- header
+    data <- janitor::clean_names(data)
+    
+    data <- data %>% filter(!if_all(everything(), is.na))
+    
+    data <- data %>% mutate(pttid = sheet_name)
+    
+    list(type = raw[[1]][type_row], data = data)
+  }
+  
+  # Extract all blocks
+  blocks <- map(seq_along(type_rows), extract_block)
+  
+  # Split into a named list by type
+  split_blocks <- blocks %>% 
+    set_names(map_chr(blocks, "type")) %>% 
+    map("data")
+  
+  split_blocks
+}
+
+all_blocks <- map(sheets, process_sheet_split)
+
+# create blocks by data type
+
+pings <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
+  mutate(date = as.Date(as.numeric(date_detected), origin = "1899-12-30")) %>%
+  # slice(-c(3, 4, 8)) %>% # 3 points displayed as on land
+  select(pttid, date, lat = latitude_n, lon = longitude_w) %>%
+  arrange(date)
+
+temps <- map_dfr(all_blocks, ~ .x[["DTTEMP"]]) %>%
+  select(pttid, date, sst = sea_surface_temp_c, adt = at_depth_temp_c) %>%
+  mutate(date = as.Date(date),
+         across(c(sst, adt), as.numeric))
+
+depth  <- map_dfr(all_blocks, ~ .x[["DTDPT"]]) %>%
+  select(pttid, date, contains("depth")) %>%
+  mutate(date = as.Date(date),
+         across(contains("depth"), as.numeric))
+
+# join into one df
+shark_data <- left_join(temps, depth, by = c("pttid", "date")) %>%
+  left_join(pings, by = c("date", "pttid"))
+```
+
+# Mapping
+
+## Basic plots
+
+*Projection = 4326 (same as dataset)*
+
+### Prep
+
+```{r}
+# load Antigua shapefile
+atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
+  st_union() %>%
+  st_sf()
+
+# convert data to sf with og 4326 projection
+shark_sf_4326 <- st_as_sf(pings, coords = c("lon", "lat"), crs = 4326)
+
+# extract point data
+shark_df_4326 <- shark_sf_4326 %>%
+  mutate(x = st_coordinates(.)[,1],
+         y = st_coordinates(.)[,2]) %>%
+  st_set_geometry(NULL)
+
+# standardize coords
+lat_min <- 16.8
+lat_max <- 17.3
+lon_min <- -62.15
+lon_max <- -61.6
+```
+
+### Plot
+
+```{r}
+# plot pings - static
+ggplot() +
+  geom_sf(data = atg, fill = "lightblue", color = "lightblue") +  # islands
+  geom_path(data = shark_df_4326, aes(x = x, y = y, group = pttid, color = pttid),
+            size = .5, alpha = 0.5, linetype = 2) +
+  geom_point(data = shark_df_4326, aes(x = x, y = y, group = pttid, color = pttid),
+             size = 1) +
+  scale_color_manual(values = c("coral2", "gold")) +
+  xlim(c(lon_min, lon_max)) + ylim(c(lat_min, lat_max)) +
+  labs(x = NULL, y = NULL, color = "ID", title = "Shark movement over time") +
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "steelblue"),
+        panel.grid = element_blank())
+ggsave(here("tagging", "figs", "pings_static.png"))
+
+
+# animated plots - indv. sharks
+animate_indv <- function(pttid, shark_df, atg, out_dir = "mapping/figs") {
+  
+  p_anim <- ggplot() +
+    geom_sf(data = atg, fill = "lightblue", color = "lightblue") +
+    geom_path(
+      data = shark_df %>% filter(pttid == !!pttid),
+      aes(x = x, y = y),
+      color = "coral2", size = 1, alpha = 0.7, linetype = 2
+    ) +
+    geom_point(
+      data = shark_df %>% filter(pttid == !!pttid),
+      aes(x = x, y = y),
+      color = "coral2", size = 2
+    ) +
+    xlim(c(lon_min, lon_max)) + ylim(c(lat_min, lat_max)) +
+    labs(
+      x = NULL, y = NULL,
+      title = glue::glue("Shark {pttid} movement over time: {{frame_along}}")
+    ) +
+    theme_bw(base_size = 18) +
+    theme(
+      panel.background = element_rect(fill = "steelblue"),
+      panel.grid = element_blank()
+    ) +
+    transition_reveal(date)
+  
+  # animate
+  anim <- gganimate::animate(
+    p_anim,
+    nframes = 150, fps = 10,
+    width = 1000, height = 750,
+    renderer = gifski_renderer()
+  )
+  
+  # save
+  gif_path <- here::here("tagging", "figs", paste0("shark_track_", pttid, ".gif"))
+  anim_save(gif_path, animation = anim)
+  
+  message("✅ Saved: ", gif_path)
+}
+
+unique_ids <- unique(shark_df_4326$pttid)
+purrr::walk(unique_ids, animate_indv, shark_df = shark_df_4326, atg = atg)
+
+# animated plot - mult sharks
+p_anim <- ggplot() +
+  geom_sf(data = atg, fill = "lightblue", color = "lightblue") +  # islands
+  geom_path(data = shark_df_4326, aes(x = x, y = y, group = pttid, color = pttid),
+            size = 1, alpha = 0.7, linetype = 2) +
+  geom_point(data = shark_df_4326, aes(x = x, y = y, group = pttid, color = pttid),
+             size = 2) +
+  scale_color_manual(values = c("coral2", "gold")) +
+  xlim(c(lon_min, lon_max)) + ylim(c(lat_min, lat_max)) +
+  labs(x = NULL, y = NULL, color = "ID", title = "Shark movement over time: {frame_along}") +
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "steelblue"),
+        panel.grid = element_blank()) +
+  transition_reveal(date)
+
+anim <- gganimate::animate(p_anim, nframes = 150, fps = 10, width = 600, height = 400, renderer = gifski_renderer())
+anim_save(here("tagging", "figs", "shark_track_mult.gif"), animation = anim)
+```
+
+
+## ESRI plots
+*Projection = 3857 (must reproject dataset)*
+
+### Prep
+
+```{r}
+# link ESRI layers
+esri_ocean <- paste0('https://services.arcgisonline.com/arcgis/rest/services/','Ocean/World_Ocean_Base/MapServer/tile/${z}/${y}/${x}.jpeg')
+esri_world_imagery <- "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}.jpeg"
+
+# convert to sf and reproject with 3857 projection
+shark_sf_3857 <- st_as_sf(pings, coords = c("lon", "lat"), crs = 4326) %>% # og projection was 4326
+  st_transform(3857) 
+
+# extract point data
+shark_df_3857 <- shark_sf_3857 %>%
+  mutate(x = st_coordinates(.)[,1],
+         y = st_coordinates(.)[,2]) %>%
+  st_set_geometry(NULL)
+
+# set range and reproject with 3857 projection
+bb_3857 <- st_bbox(
+  st_transform(
+    st_as_sfc(st_bbox(c(xmin = lon_min, xmax = lon_max, ymin = lat_min, ymax = lat_max), crs = 4326)), 3857))
+xlim_3857 <- bb_3857[c("xmin", "xmax")]
+ylim_3857 <- bb_3857[c("ymin", "ymax")]
+
+```
+
+### Plot
+
+```{r}
+# static background (rendered once)
+p_base <- ggplot() +
+  annotation_map_tile(type = esri_world_imagery, progress = "none", zoomin = 0) +
+  coord_sf(crs = st_crs(3857), xlim = xlim_3857, ylim = ylim_3857, expand = FALSE) +
+  theme_bw(base_size = 18) +
+  theme(
+    panel.background = element_rect(fill = "steelblue"),
+    panel.grid = element_blank(),
+    legend.position = "bottom"
+  ) 
+
+# animate overlay (rendered repeatedly)
+p_anim <- p_base +
+  geom_path(data = shark_df_3857, 
+            aes(x = x, y = y, group = pttid, color = pttid),
+            linewidth = 1, alpha = 0.7, linetype = 2) +
+  geom_point(data = shark_df_3857,
+             aes(x = x, y = y, group = pttid, color = pttid),
+             size = 2) +
+  scale_color_manual(values = c("coral2", "gold")) +
+  labs(x = NULL, y = NULL, color = "Shark ID",
+       title = "Shark movement over time: {frame_along}") +
+  transition_reveal(along = date)
+
+# render + save
+anim <- gganimate::animate(
+  p_anim,
+  nframes = 150, fps = 10,
+  width = 1600, height = 1200,
+  renderer = gifski_renderer())
+anim_save(here("tagging", "figs", "shark_track_mult_esri.gif"), animation = anim)
+```
+## Bathy plots
+
+### Prep
+```{r}
+library(terra)
+
+# bathymetry raster (user-defined GeoTIFF): Sentinel2 2022 ATG-specific from TNC: https://caribbeanscienceatlas.tnc.org/maps/28371a902f414fef830cc2e6ff9b3d8f
+
+# set lims for crop to save processing time
+lon_lim <- c(-62.22, -61.6)
+lat_lim <- c(16.9, 17.3)
+
+# create bbox in same CRS as raster (EPSG:4326)
+bbox_4326 <- st_as_sfc(st_bbox(c(
+  xmin = lon_lim[1],
+  xmax = lon_lim[2],
+  ymin = lat_lim[1],
+  ymax = lat_lim[2]
+), crs = 4326))
+
+# load, crop, and convert to df
+sentinel_df <- rast(here("mapping", "rasters", "sentinel_atg", "atg_bath_Sentinel2_2022_clip.tif")) %>%
+  crop(bbox_4326) %>%
+  as.data.frame(xy = TRUE) %>%
+  setNames(c("x", "y", "depth"))
+
+# downsample for faster rendering if needed
+sentinel_df_small <- sentinel_df %>% sample_frac(0.5)
+```
+
+
+### Plot
+```{r}
+# static background (rendered once)
+p_base <- ggplot() +
+  geom_raster(data = sentinel_df, aes(x = x, y = y, fill = depth)) +
+  scale_fill_gradient2(low = "tan", mid = "lightblue", high = "steelblue4", midpoint = 0, name = "Depth (m)") +
+  coord_fixed(xlim = c(-62.15, -61.6), ylim = c(16.9, 17.3)) +
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "steelblue4"),
+        panel.grid = element_blank())
+
+# animate overlay
+p_anim <- p_base +
+  geom_path(data = shark_df_3857, aes(x = x, y = y, group = pttid, color = pttid),
+            size = 1, alpha = 0.7, linetype = 2) +
+  geom_point(data = shark_df_3857, aes(x = x, y = y, group = pttid, color = pttid),
+             size = 2) +
+  scale_color_manual(values = c("coral2", "gold")) +
+  labs(x = NULL, y = NULL, color = "Shark ID",
+       title = "Shark movement over time: {frame_along}") +
+  transition_reveal(along = date)
+
+gganimate::animate(p_anim, nframes = 150, fps = 10)
+anim_save(here("mapping", "figs", "shark_track_bathy.gif"), animation = anim)
+```
+
+
+# Depth / Temp
+
+## Temperature
+
+```{r}
+p_temp <- ggplot(shark_data, aes(x = date, group = pttid)) +
+  geom_line(data = shark_data %>%
+              pivot_longer(cols = c(sst, adt),
+                           names_to = "type", values_to = "temp") %>%
+              mutate(type = recode(type,
+                                   sst = "Sea surface temp.",
+                                   adt = "At-depth temp.")),
+            aes(y = temp, color = type, group = interaction(pttid, type)),
+            size = 0.4) +
+  scale_color_manual(values = c("Sea surface temp." = "coral",
+                                "At-depth temp." = "goldenrod")) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  labs(color = NULL, y = "Temperature (C)", x = "")
+ggsave(here("tagging", "figs", "shark_temp.png"), plot = p_temp, width = 6, height = 6)
+```
+
+## Depth
+
+```{r}
+# still plot - mult
+p_depth <- ggplot(shark_data, aes(x = date)) +
+  geom_ribbon(aes(ymin = min_depth_m, ymax = max_depth_m, group = pttid),
+              fill = "gray", alpha = 0.4) +
+  geom_line(data = shark_data %>%
+              pivot_longer(cols = c(min_depth_m, mean_depth_m, max_depth_m),
+                           names_to = "type", values_to = "depth") %>%
+              mutate(type = recode(type,
+                                   min_depth_m = "Min. depth",
+                                   mean_depth_m = "Mean depth",
+                                   max_depth_m = "Max. depth")),
+            aes(y = depth, color = type, group = interaction(pttid, type)),
+            size = 0.8) +
+  scale_y_reverse() +
+  scale_color_manual(values = c("Min. depth" = "lightblue",
+                                "Mean depth" = "gray50",
+                                "Max. depth" = "steelblue")) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  labs(color = "", y = "Depth (m)", x = "")
+ggsave(here("tagging", "figs", "shark_depth.png"), plot = p_depth, width = 6, height = 6)
+
+# still plot - indv
+p_depth_indv <- ggplot(shark_data, aes(x = date)) +
+  geom_ribbon(aes(ymin = min_depth_m, ymax = max_depth_m, group = pttid),
+              fill = "gray", alpha = 0.4) +
+  geom_line(data = shark_data %>%
+              pivot_longer(cols = c(min_depth_m, mean_depth_m, max_depth_m),
+                           names_to = "type", values_to = "depth") %>%
+              mutate(type = recode(type,
+                                   min_depth_m = "Min. depth",
+                                   mean_depth_m = "Mean depth",
+                                   max_depth_m = "Max. depth")),
+            aes(y = depth, color = type, group = interaction(pttid, type)),
+            size = 0.8) +
+  geom_point(data = shark_data %>%
+               filter(!is.na(lat)),
+             aes(y = min_depth_m),
+             shape = 21, fill = "indianred2", color = "indianred2", size = 2, alpha = 0.7) +
+  scale_y_reverse() +
+  scale_color_manual(values = c("Min. depth" = "lightblue",
+                                "Mean depth" = "gray50",
+                                "Max. depth" = "steelblue")) +
+  facet_wrap(~ pttid) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  labs(color = "", y = "Depth (m)", x = "")
+ggsave(here("tagging", "figs", "shark_depth_indv.png"), plot = p_depth_indv, width = 6, height = 6)
+
+# animated plots - turn off ribbon
+# p_anim <- p_depth +
+#   theme_bw(base_size = 18) +
+#   transition_reveal(date)
+# anim <- gganimate::animate(p_anim, nframes = 100, fps = 10, width = 800, height = 600)
+# anim_save(here("tagging", "figs", "shark_depth.gif"), animation = anim)
+# 
+# p_anim <- p_depth +
+#   facet_wrap(~ pttid) +
+#   theme_bw(base_size = 18) +
+#   theme(legend.position = "top") +
+#   transition_reveal(date)
+# anim <- gganimate::animate(p_anim, nframes = 100, fps = 10, width = 800, height = 600)
+# anim_save(here("tagging", "figs", "shark_depth_indv.gif"), animation = anim)
+```
+
+## Panels
+
+```{r}
+# Plot panels
+p_overlay <- p_temp / p_depth
+ggsave(here("tagging", "figs", "depth_temp_OG.png"), plot = p_overlay, width = 6, height = 6)
+```
+
+
+

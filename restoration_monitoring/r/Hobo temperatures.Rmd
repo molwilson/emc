@@ -16,52 +16,88 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
 ```{r}
-cades <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Cades.xlsx"), 
-                  sheet = 1) %>%
+cades <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Cades") %>%
   clean_names() %>%
-  dplyr::rename(date = 2, temp_c = 3) %>%
-  select(-number) %>%
-  mutate(nursery = "Cades")
+  slice(-1) %>% # remove first row 
+  mutate(logger = "Cades")
 
-tpb <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Ten pound bay.xlsx"), 
-                  sheet = 1) %>%
+tpb <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Ten Pound Bay") %>%
   clean_names() %>%
-  dplyr::rename(date = 2, temp_c = 3) %>%
-  select(-number) %>%
-  mutate(nursery = "Ten Pound Bay")
+  slice(-1) %>%
+  mutate(logger = "Ten Pound Bay")
 
-deep <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Deep water.xlsx"), 
-                  sheet = 1) %>%
+jumby <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Jumby") %>%
   clean_names() %>%
-  dplyr::rename(date = 2, temp_c = 3) %>%
-  select(-number) %>%
-  mutate(nursery = "Deep Nursery")
+  slice(-1) %>%
+  mutate(logger = "Jumby")
 
-temp_data <- rbind(cades, tpb, deep) %>%
-  filter(temp_c < 32) # removing outliers from loggers being on the boat and heating up
+# create a filter to remove times during surface intervals
+surf_int <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Surface intervals") %>%
+  clean_names() %>%
+  select(-notes)
 
+temp_data <- rbind(cades, tpb, jumby) %>%
+  select(-notes) %>%
+  filter(between(temp_c, 25, 35)) %>% # removing rogue outliers
+  # filter out any readings taken during surface intervals
+  anti_join(surf_int,
+            by = join_by(
+              logger == logger,
+              between(date_time, surface_start, surface_end)
+            )) %>%
+  # drop any readings more than 2C above previous hour's reading
+  arrange(logger, date_time) %>%
+  group_by(logger) %>%
+  mutate(temp_diff = temp_c - lag(temp_c)) %>% # create helper column
+  filter(is.na(temp_diff) | temp_diff <= 2) %>%  # keep if first row or <= 2 °C jump
+  ungroup() %>%
+  select(-temp_diff) # drop helper column
+
+# define references
+lab_temp <- expression("Temperature ("*~degree*C*")")
+ref_temp = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6)
+lab_ref_temp <- "Target range (Coral Reef Alliance)"
 ref_temp_bleaching = 30.63
+lab_ref_temp_bleaching <- "Coral bleaching threshold (NOAA)"
+ylims_temp <- c(22, (max(temp_data$temp_c, na.rm = T) + 1))
 
-ggplot(temp_data,
-       aes(x = date, y = temp_c, color = nursery)) +
-  geom_line(alpha = 0.9, size = 0.3) +
+# plots
+ggplot() +
+  geom_rect(data = ref_temp, 
+              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), 
+                  ymin = ymin, ymax = ymax, 
+                  fill = lab_ref_temp),
+              alpha = 0.3) +
+  scale_fill_manual(values = "gray") +
+  geom_line(data = temp_data,
+            aes(x = date_time, y = temp_c, group = logger, color = logger),
+            alpha = 0.9) +
   scale_color_manual(values = c("cadetblue", "coral", "gold")) +
   geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed') +
   scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
-  labs(x = "", y = "Temperature (°C)", color = "Nursery location") +
+  labs(x = "", y = "Temperature (°C)", color = "Nursery location", fill = "") +
   theme_bw() +
-  theme(legend.position = "bottom")
-ggsave(here("restoration_monitoring", "figs", "hobo_summary.png"), width = 6, height = 4)
+  theme(legend.position = "top")
+ggsave(here("restoration_monitoring", "figs", "hobo_summary_25-26_Q2.png"), width = 6, height = 4)
 
 ggplot(temp_data,
-       aes(x = date, y = temp_c)) +
+       aes(x = date_time, y = temp_c)) +
   geom_line(alpha = 0.9, size = 0.3, color = "cadetblue") +
   geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed', color = "coral") +
   scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
-  facet_grid(. ~ nursery) +
-  labs(x = "", y = "Temperature (°C)", color = "Nursery") +
+  facet_grid(. ~ logger) +
+  labs(x = "", y = "Temperature (°C)") +
   theme_bw()
-ggsave(here("restoration_monitoring", "figs", "hobo_nursery.png"), width = 6, height = 4)
-  
+ggsave(here("restoration_monitoring", "figs", "hobo_nursery_25-26_Q2.png"), width = 6, height = 4)
+
+ggplot(temp_data %>% filter(logger == "Cades"),
+       aes(x = date_time, y = temp_c)) +
+  geom_line(alpha = 0.9, size = 0.3, color = "cadetblue") +
+  geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed', color = "coral") +
+  scale_x_datetime(date_labels = "%b %Y", date_breaks = "3 months") +
+  scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
+  labs(x = "", y = "Temperature (°C)") +
+  theme_bw()
+ggsave(here("restoration_monitoring", "figs", "hobo_cades_25-26_Q2.png"), width = 6, height = 4)
 ```
 
