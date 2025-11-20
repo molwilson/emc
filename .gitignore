@@ -1,5 +1,8 @@
+
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
-mapping/rasters/sentinel_atg/atg_bath_Sentinel2_2022_clip.tif
+mapping/rasters/
+.DS_Store
+
