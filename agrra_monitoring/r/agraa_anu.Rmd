@@ -23,6 +23,7 @@ library(janitor) # for cleaning variable names
 library(scales) # for plotting percentages
 library(fmsb) # for radar plots
 library(vegan) # for NMDS
+library(forcats) # for wrangling data for forest plots
 library(broom) # for visualizing variances
 library(patchwork) # for combining plots
 library(ggpubr) # for adding significances into plots
@@ -1265,6 +1266,14 @@ ggplot(fish_bm_site %>% filter(code == "serr"),
   geom_line() +
   labs(x = "Year", y = "Serranid biomass (g/100m2)", color = "Site", group = "Site") +
   theme_minimal()
+
+ggplot(fish_bm_year, aes(x = year, y = mean, group = site_cat, color = site_cat)) +
+  geom_point() +
+  geom_line() + 
+  labs(x = "Year", y = "Biomass", color = "Location") +
+  facet_wrap(~ family) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 ### Radar plots
@@ -1356,63 +1365,115 @@ legend(
 )
 ```
 
+## Density
+
+### Import + wrangle data
+
+```{r}
+# import data
+fish_den_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "FishDensity", "FishDensityBySite.xlsx"), sheet = "Data") %>% 
+  rename_with(fix_names) %>%
+  mutate(year = year(date)) %>%
+  filter(nt >= 8) %>% # keeping only sites with 8 or more transects
+  select(site, year, contains("avg"), contains("std")) %>%
+  pivot_longer(
+    cols = -c(site, year),  
+    names_to = "family_stat",      
+    values_to = "value"                 
+  ) %>%
+  separate(family_stat, into = c("code_com", "stat"), sep = "_(?=[^_]+$)") %>%
+  left_join(fish_fam_key, by = "code_com") %>%
+  select(site, year, code = code_lat, family, stat, value)
+
+fish_den_2025 <- rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "FishDensity.xlsx"), sheet = "Overall"),
+                      read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "FishDensity.xlsx"), sheet = "Overall")) %>%
+  # deal with weird capitalization in species col names
+  rename_with(fix_names) %>%
+  filter(nt >= 8) %>% # keeping only sites with 8 or more transects
+  mutate(year = 2025,
+         site = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
+  select(site, year, contains("avg"), contains("std")) %>%
+  rename_with(~ gsub("^t_", "", .x), .cols = -c(site, year)) %>%
+  pivot_longer(
+    cols = -c(site, year),  
+    names_to = "family_stat",      
+    values_to = "value"                 
+  ) %>%
+  separate(family_stat, into = c("code_lat", "stat"), sep = "_(?=[^_]+$)") %>%
+  left_join(fish_fam_key, by = "code_lat") %>%
+  select(site, year, code = code_lat, family, stat, value)
+
+# merge datasets
+fish_den_site <- rbind(fish_den_hist, fish_den_2025) %>%
+ mutate(site = if_else(str_detect(site, "^Site \\d+"), 
+                        str_extract(site, "^Site \\d+"), 
+                        site), # dealing with NPA site inconsistencies
+         site_cat = if_else(str_detect(site, "^Site \\d+"), "NDNP",
+                            if_else(str_detect(site, "Redonda"), "Redonda",
+                            "NEMMA"))) %>%
+  mutate(year = if_else(year == 2024, 2025, year)) %>% # one erroneous 2024 date
+  filter(year != 2022,
+         !is.na(family)) %>% # 2022 was an incomplete data collection year for NPA
+  group_by(site) %>%
+  filter(n_distinct(year) > 1) %>% # keeping only sites with over time comparisons
+  ungroup() %>%
+  pivot_wider(
+    names_from = stat,   # use 'avg' and 'std' as new column names
+    values_from = value  # fill those columns with the numeric values
+  ) %>%
+  unnest(c(avg, std)) # make numeric instead of list
+```
+
 ### Forest plots
 
 ```{r}
-library(tidyverse)
+# calculating paired changes per site, and 95% confidence intervals
 
-# ---- prepare and compute change (fixed approach) ----
-df_change <- fish_bm_site %>%
+# --- compute paired deltas per site, then summarize per family × site_cat ---
+df_change <- fish_den_site %>%
   filter(year %in% c(2017, 2019, 2025)) %>%
-  # pivot so we have avg_2017, avg_2019, avg_2025, and std_*
+  # pivot so each site has avg_2017, avg_2019, avg_2025 (NA where missing)
   pivot_wider(
-    id_cols = c(site, family, site_cat),
+    id_cols = c(site_cat, family, site),
     names_from = year,
-    values_from = c(avg, std),
-    names_glue = "{.value}_{year}"
+    values_from = avg,
+    names_glue = "avg_{year}"
   ) %>%
-  # create baseline as earliest of 2017 or 2019 (coalesce picks first non-NA)
+  # baseline = 2017 if present otherwise 2019
   mutate(
-    baseline_avg = coalesce(avg_2017, avg_2019),
-    baseline_std = coalesce(std_2017, std_2019)
+    baseline_value = coalesce(avg_2017, avg_2019)
   ) %>%
-  # drop groups that lack either baseline or 2025
-  filter(!is.na(baseline_avg), !is.na(avg_2025)) %>%
-  # compute change and CIs (simple SE-based; adjust if you want bootstrap or paired)
-  mutate(
-    change = avg_2025 - baseline_avg,
-    # If std columns are SD of site means, proceed; otherwise adapt
-    sd_base = baseline_std,
-    sd_2025 = std_2025,
-    # handle possible NA std by treating as 0 (or better: compute from raw data)
-    sd_base = if_else(is.na(sd_base), 0, sd_base),
-    sd_2025 = if_else(is.na(sd_2025), 0, sd_2025),
-    se_change = sqrt(sd_base^2 + sd_2025^2),
-    ci_low = change - 1.96 * se_change,
-    ci_high = change + 1.96 * se_change
+  # keep only sites that have both a baseline and 2025
+  filter(!is.na(baseline_value), !is.na(avg_2025)) %>%
+  # compute paired delta per site
+  mutate(delta = avg_2025 - baseline_value) %>%
+  # summarize to family × site_cat
+  group_by(site_cat, family) %>%
+  summarise(
+    n_sites    = n(),
+    mean_change = mean(delta, na.rm = TRUE),
+    sd_change   = sd(delta, na.rm = TRUE),
+    se_change   = sd_change / sqrt(n_sites),
+    ci_low      = mean_change - 1.96 * se_change,
+    ci_high     = mean_change + 1.96 * se_change,
+    .groups = "drop"
   )
 
-# Quick check
-glimpse(df_change)
+# quick diagnostic: show how many sites contributed per family × site_cat
+print(df_change %>% arrange(site_cat, desc(n_sites)))
 
-
-# --- 2) Forest plot (paneled by site_cat) --------------------------
-
-p <- df_change %>%
-  ggplot(aes(x = change, y = fct_reorder(family, change))) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
-  geom_pointrange(aes(xmin = ci_low, xmax = ci_high), size = 0.6) +
+# --- forest plot: one point per family per panel (site_cat) ---
+p <- ggplot(df_change %>% group_by(site_cat) %>% mutate(family = fct_reorder(family, mean_change)),
+       aes(x = mean_change, y = family)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
+  geom_pointrange(aes(xmin = ci_low, xmax = ci_high), size = 0.2) +
   facet_wrap(~ site_cat, scales = "free_y") +
+  theme_bw(base_size = 12) +
   labs(
-    x = "Change in biomass (avg 2025 − avg baseline)",
-    y = "Family",
-    title = "Change in fish biomass from baseline (2017/2019) to 2025",
-    subtitle = "Forest plot by family, faceted by site_cat"
-  ) +
-  theme_minimal(base_size = 13)
+    x = expression("Change in density (indv. 100m"^{-2}*")"),
+    y = "Family")
 
-print(p)
-
+ggsave(plot = p, here("agrra_monitoring", "figs", "fish_den_forest.png"), width = 6, height = 4)
 ```
 
 
