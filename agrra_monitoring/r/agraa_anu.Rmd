@@ -14,7 +14,7 @@ output:
 # Setup
 
 ```{r setup, message = F, warning = F, echo = F}
-# Install packages 
+# Install packages  
 library(tidyverse)
 library(here) # for accessing files within directory
 library(readxl) # for reading indv. sheets within excel files
