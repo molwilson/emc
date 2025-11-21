@@ -14,12 +14,12 @@ output:
 # Setup
 
 ```{r setup, message = F, warning = F, echo = F}
-# Install packages  
+# Install packages
 library(tidyverse)
 library(here) # for accessing files within directory
 library(readxl) # for reading indv. sheets within excel files
 library(purrr) # for joining multiple sheets successively
-library(janitor) # for cleaning variable names so they have consistent capitalization etc.
+library(janitor) # for cleaning variable names
 library(scales) # for plotting percentages
 library(fmsb) # for radar plots
 library(vegan) # for NMDS
@@ -65,7 +65,6 @@ theme_pub <- function(base_size = 14, base_family = "") {
       strip.text = element_text(size = base_size * 1.1, face = "bold")
     )
 }
-
 ```
 
 # Benthic
@@ -175,7 +174,7 @@ ggplot(benthic_cover_site, aes(x = year, y = tas_mean, group = site, shape = sit
 ### Box plots by year
 
 ```{r}
-make_site_box <- function(df, site_name, yvar, ylab,
+make_bp <- function(df, site_name, yvar, ylab,
                           y_max = NULL, test_method = "wilcox.test",
                           show_ns = FALSE, remove_x_text = FALSE,
                           title = TRUE, remove_y_text = FALSE) {
@@ -235,27 +234,27 @@ make_site_box <- function(df, site_name, yvar, ylab,
 }
 
 
-p1 <- make_site_box(benthic_cover_site, "NEMMA",
+p1 <- make_bp(benthic_cover_site, "NEMMA",
                     yvar = "lc_mean", ylab = "Live Coral",
                     y_max = 0.40,
                     remove_x_text = TRUE,
                     title = TRUE,
                     remove_y_text = FALSE)
 
-p2 <- make_site_box(benthic_cover_site, "NDNP",
+p2 <- make_bp(benthic_cover_site, "NDNP",
                     yvar = "lc_mean", ylab = "Live Coral",
                     y_max = 0.40,
                     remove_x_text = TRUE,
                     title = TRUE,
                     remove_y_text = TRUE)
 
-p3 <- make_site_box(benthic_cover_site, "NEMMA",
+p3 <- make_bp(benthic_cover_site, "NEMMA",
                     yvar = "fma_mean", ylab = "Fleshy Macroalgae",
                     y_max = 0.80,
                     title = FALSE,
                     remove_y_text = FALSE)
 
-p4 <- make_site_box(benthic_cover_site, "NDNP",
+p4 <- make_bp(benthic_cover_site, "NDNP",
                     yvar = "fma_mean", ylab = "Fleshy Macroalgae",
                     y_max = 0.80,
                     title = FALSE,
@@ -265,9 +264,8 @@ final_plot <- (p1 | p2) / (p3 | p4)
   # + plot_annotation(tag_levels = "A")  # optional panel labels A, B, C, D
 
 final_plot
-ggsave(here("agrra_monitoring", "figs"," lc_fma_cover.png"), plot = final_plot, width = 8, height = 6)
+ggsave(here("agrra_monitoring", "figs", "lc_fma_cover.png"), plot = final_plot, width = 8, height = 6)
 ```
-
 
 
 ### Radar plots
@@ -367,20 +365,21 @@ legend(
 Removing cyanobacteria here due to seasonality and peysonnelids in NDNP due to lack in confidence about identification
 
 ```{r}
+nmds_var <- c("lc", "cca", "ta", "tas", "fma", "cma", "ainv")
+
 benthic_nmds <- benthic_cover_site %>%
-  select(-contains("_sd"),
-         -contains("cyan"),
-         -contains("peys")) %>%
   rename_with(~ gsub("_mean", "", .x)) %>%
-  mutate(year = as.character(year))
+  mutate(period = ifelse(year == "2025", "2025", "2017-2019")) %>%
+  select(site, site_cat, period, nmds_var) %>%
+  ungroup()
 
 benthic_meta <- benthic_nmds %>%
   ungroup() %>%
-  select(site, site_cat, year)
+  select(site, site_cat, period)
 
 benthic_pc <- benthic_nmds %>%
   ungroup() %>%
-  select(-site, -site_cat, -year)
+  select(-site, -site_cat, -period)
 
 set.seed(123)
 benthic_nmds_ord <- metaMDS(
@@ -395,7 +394,7 @@ site_scores <- scores(benthic_nmds_ord, display = "sites") %>%
   as.data.frame() %>%
   mutate(site     = benthic_meta$site,
          site_cat = benthic_meta$site_cat,
-         year     = benthic_meta$year)
+         period     = benthic_meta$period)
 
 pc_scores <- scores(benthic_nmds_ord, display = "species") %>%
   as.data.frame() %>%
@@ -411,9 +410,9 @@ pc_scores_scaled <- pc_scores %>%
     label_nudge_y = ifelse(NMDS2 >= 0, 0.05, -0.05)
   )
 
-ggplot(site_scores, aes(x = NMDS1, y = NMDS2, color = year)) +
+p <- ggplot(site_scores, aes(x = NMDS1, y = NMDS2, color = period)) +
   geom_point(size = 1, alpha = 0.4) +
-  stat_ellipse(aes(group = year), type = "t", linetype = 2) +
+  stat_ellipse(aes(group = period), type = "t", linetype = 2) +
   facet_wrap(~ site_cat) +
   # geom_segment(data = pc_scores_scaled,
   #              aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
@@ -429,16 +428,21 @@ ggplot(site_scores, aes(x = NMDS1, y = NMDS2, color = year)) +
   labs(color = "Year") +
   theme(strip.text = element_text(size = 14, face = "bold"),
         legend.position = "bottom")
+p
+
+ggsave(plot = p, here("agrra_monitoring", "figs", "benthic_nmds.png"), width = 8, height = 5)
 ```
 
 ```{r}
 # PERMANOVA
+
+### need to fix code so it distinguishes between year and site_cat in the model
 set.seed(123)
 adonis_res <- adonis2(
-  benthic_pc ~ site_cat * year,
-  data = benthic_meta,
-  method = "bray",
-  permutations = 999
+  as.matrix(benthic_nmds[, nmds_var]) ~ site_cat + period,
+  data = benthic_nmds,
+  permutations = 999,
+  method = "bray"
 )
 
 permanova_table <- adonis_res %>%
@@ -1043,7 +1047,7 @@ recruits_fam_year <- recruits_fam_site %>%
   ungroup()
 ```
 
-### Line plots
+### Line plots by site
 
 ```{r}
 ggplot(recruits_fam_site %>%
@@ -1066,6 +1070,30 @@ ggplot(recruits_fam_site %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+### Box plots by year
+
+```{r}
+recruits_tot_site <- recruits_fam_site %>%
+  filter(family_code == "ALL" & size == "total")
+
+p1 <- make_bp(recruits_tot_site, "NEMMA",
+        yvar = "avg", ylab = expression("Coral recruits (indv. m"^{-2}*")"),
+        y_max = 16,
+        title = TRUE) +
+  scale_y_continuous()
+
+p2 <- make_bp(recruits_tot_site, "NDNP",
+        yvar = "avg", ylab = expression("Coral recruits (indv. m"^{-2}*")"),
+        y_max = 16,
+        title = TRUE,
+        remove_y_text = FALSE) +
+  scale_y_continuous()
+
+final_plot <- (p1 | p2)
+final_plot
+
+ggsave(here("agrra_monitoring", "figs", "recruits.png"), plot = final_plot, width = 6, height = 4)
+```
 
 
 # Fish
@@ -1326,6 +1354,65 @@ legend(
   pt.cex = 1.5,
   fill = fill_colors            # show fill colors in legend
 )
+```
+
+### Forest plots
+
+```{r}
+library(tidyverse)
+
+# ---- prepare and compute change (fixed approach) ----
+df_change <- fish_bm_site %>%
+  filter(year %in% c(2017, 2019, 2025)) %>%
+  # pivot so we have avg_2017, avg_2019, avg_2025, and std_*
+  pivot_wider(
+    id_cols = c(site, family, site_cat),
+    names_from = year,
+    values_from = c(avg, std),
+    names_glue = "{.value}_{year}"
+  ) %>%
+  # create baseline as earliest of 2017 or 2019 (coalesce picks first non-NA)
+  mutate(
+    baseline_avg = coalesce(avg_2017, avg_2019),
+    baseline_std = coalesce(std_2017, std_2019)
+  ) %>%
+  # drop groups that lack either baseline or 2025
+  filter(!is.na(baseline_avg), !is.na(avg_2025)) %>%
+  # compute change and CIs (simple SE-based; adjust if you want bootstrap or paired)
+  mutate(
+    change = avg_2025 - baseline_avg,
+    # If std columns are SD of site means, proceed; otherwise adapt
+    sd_base = baseline_std,
+    sd_2025 = std_2025,
+    # handle possible NA std by treating as 0 (or better: compute from raw data)
+    sd_base = if_else(is.na(sd_base), 0, sd_base),
+    sd_2025 = if_else(is.na(sd_2025), 0, sd_2025),
+    se_change = sqrt(sd_base^2 + sd_2025^2),
+    ci_low = change - 1.96 * se_change,
+    ci_high = change + 1.96 * se_change
+  )
+
+# Quick check
+glimpse(df_change)
+
+
+# --- 2) Forest plot (paneled by site_cat) --------------------------
+
+p <- df_change %>%
+  ggplot(aes(x = change, y = fct_reorder(family, change))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_pointrange(aes(xmin = ci_low, xmax = ci_high), size = 0.6) +
+  facet_wrap(~ site_cat, scales = "free_y") +
+  labs(
+    x = "Change in biomass (avg 2025 − avg baseline)",
+    y = "Family",
+    title = "Change in fish biomass from baseline (2017/2019) to 2025",
+    subtitle = "Forest plot by family, faceted by site_cat"
+  ) +
+  theme_minimal(base_size = 13)
+
+print(p)
+
 ```
 
 
