@@ -955,6 +955,68 @@ legend(
 )
 ```
 
+### Forest plots
+
+Probably would show only NEMMA
+
+```{r}
+# calculating paired changes per site, and 95% confidence intervals
+coral_fam_site <- coral_spp_site %>%
+  group_by(year, site_cat, site, family) %>%
+  summarize(avg = mean(avg)) %>%
+  filter(family != "Unknown spp.")
+
+# --- compute paired deltas per site, then summarize per family × site_cat ---
+df_change <- coral_fam_site %>%
+  filter(year %in% c(2017, 2019, 2025)) %>%
+  # pivot so each site has avg_2017, avg_2019, avg_2025 (NA where missing)
+  pivot_wider(
+    id_cols = c(site_cat, family, site),
+    names_from = year,
+    values_from = avg,
+    names_glue = "avg_{year}"
+  ) %>%
+  # baseline = 2017 if present otherwise 2019
+  mutate(
+    baseline_value = coalesce(avg_2017, avg_2019)
+  ) %>%
+  # keep only sites that have both a baseline and 2025
+  filter(!is.na(baseline_value), !is.na(avg_2025)) %>%
+  # compute paired delta per site
+  mutate(delta = avg_2025 - baseline_value) %>%
+  # summarize to family × site_cat
+  group_by(site_cat, family) %>%
+  summarise(
+    n_sites    = n(),
+    mean_change = mean(delta, na.rm = TRUE),
+    sd_change   = sd(delta, na.rm = TRUE),
+    se_change   = sd_change / sqrt(n_sites),
+    ci_low      = mean_change - 1.96 * se_change,
+    ci_high     = mean_change + 1.96 * se_change,
+    .groups = "drop"
+  )
+
+# quick diagnostic: show how many sites contributed per family × site_cat
+print(df_change %>% arrange(site_cat, desc(n_sites)))
+
+# --- forest plot: one point per family per panel (site_cat) ---
+p <- ggplot(df_change %>% group_by(site_cat) %>% mutate(family = fct_reorder(family, mean_change)),
+       aes(x = mean_change, y = family)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") +
+  geom_pointrange(aes(xmin = ci_low, xmax = ci_high), size = 0.2) +
+  facet_wrap(~ site_cat, scales = "free_y") +
+  scale_x_continuous(labels = label_percent(),
+                     # breaks = c(-0.01, 0.00, 0.01),
+                     limits = c(-.018, .018)) +
+  theme_bw(base_size = 12) +
+  labs(
+    x = "Change in percent cover",
+    y = "Family")
+
+ggsave(plot = p, here("agrra_monitoring", "figs", "coral_forest.png"), width = 8, height = 4)
+```
+
+
 ## Coral recruits
 
 Data overview:
