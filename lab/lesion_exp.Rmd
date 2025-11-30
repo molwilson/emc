@@ -1,0 +1,72 @@
+---
+title: "Lesion Experiment"
+author: "Molly Wilson"
+date: "2025-11-30"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(here)
+library(readxl)
+library(janitor)
+```
+
+Processing steps
+1. Generate list of IDs from survival df
+2. Left join lesion data with all IDs and date combinations
+3. Replace missing or NA lesions_YN with N
+4. Calculate date of first lesion for each ID
+5. Create df with ID, survival_YN and date of first lesion
+6. Run stats
+
+```{r}
+# import data
+survival <- read_excel(here("lab", "data_raw", "Lesion Experiment Data.xlsx"), sheet = "Data entry_survival") %>% 
+  clean_names()
+
+lesions <- read_excel(here("lab", "data_raw", "Lesion Experiment Data.xlsx"), sheet = "Data entry_lesions") %>% 
+  clean_names() %>%
+  mutate(date = as.Date(date)) %>%
+  complete(id = survival$id,
+           date = unique(date)) %>%
+  replace_na(list(lesions_present = "N")) %>%
+  select(id, date, lesions_present)
+
+# create df with one row per fragment ID
+start_date <- as.Date("2025-11-07")
+data_id <- lesions %>%
+  filter(lesions_present == "Y") %>% # keep only dates lesions were present
+  group_by(id) %>%
+  summarize(date_first_lesion = min(date), .groups = "drop") %>%
+  mutate(day_first_lesion = as.numeric(date_first_lesion - start_date)) %>%
+  full_join(survival %>% select(id, survival), by = "id") %>%
+  mutate(survival = ifelse(survival == "Y", 1, 0)) %>%
+  separate(id,
+           into = c("treatment", "genotype", "replicate"),
+           sep = "-",
+           remove = FALSE)
+
+# check for correct number of fragments
+n_ids_in_id <- nrow(data_id %>% distinct(id))
+```
+
+Basic stats
+
+- Can't use GLM for survival because all survivors are genotype 53 (separation breaks the model) -> using Firth's penalized logistic regression instead
+
+```{r}
+library(brglm2) # for Firth's penalized logistic regression
+data_id$treatment <- relevel(factor(data_id$treatment), ref = "C")
+
+m_firth <- glm(
+  survival ~ genotype + treatment,
+  data = data_id,
+  family = binomial,
+  method = "brglmFit"
+)
+summary(m_firth)
+
+```
+
+
