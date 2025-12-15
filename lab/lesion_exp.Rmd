@@ -51,7 +51,7 @@ data_id <- lesions %>%
 n_ids_in_id <- nrow(data_id %>% distinct(id))
 ```
 
-Basic stats
+Stats: survival
 
 - Can't use GLM for survival because all survivors are genotype 53 (separation breaks the model) -> using Firth's penalized logistic regression instead
 
@@ -66,7 +66,31 @@ m_firth <- glm(
   method = "brglmFit"
 )
 summary(m_firth)
+```
+
+Stats: time to lesion appearance 
+
+- Using Cox proportional hazards model
+
+```{r}
+library(survival)
+
+data_id$event_lesion <- ifelse(is.na(data_id$day_first_lesion), 0, 1)
+
+data_id$time_lesion <- ifelse(
+  is.na(data_id$day_first_lesion),
+  max(data_id$day_first_lesion, na.rm = TRUE),  # censor at last sampled day
+  data_id$day_first_lesion
+)
+
+cox_lesion <- coxph(
+  Surv(time_lesion, event_lesion) ~ genotype + treatment,
+  data = data_id
+)
+
+summary(cox_lesion)
 
 ```
+
 
 

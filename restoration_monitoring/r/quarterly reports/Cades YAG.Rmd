@@ -1,0 +1,104 @@
+---
+title: "Cades 2025 YAG Report"
+author: "Molly Wilson"
+date: "2025-12-08"
+output: html_document
+---
+Stats wanted:
+
+# Total number genotype
+# Total number species
+# Total number outplants
+# Current health in the nursery
+# Current survival rate of outplants
+
+```{r}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+```
+
+
+# Nursery and GB
+```{r}
+nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
+  clean_names() %>%
+  mutate(date = ymd(as.character(date)),
+         nursery = if_else(nursery == "TPB", "Ten Pound Bay", nursery)) %>%
+  mutate(species = substr(genotype, 1, 4),
+         across(starts_with("n_"), ~ replace_na(.x, 0)),
+         n_tot = n_healthy + n_bleached + n_pale + n_diseased + n_other) %>%
+  group_by(nursery) %>%
+  filter(str_detect(nursery, "Cades") &
+           date == max(date)) %>%
+  ungroup() %>%
+  select(genotype, n_healthy)
+
+gb_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "genebank monitoring") %>% 
+  clean_names() %>%
+  mutate(date = ymd(as.character(date))) %>%
+  mutate(species = substr(genotype, 1, 4),
+         across(starts_with("n_"), ~ replace_na(.x, 0)),
+         n_diseased = n_diseased_pruned + n_diseased_removed, # currently not distinguishing, this matches col names for merging with nursery_frags
+         n_tot = n_healthy + n_bleached + n_pale + n_diseased + n_other) %>%
+  select(-n_diseased_pruned, -n_diseased_removed) %>%
+  group_by(nursery) %>%
+  filter(nursery == "Cades" &
+           date == max(date)) %>%
+  ungroup() %>%
+  select(genotype, n_healthy)
+
+nursery_frags <- rbind(nursery_mon, gb_mon) %>%
+  mutate(species = substr(genotype, 1, 4)) %>%
+  group_by(genotype, species) %>%
+  summarize(n_frags = sum(n_healthy))
+```
+
+
+```{r}
+outplants <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "outplants") %>%
+  clean_names() %>%
+  mutate(genotype = substr(id, 1, 6),
+         species = substr(id, 1, 4)) %>%
+  filter(!is.na(date), str_detect(site, "Cades")) %>%
+  select(species, genotype, n_frags)
+
+outplant_monitoring <- read_excel(here("restoration_monitoring", "data_raw", "genotype tracking.xlsx"), sheet = "outplant monitoring") %>% 
+  clean_names() %>%
+  filter(!is.na(n_healthy) & 
+           !is.na(n_planted) & # filtering out any genotypes with missing data
+           str_detect(site, "Cades")) %>% 
+  mutate(genotype = substr(id, 1, 6),
+         species = substr(id, 1, 4),
+         n_planted = as.numeric(n_planted),
+         date_monitored = ymd(date_monitored),
+         date_planted = ymd(date_planted))
+```
+
+
+```{r}
+# total genotypes
+genotypes <- rbind(nursery_frags, outplants) %>%
+  select(genotype) %>%
+  distinct()
+
+# total species
+species <- rbind(nursery_frags, outplants) %>%
+  ungroup() %>%
+  select(species) %>%
+  distinct()
+
+# outplant performance
+outplant_perf_site <- outplant_monitoring %>%
+  group_by(site) %>%
+  filter(date_monitored == max(date_monitored)) %>%
+  summarize(n_planted = sum(n_planted),
+            n_healthy = sum(n_healthy)) %>%
+  adorn_totals("row") %>%
+  mutate(survival = n_healthy/n_planted)
+```
+
+
+
+
