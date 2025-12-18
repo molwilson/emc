@@ -19,14 +19,29 @@ library(gganimate)
 library(patchwork)
 ```
 
-# Import + format raw ARGOS data
+# Import + format data
 
-- each shark has inividual sheet
+## Tagging data
+```{r}
+tagging <- read_excel(here("tagging", "data_raw", "Shark tagging data.xlsx"), sheet = "Tagging") %>% 
+  clean_names() %>%
+  filter(!str_detect(as.character(date), "[A-Za-z]") & sat_ptt != "NA") %>% # remove any placeholder dates
+  mutate(date = as.Date(as.numeric(date), origin = "1899-12-30"),
+         length_sex = paste0(tl, "cm-", sex)) %>%
+  select(pttid = sat_ptt, date, lat = lattitude, lon = longitude, sex, species, length_tot = tl, length_sex)
+```
+
+## Raw ARGOS data
+
+- each shark has individual sheet
 - each sheet has multiple data types with different header rows bound together
 - function below splits data types within each sheet and then binds sheets together into one df
-```{r}
 
-file_path <- here("tagging", "data_raw", "DataRw.xlsx")
+*make sure all dates are in "date" ("YYYY-MM-DD") format within excel*
+*make sure all sheets have DTPNG/DTTEMP/DTDPT between data chunks within excel*
+
+```{r}
+file_path <- here("tagging", "data_raw", "Argos_compiled.xlsx")
 sheets <- excel_sheets(file_path)
 
 process_sheet_split <- function(sheet_name) {
@@ -45,22 +60,27 @@ process_sheet_split <- function(sheet_name) {
     header <- as.character(unlist(raw[header_row, ]))
     data <- raw[(header_row+1):end_row, ]
     
-    # Clean names
-    header[is.na(header) | header==""] <- paste0("col_", seq_len(sum(is.na(header) | header=="")))
+    # Clean header
+    header[is.na(header) | header == ""] <- paste0("col_", seq_len(sum(is.na(header) | header == "")))
     names(data) <- header
     data <- janitor::clean_names(data)
     
+    # Remove empty rows
     data <- data %>% filter(!if_all(everything(), is.na))
     
-    data <- data %>% mutate(pttid = sheet_name)
+    # Convert PTTID to numeric (extract numbers only)
+    if("pttid" %in% names(data)) {
+      data <- data %>% 
+        mutate(pttid = str_extract(pttid, "\\d+")) %>%  # extract numeric part
+        mutate(pttid = as.numeric(pttid))               # convert to numeric
+    }
     
     list(type = raw[[1]][type_row], data = data)
   }
   
-  # Extract all blocks
   blocks <- map(seq_along(type_rows), extract_block)
   
-  # Split into a named list by type
+  # Split into named list by type
   split_blocks <- blocks %>% 
     set_names(map_chr(blocks, "type")) %>% 
     map("data")
@@ -72,11 +92,22 @@ all_blocks <- map(sheets, process_sheet_split)
 
 # create blocks by data type
 
+pttid_list <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
+  pull(pttid) %>%
+  unique()
+
 pings <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
   mutate(date = as.Date(as.numeric(date_detected), origin = "1899-12-30")) %>%
   # slice(-c(3, 4, 8)) %>% # 3 points displayed as on land
   select(pttid, date, lat = latitude_n, lon = longitude_w) %>%
-  arrange(date)
+  rbind(tagging %>%
+          filter(pttid %in% pttid_list) %>%
+          select(pttid, date, lat, lon)) %>%
+  arrange(date) %>%
+  left_join(tagging %>%
+              select(pttid, sex, species, length_tot, length_sex), 
+            by = c("pttid"))
+# create shark label here?
 
 temps <- map_dfr(all_blocks, ~ .x[["DTTEMP"]]) %>%
   select(pttid, date, sst = sea_surface_temp_c, adt = at_depth_temp_c) %>%
@@ -90,8 +121,15 @@ depth  <- map_dfr(all_blocks, ~ .x[["DTDPT"]]) %>%
 
 # join into one df
 shark_data <- left_join(temps, depth, by = c("pttid", "date")) %>%
-  left_join(pings, by = c("date", "pttid"))
+  mutate(pttid = as.character(pttid)) %>%
+  left_join(pings, by = c("date", "pttid")) %>%
+  left_join(tagging %>%
+              select(pttid, sex, species, length_tot, length_sex), 
+            by = c("pttid"))
 ```
+
+
+## Integrate data sources
 
 # Mapping
 
@@ -102,7 +140,7 @@ shark_data <- left_join(temps, depth, by = c("pttid", "date")) %>%
 ### Prep
 
 ```{r}
-# load Antigua shapefile
+# load Antigua shapefile (switch to Caribbean shapefile eventually)
 atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
   st_union() %>%
   st_sf()
@@ -116,77 +154,47 @@ shark_df_4326 <- shark_sf_4326 %>%
          y = st_coordinates(.)[,2]) %>%
   st_set_geometry(NULL)
 
-# standardize coords
-lat_min <- 16.8
-lat_max <- 17.3
-lon_min <- -62.15
-lon_max <- -61.6
+# standardize coords (ANU)
+# lat_lim <- c(16.8, 17.3)
+# lon_lim <- c(-62.15, -61.6)
+
+# generating coordinate buffer
+expand_range <- function(x, buffer = 0.3) { # buffer as proportion of data range
+  r <- range(x, na.rm = TRUE)
+  r + diff(r) * buffer * c(-1, 1)
+}
 ```
 
 ### Plot
 
+#### Static
+
 ```{r}
 # plot pings - static
+lon_lim <- expand_range(shark_df_4326$x, buffer_prop)
+lat_lim <- expand_range(shark_df_4326$y, buffer_prop)
+
 ggplot() +
   geom_sf(data = atg, fill = "lightblue", color = "lightblue") +  # islands
   geom_path(data = shark_df_4326, aes(x = x, y = y, group = pttid, color = pttid),
             size = .5, alpha = 0.5, linetype = 2) +
   geom_point(data = shark_df_4326, aes(x = x, y = y, group = pttid, color = pttid),
              size = 1) +
-  scale_color_manual(values = c("coral2", "gold")) +
-  xlim(c(lon_min, lon_max)) + ylim(c(lat_min, lat_max)) +
+  # scale_color_manual(values = c("coral2", "gold")) +
+  # xlim(c(lon_min, lon_max)) + ylim(c(lat_min, lat_max)) +
+  coord_sf(xlim = lon_lim, ylim = lat_lim, expand = FALSE) +
   labs(x = NULL, y = NULL, color = "ID", title = "Shark movement over time") +
   theme_bw() +
   theme(panel.background = element_rect(fill = "steelblue"),
         panel.grid = element_blank())
-ggsave(here("tagging", "figs", "pings_static.png"))
+#ggsave(here("tagging", "figs", "pings_static.png"))
+```
 
+#### Animation
 
-# animated plots - indv. sharks
-animate_indv <- function(pttid, shark_df, atg, out_dir = "mapping/figs") {
-  
-  p_anim <- ggplot() +
-    geom_sf(data = atg, fill = "lightblue", color = "lightblue") +
-    geom_path(
-      data = shark_df %>% filter(pttid == !!pttid),
-      aes(x = x, y = y),
-      color = "coral2", size = 1, alpha = 0.7, linetype = 2
-    ) +
-    geom_point(
-      data = shark_df %>% filter(pttid == !!pttid),
-      aes(x = x, y = y),
-      color = "coral2", size = 2
-    ) +
-    xlim(c(lon_min, lon_max)) + ylim(c(lat_min, lat_max)) +
-    labs(
-      x = NULL, y = NULL,
-      title = glue::glue("Shark {pttid} movement over time: {{frame_along}}")
-    ) +
-    theme_bw(base_size = 18) +
-    theme(
-      panel.background = element_rect(fill = "steelblue"),
-      panel.grid = element_blank()
-    ) +
-    transition_reveal(date)
-  
-  # animate
-  anim <- gganimate::animate(
-    p_anim,
-    nframes = 150, fps = 10,
-    width = 1000, height = 750,
-    renderer = gifski_renderer()
-  )
-  
-  # save
-  gif_path <- here::here("tagging", "figs", paste0("shark_track_", pttid, ".gif"))
-  anim_save(gif_path, animation = anim)
-  
-  message("✅ Saved: ", gif_path)
-}
+##### Compiled sharks
 
-unique_ids <- unique(shark_df_4326$pttid)
-purrr::walk(unique_ids, animate_indv, shark_df = shark_df_4326, atg = atg)
-
+```{r}
 # animated plot - mult sharks
 p_anim <- ggplot() +
   geom_sf(data = atg, fill = "lightblue", color = "lightblue") +  # islands
@@ -194,7 +202,6 @@ p_anim <- ggplot() +
             size = 1, alpha = 0.7, linetype = 2) +
   geom_point(data = shark_df_4326, aes(x = x, y = y, group = pttid, color = pttid),
              size = 2) +
-  scale_color_manual(values = c("coral2", "gold")) +
   xlim(c(lon_min, lon_max)) + ylim(c(lat_min, lat_max)) +
   labs(x = NULL, y = NULL, color = "ID", title = "Shark movement over time: {frame_along}") +
   theme_bw() +
@@ -205,6 +212,149 @@ p_anim <- ggplot() +
 anim <- gganimate::animate(p_anim, nframes = 150, fps = 10, width = 600, height = 400, renderer = gifski_renderer())
 anim_save(here("tagging", "figs", "shark_track_mult.gif"), animation = anim)
 ```
+
+##### Indvidual sharks
+
+```{r}
+animate_indv <- function(
+  pttid,
+  shark_df,
+  atg,
+  buffer_prop = 0.5,
+  out_dir = "tagging/figs"
+) {
+
+  # subset data ONCE
+  df_i <- shark_df %>% 
+    filter(pttid == !!pttid)
+
+  # compute per-shark limits
+  lon_lim <- expand_range(df_i$x, buffer_prop)
+  lat_lim <- expand_range(df_i$y, buffer_prop)
+
+  p_anim <- ggplot() +
+    geom_sf(data = atg, fill = "lightblue", color = "lightblue") +
+    geom_path(
+      data = df_i,
+      aes(x = x, y = y),
+      color = "coral2", size = 1, alpha = 0.7, linetype = 2
+    ) +
+    geom_point(
+      data = df_i,
+      aes(x = x, y = y),
+      color = "coral2", size = 2
+    ) +
+    coord_sf(
+      xlim = lon_lim,
+      ylim = lat_lim,
+      expand = FALSE
+    ) +
+    labs(
+      x = NULL, y = NULL,
+      title = glue::glue("Shark {pttid} movement over time: {{frame_along}}")
+    ) +
+    theme_bw(base_size = 18) +
+    theme(
+      panel.background = element_rect(fill = "steelblue"),
+      panel.grid = element_blank(),
+      aspect.ratio = 1 # force square regardless of lims
+    ) +
+    transition_reveal(date)
+
+  anim <- gganimate::animate(
+    p_anim,
+    nframes = 150, fps = 10,
+    width = 1000, height = 750,
+    renderer = gifski_renderer()
+  )
+
+  gif_path <- here::here(
+    out_dir,
+    paste0("shark_track_", pttid, ".gif")
+  )
+
+  anim_save(gif_path, animation = anim)
+
+  message("✅ Saved: ", gif_path)
+}
+
+unique_ids <- unique(shark_df_4326$pttid)
+purrr::walk(unique_ids, animate_indv, shark_df = shark_df_4326, atg = atg)
+```
+```{r}
+animate_indv <- function(
+  pttid,
+  shark_df,
+  atg,
+  buffer_prop = 0.1,
+  out_dir = "tagging/figs"
+) {
+
+  # subset shark data
+  df_i <- shark_df %>% filter(pttid == !!pttid)
+
+  if(nrow(df_i) == 0) {
+    warning("No data for pttid: ", pttid)
+    return(NULL)
+  }
+
+  # helper to expand range
+  expand_range <- function(x, buffer = 0.1) {
+    r <- range(x, na.rm = TRUE)
+    r + diff(r) * buffer * c(-1, 1)
+  }
+
+  # project islands and shark points to UTM (zone 20N)
+  atg_proj <- st_transform(atg, 32620)
+  df_i_sf <- st_as_sf(df_i, coords = c("x", "y"), crs = 4326) %>%
+    st_transform(32620)
+
+  # compute per-shark limits in meters
+  coords <- st_coordinates(df_i_sf)
+  x_lim <- expand_range(coords[,1], buffer_prop)
+  y_lim <- expand_range(coords[,2], buffer_prop)
+
+  # build animation
+  p_anim <- ggplot() +
+    geom_sf(data = atg_proj, fill = "lightblue", color = "lightblue") +
+    geom_path(data = as.data.frame(coords), aes(X, Y),
+              color = "coral2", size = 1, alpha = 0.7, linetype = 2) +
+    geom_point(data = as.data.frame(coords), aes(X, Y),
+               color = "coral2", size = 2) +
+    coord_sf(xlim = x_lim, ylim = y_lim, expand = FALSE) +
+    labs(
+      x = NULL, y = NULL,
+      title = glue::glue("Shark {pttid} movement over time: {{frame_along}}")
+    ) +
+    theme_bw(base_size = 18) +
+    theme(
+      panel.background = element_rect(fill = "steelblue"),
+      panel.grid = element_blank()
+    ) +
+    transition_reveal(df_i$date)
+
+  # animate and save square GIF
+  anim <- gganimate::animate(
+    p_anim,
+    nframes = 150, fps = 10,
+    width = 800, height = 800,  # square
+    renderer = gifski_renderer()
+  )
+
+  gif_path <- here::here(
+    out_dir,
+    paste0("shark_track_", pttid, ".gif")
+  )
+
+  anim_save(gif_path, animation = anim)
+  message("✅ Saved: ", gif_path)
+}
+
+unique_ids <- unique(shark_df_4326$pttid)
+purrr::walk(unique_ids, animate_indv, shark_df = shark_df_4326, atg = atg)
+
+```
+
 
 
 ## ESRI plots
@@ -228,9 +378,34 @@ shark_df_3857 <- shark_sf_3857 %>%
   st_set_geometry(NULL)
 
 # set range and reproject with 3857 projection
-bb_3857 <- st_bbox(
-  st_transform(
-    st_as_sfc(st_bbox(c(xmin = lon_min, xmax = lon_max, ymin = lat_min, ymax = lat_max), crs = 4326)), 3857))
+# bb_3857 <- st_bbox(
+#   st_transform(
+#     st_as_sfc(st_bbox(c(xmin = lon_min, xmax = lon_max, ymin = lat_min, ymax = lat_max), crs = 4326)), 3857))
+# xlim_3857 <- bb_3857[c("xmin", "xmax")]
+# ylim_3857 <- bb_3857[c("ymin", "ymax")]
+
+# set coordinate range using buffer
+buffer_prop <- 0.5  # adjust padding around the tracks
+
+expand_range <- function(x, buffer = 0.05) {
+  r <- range(x, na.rm = TRUE)
+  r + diff(r) * buffer * c(-1, 1)
+}
+
+pings$lon <- as.numeric(pings$lon)
+pings$lat <- as.numeric(pings$lat)
+lon_lim <- expand_range(pings$lon, buffer_prop)
+lat_lim <- expand_range(pings$lat, buffer_prop)
+
+# create bbox with range
+bb_buffered <- st_as_sfc(st_bbox(c(
+  xmin = lon_lim[1], xmax = lon_lim[2],
+  ymin = lat_lim[1], ymax = lat_lim[2]
+), crs = 4326))
+
+# reproject bbox with 3857 projection
+bb_3857 <- st_bbox(st_transform(bb_buffered, 3857))
+
 xlim_3857 <- bb_3857[c("xmin", "xmax")]
 ylim_3857 <- bb_3857[c("ymin", "ymax")]
 
@@ -239,7 +414,7 @@ ylim_3857 <- bb_3857[c("ymin", "ymax")]
 ### Plot
 
 ```{r}
-# static background (rendered once)
+# base / background (rendered once)
 p_base <- ggplot() +
   annotation_map_tile(type = esri_world_imagery, progress = "none", zoomin = 0) +
   coord_sf(crs = st_crs(3857), xlim = xlim_3857, ylim = ylim_3857, expand = FALSE) +
@@ -247,19 +422,62 @@ p_base <- ggplot() +
   theme(
     panel.background = element_rect(fill = "steelblue"),
     panel.grid = element_blank(),
-    legend.position = "bottom"
-  ) 
+    legend.position = "right",
+    legend.key = element_blank(),
+    plot.title = element_text(hjust = 0.5))
+```
 
+#### Static
+```{r}
+shark_key <- tagging %>%
+  select(pttid, length_sex) %>%
+  distinct()
+
+shark_df_plot <- shark_df_3857 %>%
+  left_join(shark_key, by = "pttid")
+
+p_static <- p_base +
+  geom_path(
+    data = shark_df_plot,
+    aes(x = x, y = y, group = pttid, color = pttid),
+    linewidth = 1, alpha = 0.7, linetype = 2) +
+  geom_point(
+    data = shark_df_plot,
+    aes(x = x, y = y, group = pttid, color = pttid),
+    size = 1) +
+  scale_color_discrete(
+    name = "Total length - Sex",
+    labels = setNames(shark_key$length_sex, shark_key$pttid)) +
+  labs(x = NULL, y = NULL, title = NULL)
+
+ggsave(here("tagging", "figs", "shark_track_mult_esri.png"), plot = p_static, width = 10, height = 10)
+```
+
+#### Animation
+
+##### Compiled sharks
+
+```{r}
 # animate overlay (rendered repeatedly)
+shark_key <- tagging %>%
+  select(pttid, length_sex) %>%
+  distinct()
+
+shark_df_plot <- shark_df_3857 %>%
+  left_join(shark_key, by = "pttid")
+
 p_anim <- p_base +
-  geom_path(data = shark_df_3857, 
+  geom_path(data = shark_df_plot, 
             aes(x = x, y = y, group = pttid, color = pttid),
             linewidth = 1, alpha = 0.7, linetype = 2) +
-  geom_point(data = shark_df_3857,
+  geom_point(data = shark_df_plot,
              aes(x = x, y = y, group = pttid, color = pttid),
              size = 2) +
-  scale_color_manual(values = c("coral2", "gold")) +
-  labs(x = NULL, y = NULL, color = "Shark ID",
+  scale_color_discrete(
+    name = "Total length - Sex",
+    labels = setNames(shark_key$length_sex, shark_key$pttid)
+  ) +
+  labs(x = NULL, y = NULL,
        title = "Shark movement over time: {frame_along}") +
   transition_reveal(along = date)
 
@@ -267,10 +485,113 @@ p_anim <- p_base +
 anim <- gganimate::animate(
   p_anim,
   nframes = 150, fps = 10,
-  width = 1600, height = 1200,
+  width = 1000,
   renderer = gifski_renderer())
 anim_save(here("tagging", "figs", "shark_track_mult_esri.gif"), animation = anim)
 ```
+
+##### Individual sharks
+
+```{r}
+make_base_esri_map <- function(xlim, ylim) {
+  ggplot() +
+    annotation_map_tile(
+      type = esri_world_imagery,
+      progress = "none",
+      zoomin = 0
+    ) +
+    coord_sf(
+      crs = st_crs(3857),
+      xlim = xlim,
+      ylim = ylim,
+      expand = FALSE
+    ) +
+    theme_bw(base_size = 18) +
+    theme(
+      panel.background = element_rect(fill = "steelblue"),
+      panel.grid = element_blank(),
+      legend.position = "none"
+    )
+}
+
+animate_indv_esri <- function(
+  pttid,
+  shark_df_3857,
+  buffer_prop = 0.5,
+  out_dir = "tagging/figs"
+) {
+
+  # ---- subset data ONCE ----
+  df_i <- shark_df_3857 %>%
+    dplyr::filter(pttid == !!pttid)
+
+  if (nrow(df_i) < 2) {
+    message("⚠️ Skipping ", pttid, " (not enough points)")
+    return(NULL)
+  }
+
+  # ---- per-shark map limits (in meters, EPSG:3857) ----
+  xlim <- expand_range(df_i$x, buffer_prop)
+  ylim <- expand_range(df_i$y, buffer_prop)
+
+  # ---- base map ----
+  p_base <- make_base_esri_map(xlim, ylim)
+
+  # ---- animated overlay ----
+  p_anim <- p_base +
+    geom_path(
+      data = df_i,
+      aes(x = x, y = y),
+      color = "coral2",
+      linewidth = 1,
+      alpha = 0.7,
+      linetype = 2
+    ) +
+    geom_point(
+      data = df_i,
+      aes(x = x, y = y),
+      color = "coral2",
+      size = 2
+    ) +
+    labs(
+      x = NULL,
+      y = NULL,
+      title = glue::glue("Shark {pttid} movement over time: {{frame_along}}")
+    ) +
+    transition_reveal(along = date)
+
+  # ---- render ----
+  anim <- gganimate::animate(
+    p_anim,
+    nframes = 150,
+    fps = 10,
+    width = 1000,
+    height = 750,
+    renderer = gifski_renderer()
+  )
+
+  gif_path <- here::here(
+    out_dir,
+    paste0("shark_track_", pttid, ".gif")
+  )
+
+  anim_save(gif_path, animation = anim)
+
+  message("✅ Saved: ", gif_path)
+}
+
+unique_ids <- unique(shark_df_3857$pttid)
+
+purrr::walk(
+  unique_ids,
+  animate_indv_esri,
+  shark_df_3857 = shark_df_3857
+)
+
+```
+
+
+
 ## Bathy plots
 
 ### Prep

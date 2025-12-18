@@ -5,4 +5,5 @@
 .Ruserdata
 mapping/rasters/
 .DS_Store
+rosm.cache/
 
