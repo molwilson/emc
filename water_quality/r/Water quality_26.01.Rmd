@@ -15,16 +15,20 @@ output:
 sites <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sites") %>% 
   clean_names()
 
-ysi_raw <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi") %>% 
+ysi_raw <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi complete") %>% 
   rename_with(tolower) %>% # prevents clean_names() from adding extra underscores before caps
   clean_names() %>%
-  rename(site_code_depth = site_code)
+  rename(site_code_depth = site_name)
 
-ysi_dup <- ysi_raw %>% group_by(site_code_depth, date) %>%
-  summarize(count = n()) %>%
-  filter(count >2) # should be only 2 samples (1 per probe) at each site/depth per day
+ysi_omissions <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi report omissions") %>%
+  clean_names()
 
+# need to clean this with new var names
+# clean site names - caps, corington
 ysi <- ysi_raw %>%
+  anti_join(
+    ysi_omissions,
+    by = c("date", "time", "site_code_depth")) %>%
   select(date, site_code_depth, temperature_c = temperature_c_24, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu) %>%
   drop_na() %>%
   left_join(ysi_raw %>%
@@ -34,6 +38,10 @@ ysi <- ysi_raw %>%
   mutate(site_code = str_replace(site_code_depth, "[:digit:]", ""),
          depth_m = parse_number(site_code_depth),
          depth_m = replace_na(depth_m, 1)) # surface-only sites are assumed to be approx 1m
+
+ysi_dup <- ysi %>% group_by(site_code_depth, date) %>%
+  summarize(count = n()) %>%
+  filter(count >2) # should be only 2 samples (1 per probe) at each site/depth per day
 
 ```
 
