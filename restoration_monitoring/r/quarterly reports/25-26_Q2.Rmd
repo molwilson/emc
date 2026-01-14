@@ -1,0 +1,532 @@
+---
+title: "2025-26 Q2 Data Report"
+author: "Molly Wilson"
+date: "2026-01-15"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    theme: cerulean
+    highlight: haddock
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(scales)
+library(lubridate)
+library(knitr)
+library(kableExtra) # do I need this with DT?
+library(DT)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r}
+# quarterly settings
+
+q_label <- "Q2 2025-26"
+q_start <- "2025-10-01"
+q_end <- "2026-01-15" # extending for recent data collection
+
+# biannual settings
+b_start <- "2025-07-01"
+b_end <- "2026-01-15" # extending for recent data collection
+```
+
+
+# Nurseries
+
+## Genebank monitoring
+
+- APAL24 has an extra frag?
+- Survivorship (number of frags at end vs. beginning + additions) currently includes diseased frags in total frag number at both beginning and end. Does this make sense?
+- Rates of infection, bleaching, etc. are currently calculated as the mean of % incidence at each monitoring date across the quarter. Eventually I need to incorporate longer-term performance into genotype tracking sheet.
+
+```{r}
+# import genotype tracking - genebank data
+
+gb_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "genebank monitoring") %>% 
+  clean_names() %>%
+  mutate(date = ymd(as.character(date))) %>%
+  filter(date >= as.Date(q_start) & date <= as.Date(q_end)) %>%
+  mutate(species = substr(genotype, 1, 4),
+         across(starts_with("n_"), ~ replace_na(.x, 0)),
+         n_diseased = n_diseased_pruned + n_diseased_removed, # currently not distinguishing, this matches col names for merging with nursery_frags
+         n_tot = n_healthy + n_bleached + n_pale + n_diseased + n_other) %>%
+  select(-n_diseased_pruned, -n_diseased_removed)
+
+gb_mon_last <- gb_mon %>%
+  group_by(nursery) %>%
+  slice_max(date, n = 1) %>%
+  ungroup()
+
+# determine rates of survival, infection, bleaching, and paling by genotype and by nursery
+
+gb_perf <- gb_mon %>%
+  group_by(nursery, genotype) %>%
+  arrange(date) %>%
+  summarise(p_survival = last(n_tot) / (first(n_tot) + sum(n_added)), # account for any fragments added during Q
+            p_diseased = mean(n_diseased / n_tot, na.rm = TRUE),
+            p_bleached = mean(n_bleached / n_tot, na.rm = TRUE),
+            p_pale = mean(n_pale / n_tot, na.rm = TRUE),
+            .groups = "drop")
+
+datatable(gb_perf, 
+          options = list(pageLength = 15),
+          rownames = FALSE)
+```
+
+## Nursery stats
+
+- Missing frag counts from TPB shallow table - just included genotypes there for species/genotype counts
+- Missing dome counts from Jumby - copied August numbers as placeholder 
+
+```{r}
+nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
+  clean_names() %>%
+  mutate(date = ymd(as.character(date)),
+         nursery = if_else(nursery == "TPB", "Ten Pound Bay", nursery)) %>%
+  filter(date >= ymd(q_start) & date <= ymd(q_end)) %>%
+  mutate(species = substr(genotype, 1, 4),
+         across(starts_with("n_"), ~ replace_na(.x, 0)),
+         n_tot = n_healthy + n_bleached + n_pale + n_diseased + n_other)
+
+nurs_mon_last <- nursery_mon %>%
+  group_by(nursery) %>%
+  slice_max(date, n = 1) %>% # keep row(s) with max date per nursery, assumes all monitoring per nursery done in one day
+  ungroup() 
+  
+nurs_gb_mon_last <- bind_rows(nurs_mon_last, gb_mon_last) %>%
+  select(date, nursery, location, species, genotype, starts_with("n_"), -n_added)
+```
+
+### By nursery
+
+```{r}
+frags_nursery <- nurs_gb_mon_last %>%
+  group_by(nursery) %>%
+  summarize(n_tot = sum(n_tot),
+            n_healthy = sum(n_healthy),
+            n_bleached = sum(n_bleached),
+            n_pale = sum(n_pale),
+            n_diseased = sum(n_diseased)) %>%
+  adorn_totals("row") %>%
+  mutate(p_healthy = percent(n_healthy / n_tot, accuracy = 0.1),
+         p_heatstress = percent((n_bleached + n_pale) / n_tot, accuracy = 0.1),
+         p_diseased = percent(n_diseased / n_tot, accuracy = 0.1)) %>%
+  left_join(nurs_gb_mon_last %>%
+              select(nursery, species) %>%
+              distinct() %>%
+              group_by(nursery) %>%
+              summarize(n_spp = n())) %>%
+  left_join(nurs_gb_mon_last %>%
+              select(nursery, genotype) %>%
+              distinct() %>%
+              filter(!str_detect(genotype, "XX")) %>% # don't want unknown genotypes to double count
+              group_by(nursery) %>%
+              summarize(n_genotypes = n())) %>%
+  select(nursery, n_spp, n_genotypes, n_frags = n_tot, p_healthy, p_heatstress, p_diseased)
+
+kable(frags_nursery)
+```
+
+### By species
+
+```{r}
+frags_spp <- nurs_gb_mon_last %>%
+  select(species, genotype) %>%
+  distinct() %>%
+  filter(!str_detect(genotype, "XX")) %>% # don't want unknown genotypes to double count
+  group_by(species) %>%
+  summarize(n_genotypes = n()) %>%
+  left_join(nurs_gb_mon_last %>%
+              group_by(species) %>%
+              summarize(n_tot = sum(n_tot),
+                        n_healthy = sum(n_healthy),
+                        n_bleached = sum(n_bleached),
+                        n_pale = sum(n_pale),
+                        n_diseased = sum(n_diseased))) %>%
+  adorn_totals("row") %>%
+  mutate(p_healthy = percent(n_healthy / n_tot, accuracy = 0.1),
+         p_heatstress = percent((n_bleached + n_pale) / n_tot, accuracy = 0.1),
+         p_diseased = percent(n_diseased / n_tot, accuracy = 0.1)) %>%
+  select(species, n_genotypes, n_frags = n_tot, p_healthy, p_heatstress, p_diseased)
+
+datatable(frags_spp, 
+          options = list(pageLength = 15),
+          rownames = FALSE)
+```
+### By genotype
+
+*See genotype tracking for consolidated summary*
+
+```{r}
+frags_genotype <- nurs_gb_mon_last %>%
+  group_by(genotype) %>%
+  summarize(n_tot = sum(n_tot)) %>%
+  select(genotype, n_frags = n_tot)
+```
+
+### By structure
+
+- Could eventually add structure type, but not sure how to automate this based on current nursery map formatting
+```{r}
+frags_structure <- nurs_gb_mon_last %>%
+  group_by(nursery, location) %>%
+  summarize(n_tot = sum(n_tot)) %>%
+  select(nursery, location, n_frags = n_tot)
+
+datatable(frags_structure,
+          options = list(pageLength = 10),
+          rownames = FALSE)
+```
+
+
+## Nursery locations
+
+### Map locations
+
+```{r}
+letter_names <- function(nms) LETTERS[seq_along(nms)]
+
+map_york <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), sheet = "York", 
+                   range = "A1:F9", col_names = FALSE, .name_repair = letter_names) %>%
+  mutate(row = row_number()) %>%
+  pivot_longer(cols = -row, 
+               names_to = "col", 
+               values_to = "genotype", 
+               values_drop_na = TRUE) %>%
+  unite(location, col, row, sep = "", remove = TRUE, na.rm = TRUE) %>%
+  mutate(nursery = "York")
+
+map_tpb <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), sheet = "TPB", 
+                   range = "A1:B10", col_names = FALSE, .name_repair = letter_names) %>%
+  mutate(row = row_number()) %>%
+  pivot_longer(cols = -row, 
+               names_to = "col", 
+               values_to = "genotype", 
+               values_drop_na = TRUE) %>%
+  bind_rows(read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), sheet = "TPB", 
+                       range = "A13:H20", col_names = FALSE) %>% 
+              pivot_longer(
+                cols = everything(),
+                names_to = NULL,
+                values_to = "genotype",
+                values_drop_na = TRUE) %>%
+              distinct() %>%
+              mutate(col = "ST")
+  ) %>%
+  unite(location, col, row, sep = "", remove = TRUE, na.rm = TRUE) %>%
+  mutate(nursery = "Ten Pound Bay")
+  
+
+map_cades <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), sheet = "Cades", 
+                   range = "A1:B10", col_names = FALSE, .name_repair = letter_names) %>%
+  mutate(row = row_number()) %>%
+  pivot_longer(cols = -row, 
+               names_to = "col", 
+               values_to = "genotype", 
+               values_drop_na = TRUE) %>%
+  unite(location, col, row, sep = "", remove = TRUE, na.rm = TRUE) %>%
+  mutate(nursery = "Cades")
+
+map_jumby <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), sheet = "Jumby",
+                   range = "A1:C8", col_names = FALSE, .name_repair = letter_names) %>%
+  pivot_longer(cols = everything(),
+               names_to = NULL,
+               values_to = "genotype",
+               values_drop_na = TRUE) %>%
+  mutate(
+    location = str_sub(genotype, 1, 2),
+    genotype = str_sub(genotype, 4),
+    nursery = "Jumby")
+
+nursery_maps <- rbind(map_york, map_tpb, map_cades, map_jumby) %>%
+  mutate(genotype = strsplit(as.character(genotype), " / ")) %>% 
+  unnest(genotype) %>%
+  filter(!str_detect(genotype, "GB|XX")) %>% # removing genebanks and unknown genotypes
+  mutate(geno_check = nchar(genotype) == 6)
+# this does not include genebanks yet
+```
+
+### Monitoring locations
+
+```{r}
+nursery_locations <- nurs_mon_last %>%
+              select(genotype, nursery, location) %>%
+              group_by(genotype, nursery) %>%
+              summarise(location = paste(location, collapse=", ")) %>%
+              pivot_wider(names_from = nursery, values_from = location) %>%
+              rename(york_locations = "York",
+                     tpb_locations = "Ten Pound Bay",
+                     cades_locations = "Cades",
+                     jumby_locations = "Jumby")
+
+gb_locations <- gb_mon_last %>%
+  unite("location", nursery, location) %>%
+  group_by(genotype) %>%
+  summarise(gb_locations = paste(location, collapse=", "))
+```
+
+
+
+### Consistency check
+
+*Inconsistencies in location records between nursery maps and nursery monitoring*
+```{r}
+diff_nmap <- anti_join(nursery_maps %>% select(nursery, location, genotype), 
+                       nurs_mon_last %>% select(nursery, location, genotype), 
+                       by = c("nursery", "location", "genotype"))
+
+diff_nmon <- anti_join(nurs_mon_last %>% select(nursery, location, genotype), 
+                       nursery_maps %>% select(nursery, location, genotype), 
+                       by = c("nursery", "location", "genotype"))
+
+diff_locations <- bind_rows(
+  mutate(diff_nmap, source = "nursery maps"),
+  mutate(diff_nmon, source = "nursery monitoring"))
+
+kable(diff_locations)
+```
+
+# Collections
+
+- Merge DCYL02 and DCYL03?
+
+```{r}
+collection <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "collection") %>%
+  clean_names() %>%
+  mutate(across(everything(), 
+                ~ ifelse(grepl("^(na|n/a)$", ., ignore.case = TRUE), NA, .)),
+         collection_date = as.Date(as.numeric(date), origin = "1899-12-30"),
+         site = str_to_title(site),
+         species = substr(genotype, 1, 4)) %>%
+  rename(collection_site = site,
+         collection_lat = lat,
+         collection_lon = lon) %>%
+  select(genotype, species, collection_date, collection_site, collection_lat, collection_lon) %>%
+  group_by(genotype) %>%
+  slice_min(collection_date, n = 1)
+```
+
+## By species
+```{r}
+collection_spp <- collection %>%
+  group_by(species) %>%
+  summarize(colonies = n()) %>%
+  adorn_totals("row")
+
+datatable(collection_spp,
+          rownames = FALSE)
+```
+
+## By site
+```{r}
+collection_sites <-
+  collection %>%
+  group_by(collection_site) %>%
+  summarize(colonies = n()) %>%
+  adorn_totals("row")
+
+datatable(collection_sites,
+          rownames = FALSE)
+```
+
+# Outplants
+
+## Outplant numbers
+
+Currently spiders at TPB are considered outplants, while spiders at Jumby are considered nursery frags. Keep as is?
+```{r}
+outplants <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "outplants") %>% 
+  clean_names() %>%
+  mutate(genotype = substr(id, 1, 6),
+         species = substr(id, 1, 4)) %>%
+  filter(!is.na(date)) %>%
+  select(date, site, species, genotype, id, n_frags, n_colonies)
+```
+
+### By genotype
+```{r}
+outplant_genotypes <- outplants %>%
+  filter(year(date) >= 2024) %>% # not including outplants prior to bleaching
+  group_by(genotype, site) %>%
+  summarize(n_frags = sum(n_frags)) %>%
+  pivot_wider(names_from = site, values_from = n_frags) %>%
+  mutate(across(everything(), ~ replace_na(., 0))) %>%
+  mutate(total = rowSums(across(where(is.numeric)), na.rm = TRUE)) %>%
+  adorn_totals("row")
+
+datatable(outplant_genotypes,
+          rownames = FALSE)
+```
+
+## Outplant monitoring
+
+- Need to pull n_planted data directly from outplant data, to avoid omitting outplants that died previously and are no longer monitored. But how to deal with those missing ID numbers?
+- Eventually test for statistical drivers of performance (site vs genotype)
+```{r}
+outplant_monitoring <- read_excel(here("restoration_monitoring", "data_raw", "genotype tracking.xlsx"), sheet = "outplant monitoring") %>% 
+  clean_names() %>%
+  filter(!is.na(n_healthy) & # filtering out any genotypes with missing data
+          date_monitored >= as.Date(b_start) & 
+          date_monitored <= as.Date(b_end)) %>% 
+  mutate(genotype = substr(id, 1, 6),
+         species = substr(id, 1, 4),
+         n_planted = as.numeric(n_planted),
+         date_monitored = ymd(date_monitored),
+         date_planted = ymd(date_planted))
+```
+
+### By site
+```{r}
+outplant_perf_site <- outplant_monitoring %>%
+  group_by(site) %>%
+  summarize(n_planted = sum(n_planted),
+            n_healthy = sum(n_healthy)) %>%
+  adorn_totals("row") %>%
+  mutate(survival = n_healthy/n_planted)
+
+datatable(outplant_perf_site,
+          rownames = FALSE)
+```
+
+### By species
+```{r}
+outplant_perf_spp <- outplant_monitoring %>%
+  group_by(species) %>%
+  summarize(n_planted = sum(n_planted),
+            n_healthy = sum(n_healthy)) %>%
+  adorn_totals("row") %>%
+  mutate(survival = n_healthy/n_planted)
+
+datatable(outplant_perf_spp,
+          rownames = FALSE)
+```
+
+### By genotype
+```{r}
+outplant_perf_genotype <- outplant_monitoring %>%
+  filter(nchar(id) > 4) %>% # removing outplants with missing genotype tags
+  group_by(genotype) %>%
+  summarize(n_planted = sum(n_planted),
+            n_healthy = sum(n_healthy)) %>%
+  mutate(survival = n_healthy/n_planted) %>%
+  select(genotype, n_outplanted = n_planted, n_outplants = n_healthy, outplant_survival = survival)
+
+datatable(outplant_perf_genotype,
+          rownames = FALSE)
+```
+
+# Genotype tracking
+
+Notes:
+
+- Need to integrate genotype-level genebank performance over time
+
+```{r}
+# integrate genotype location(s) (nursery map), # frags per genotype (nursery monitoring) and genotype performance into one output
+
+genotype_tracking <- collection %>%
+  full_join(nursery_locations, by = "genotype") %>%
+  full_join(frags_genotype, by = "genotype") %>%
+  full_join(gb_locations, by = "genotype") %>%
+  full_join(outplant_perf_genotype, by = "genotype") %>%
+  mutate(updated = Sys.Date(),
+         across(contains("_locations"), ~replace_na(.,"")),
+         across(starts_with("n_"), ~replace_na(.,0)),
+         active = if_else(if_all(contains("_locations"), ~ . == "" | is.na(.)),
+                           "N", "Y"), # genotypes with frags in nurseries
+         productive = if_else(if_all(contains("locations") & -all_of("gb_locations"),  ~ . == "" | is.na(.)),
+                              "N", "Y")) %>% # genotypes with frags in nurseries other than genebanks
+  arrange(genotype) %>%
+  select(updated, genotype, active, productive, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, cades_locations, jumby_locations, gb_locations, n_frags, n_outplanted, n_outplants, outplant_survival)
+
+datatable(genotype_tracking,
+          options = list(pageLength = 20),
+          rownames = FALSE)
+
+write.csv(genotype_tracking, here("restoration_monitoring", "data_outputs", "genotype_tracking.csv"), row.names=FALSE)
+```
+
+# Temp loggers
+
+```{r}
+cades <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Cades") %>%
+  clean_names() %>%
+  slice(-1) %>% # remove first row 
+  mutate(logger = "Cades")
+
+tpb <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Ten Pound Bay") %>%
+  clean_names() %>%
+  slice(-1) %>%
+  mutate(logger = "Ten Pound Bay")
+
+jumby <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Jumby") %>%
+  clean_names() %>%
+  slice(-1) %>%
+  mutate(logger = "Jumby")
+
+# create a filter to remove times during surface intervals
+surf_int <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Surface intervals") %>%
+  clean_names() %>%
+  select(-notes)
+
+temp_data <- rbind(cades, tpb, jumby) %>%
+  select(-notes) %>%
+  filter(between(temp_c, 25, 35)) %>% # removing rogue outliers
+  # filter out any readings taken during surface intervals
+  anti_join(surf_int,
+            by = join_by(
+              logger == logger,
+              between(date_time, surface_start, surface_end)
+            )) %>%
+  # drop any readings more than 2C above previous hour's reading
+  arrange(logger, date_time) %>%
+  group_by(logger) %>%
+  mutate(temp_diff = temp_c - lag(temp_c)) %>% # create helper column
+  filter(is.na(temp_diff) | temp_diff <= 2) %>%  # keep if first row or <= 2 °C jump
+  ungroup() %>%
+  select(-temp_diff) # drop helper column
+
+# define references
+lab_temp <- expression("Temperature ("*~degree*C*")")
+ref_temp = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6)
+lab_ref_temp <- "Target range (Coral Reef Alliance)"
+ref_temp_bleaching = 30.63
+lab_ref_temp_bleaching <- "Coral bleaching threshold (NOAA)"
+ylims_temp <- c(22, (max(temp_data$temp_c, na.rm = T) + 1))
+
+# plots
+ggplot() +
+  geom_rect(data = ref_temp, 
+              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), 
+                  ymin = ymin, ymax = ymax, 
+                  fill = lab_ref_temp),
+              alpha = 0.3) +
+  scale_fill_manual(values = "gray") +
+  geom_line(data = temp_data,
+            aes(x = date_time, y = temp_c, group = logger, color = logger),
+            alpha = 0.9) +
+  scale_color_manual(values = c("cadetblue", "coral", "gold")) +
+  geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed') +
+  scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
+  labs(x = "", y = "Temperature (°C)", color = "Nursery location", fill = "") +
+  theme_bw() +
+  theme(legend.position = "top")
+ggsave(here("restoration_monitoring", "figs", "hobo_summary_25-26_Q1.png"), width = 6, height = 4)
+
+ggplot(temp_data,
+       aes(x = date_time, y = temp_c)) +
+  geom_line(alpha = 0.9, size = 0.3, color = "cadetblue") +
+  geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed', color = "coral") +
+  scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
+  facet_grid(. ~ logger) +
+  labs(x = "", y = "Temperature (°C)", color = "Nursery") +
+  theme_bw()
+ggsave(here("restoration_monitoring", "figs", "hobo_nursery_25-26_Q1.png"), width = 6, height = 4)
+```
