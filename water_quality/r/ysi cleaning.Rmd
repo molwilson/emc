@@ -1,0 +1,67 @@
+---
+title: "YSI cleaning"
+author: "Molly Wilson"
+date: "2026-01-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(here) # for accessing files with directory
+library(readxl) # for reading indv. sheets within excel files
+library(janitor) # for cleaning variable names so they have consistent capitalization etc.
+library(lubridate) # for converting date formats
+```
+
+# Identifying samples that should be omitted
+```{r}
+ysi_clean <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi cleaned") %>% 
+  clean_names() %>%
+  mutate(
+    date = as.Date(date),             
+    time = format(time, "%I:%M:%S %p"),        # e.g., 9:23:48 AM
+    site_code_depth = site_code
+  )
+
+ysi_complete <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi complete") %>% 
+  clean_names() %>%
+  mutate(
+    date = as.Date(date),           
+    time = format(time, "%I:%M:%S %p"),        # e.g., 9:23:48 AM
+    site_code_depth = site_name
+  )
+
+last_clean_date <- max(ysi_clean$date, na.rm = TRUE)
+
+omissions <- ysi_complete %>%
+  anti_join(
+    ysi_clean,
+    by = c("date", "time")
+  ) %>%
+  filter(date < last_clean_date) %>%
+  select(time, date, site_code_depth)
+
+write_csv(omissions, here("water_quality", "data_outputs", "ysi_omitted.csv"))
+```
+
+# Removing omissions
+```{r}
+ysi_complete_filtered <- ysi_complete %>%
+  anti_join(
+    omissions,
+    by = c("date", "time", "site_code_depth")
+  )
+```
+
+
+# Checking for duplicates
+```{r}
+
+
+ysi_dup <- ysi_raw %>% group_by(site_code_depth, date) %>%
+  summarize(count = n()) %>%
+  filter(count >2) # should be only 2 samples (1 per probe) at each site/depth per day
+```
+
+
+
