@@ -29,6 +29,25 @@ tagging <- read_excel(here("tagging", "data_raw", "Shark tagging data.xlsx"), sh
   mutate(date = as.Date(as.numeric(date), origin = "1899-12-30"),
          length_sex = paste0(tl, "cm-", sex)) %>%
   select(pttid = sat_ptt, date, lat = lattitude, lon = longitude, sex, species, length_tot = tl, length_sex)
+
+tagging <- read_excel(here("tagging", "data_raw", "Shark tagging data.xlsx"), sheet = "Tagging") %>% 
+  clean_names() %>%
+  filter(!str_detect(as.character(date), "[A-Za-z]") & sat_ptt != "NA") %>% 
+  mutate(
+    date = as.Date(as.numeric(date), origin = "1899-12-30"),
+    tl_m  = tl / 100,
+    tl_ft = tl / 30.48,
+    sex_full = recode(sex,
+                      "M" = "Male",
+                      "F" = "Female"),
+    length_sex = paste0(
+      round(tl_m, 2), "m / ",
+      round(tl_ft, 1), "ft ",
+      sex_full)
+  ) %>%
+  select(
+    pttid = sat_ptt, date,lat = lattitude, lon = longitude, sex, species, length_tot = tl, length_sex)
+
 ```
 
 ## Raw ARGOS data
@@ -474,18 +493,18 @@ p_anim <- p_base +
              aes(x = x, y = y, group = pttid, color = pttid),
              size = 2) +
   scale_color_discrete(
-    name = "Total length - Sex",
+    name = "Total length & Sex",
     labels = setNames(shark_key$length_sex, shark_key$pttid)
   ) +
-  labs(x = NULL, y = NULL,
-       title = "Shark movement over time: {frame_along}") +
+  labs(x = NULL, y = NULL, color = "Total length & Sex",
+       title = "Tiger shark movement over time: {frame_along}") +
   transition_reveal(along = date)
 
 # render + save
 anim <- gganimate::animate(
   p_anim,
   nframes = 150, fps = 10,
-  width = 1000,
+  width = 1500,
   renderer = gifski_renderer())
 anim_save(here("tagging", "figs", "shark_track_mult_esri.gif"), animation = anim)
 ```
@@ -556,7 +575,7 @@ animate_indv_esri <- function(
     labs(
       x = NULL,
       y = NULL,
-      title = glue::glue("Shark {pttid} movement over time: {{frame_along}}")
+      title = glue::glue("{length_sex} tiger shark movement over time: {{frame_along}}")
     ) +
     transition_reveal(along = date)
 
