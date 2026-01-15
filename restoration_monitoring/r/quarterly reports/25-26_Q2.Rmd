@@ -248,7 +248,8 @@ map_jumby <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.
 nursery_maps <- rbind(map_york, map_tpb, map_cades, map_jumby) %>%
   mutate(genotype = strsplit(as.character(genotype), " / ")) %>% 
   unnest(genotype) %>%
-  filter(!str_detect(genotype, "GB|XX")) %>% # removing genebanks and unknown genotypes
+  # filter(!str_detect(genotype, "GB|XX")) %>% # removing genebanks and unknown genotypes
+  filter(!str_detect(genotype, "GB")) %>% # removing genebanks
   mutate(geno_check = nchar(genotype) == 6)
 # this does not include genebanks yet
 ```
@@ -263,7 +264,7 @@ nursery_locations <- nurs_mon_last %>%
               pivot_wider(names_from = nursery, values_from = location) %>%
               rename(york_locations = "York",
                      tpb_locations = "Ten Pound Bay",
-                     cades_locations = "Cades",
+                     # cades_locations = "Cades",
                      jumby_locations = "Jumby")
 
 gb_locations <- gb_mon_last %>%
@@ -444,7 +445,9 @@ genotype_tracking <- collection %>%
          productive = if_else(if_all(contains("locations") & -all_of("gb_locations"),  ~ . == "" | is.na(.)),
                               "N", "Y")) %>% # genotypes with frags in nurseries other than genebanks
   arrange(genotype) %>%
-  select(updated, genotype, active, productive, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, cades_locations, jumby_locations, gb_locations, n_frags, n_outplanted, n_outplants, outplant_survival)
+  select(updated, genotype, active, productive, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, 
+         # cades_locations, 
+         jumby_locations, gb_locations, n_frags, n_outplanted, n_outplants, outplant_survival)
 
 datatable(genotype_tracking,
           options = list(pageLength = 20),
