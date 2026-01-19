@@ -17,83 +17,81 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
 ```{r}
-library(tidyverse)
-library(janitor)
-library(lubridate)
-library(here)
-
-raw <- read_csv(here("water_quality", "data_raw",
-  "Kor Measurement File Export.csv"), 
-  # skip = 4, #  for OG file?
+# import raw YSI data from Kor .csv export
+raw <- read_csv(here("water_quality", "data_raw", "Kor Measurement File Export.csv"),
   col_names = FALSE,
   show_col_types = FALSE) %>%
-  filter(!str_detect(X1, "MEAN VALUE|STANDARD DEVIATION|SENSOR SERIAL NUMBER")) # extraneous rows
-
-# Identify header rows for each sensor type
-header_turbidity <- "TURBIDITY FNU"
-header_gen <- "TAL PE RFU"
-```
-
-
-```{r}
-library(tidyverse)
-library(janitor)
-
-# Read CSV (skip any extraneous rows if needed)
-raw <- read_csv(here("water_quality", "data_raw", "Kor Measurement File Export.csv"),
-                col_names = FALSE, show_col_types = FALSE) %>%
   filter(!str_detect(X1, "MEAN VALUE|STANDARD DEVIATION|SENSOR SERIAL NUMBER"))
 
-# Define sensor header identifiers
-header_turbidity <- "TURBIDITY FNU"
-header_gen       <- "TAL PE RFU"
+# import list of entries to be omitted
+omissions <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi report omissions")
+### need to reformat date/times
 
-# Detect header rows by scanning each row
-header_rows_turbidity <- which(apply(raw, 1, function(row) any(str_detect(as.character(row), header_turbidity))))
-header_rows_gen       <- which(apply(raw, 1, function(row) any(str_detect(as.character(row), header_gen))))
+# import list of entries to be corrected
+```
 
-# Rows immediately below headers are the data rows
+Cleaning YSI/Kor .csv
+```{r}
+# identify header rows for each sensor type
+header_rows_turbidity <- which(apply(raw, 1, function(row)
+  any(str_detect(as.character(row), "TURBIDITY FNU"))
+))
+
+header_rows_gen <- which(apply(raw, 1, function(row)
+  any(str_detect(as.character(row), "TAL PE RFU"))
+))
+
+# identify data rows for each sensor type
 data_rows_turbidity <- header_rows_turbidity + 1
 data_rows_gen       <- header_rows_gen + 1
 
-# Function to clean each sensor type
+# function for cleaning data into one tibble per sensor
 clean_sensor <- function(header_rows, data_rows, raw_df) {
+
   blocks <- map2(header_rows, data_rows, ~{
+
     header <- as.character(unlist(raw_df[.x, ]))
-    header[is.na(header) | header == ""] <- paste0("empty_col_", seq_len(sum(is.na(header) | header == "")))
+    header <- iconv(header, from = "", to = "UTF-8", sub = "")
+
+    empty_idx <- which(is.na(header) | header == "")
+    header[empty_idx] <- paste0("empty_col_", seq_along(empty_idx))
+
     header <- make.names(header, unique = TRUE)
-    
+    header <- make_clean_names(header)
+
     data <- as.character(unlist(raw_df[.y, ]))
+
     df <- as_tibble(as.list(data), .name_repair = "minimal")
-    colnames(df) <- make_clean_names(header)
+    colnames(df) <- header
+
     df
   })
-  
+
   tidy_df <- bind_rows(blocks) %>%
     mutate(across(everything(), ~ type.convert(., as.is = TRUE)))
-  
-  if(all(c("date", "time") %in% names(tidy_df))){
-    tidy_df <- tidy_df %>%
-      mutate(
-        date = as.Date(date, format = "%m/%d/%Y"),
-        datetime = as.POSIXct(paste(date, time), format = "%Y-%m-%d %H:%M:%S")
-      )
-  }
-  
+
+  # if (all(c("date_m_d_yyyy", "time_h_mm_ss_tt") %in% names(tidy_df))) {
+  #   tidy_df <- tidy_df %>%
+  #     mutate(
+  #       datetime = as.POSIXct(
+  #         paste(date_m_d_yyyy, time_h_mm_ss_tt),
+  #         format = "%m/%d/%Y %I:%M:%S %p",
+  #         tz = "UTC"
+  #       ),
+  #       date = as.Date(datetime)
+  #     )
+  #}
+
   tidy_df
 }
 
-# Clean each sensor separately
-turbidity_df <- clean_sensor(header_rows_turbidity, data_rows_turbidity, raw)
-general_df   <- clean_sensor(header_rows_gen, data_rows_gen, raw)
+turbidity_df <- clean_sensor(header_rows_turbidity, data_rows_turbidity, raw) %>%
+  select(date_m_d_yyyy, time_h_mm_ss_tt, site_name, turbidity_fnu)
 
-# Optional: merge both sensor types by datetime + site
-master_df <- full_join(turbidity_df, general_df, by = c("datetime", "site_name"))
-
-# ✅ Results
-turbidity_df
-general_df
-master_df
+general_df <- clean_sensor(header_rows_gen, data_rows_gen, raw) %>%
+  select(date_m_d_yyyy, time_h_mm_ss_tt, site_name, tal_pe_rfu, chlorophyll_rfu, cond_s_cm, spcond_s_cm, tds_mg_l, sal_psu, odo_mg_l, ph, temp_c)
 
 ```
+
+
 
