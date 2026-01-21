@@ -98,7 +98,6 @@ Data overview:
 # define variables to include (will remove CYAN and PEYS from some analyses)
 benthic_var <- c("lc", "cca", "ta", "tas", "fma", "cma", "cyan", "ainv", "peys")
 
-
 benthic_cover_trans <- 
   # historical data
   read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "BenthicPointCoverScaled", "BenthicPointCoverScaledByTransect.xlsx"), sheet = "Data") %>% 
@@ -1019,18 +1018,160 @@ print(adonis_res)
 Site 12 is skewing this quite a bit - but don't see reason to omit?
 
 
-## Algal canopy height
-
-- 2017: only 2005 height data...?
-- 2025: 
+## Algal spp. composition
 
 ### Import + wrangle
 ```{r}
+# metadata for genera - family matching
+fma_key <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoverScaled.xlsx"), sheet = "Metadata") %>% 
+  clean_names() %>%
+  fill(scaled_benthic_cover, column_header) %>%
+  filter(str_starts(scaled_benthic_cover, "tFMA")) %>%
+  select(code = column_header, genera = definition) %>%
+  mutate(genera = if_else(code == "BFMA", "Other BFMA",
+                          if_else(code == "GFMA", "Other GFMA",
+                                  if_else(code == "RFMA", "Other RFMA",
+                                          if_else(code == "FMA", "Other FMA", genera)))),
+         code = tolower(code))
+
+fma_gen_site <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoverScaled.xlsx"), sheet = "tFMA") %>% 
+  mutate(site_cat = "NEMMA") %>%
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoverScaled.xlsx"), sheet = "tFMA") %>% 
+              mutate(site_cat = "NDNP")) %>%
+  rename_with(fix_names) %>%
+  mutate(year = 2025,
+         site = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
+  select(year, site_cat, site, contains("avg"), contains("std"), fma_tot_avg = t_fma_avg, fma_tot_std = t_fma_std) %>% # otherwise tFMA and (other) FMA columns get duplicated as FMA
+  rename_with(~ gsub("^t_", "", .x), .cols = -c(site, year)) %>%
+  pivot_longer(
+    cols = -c(site_cat, site, year),  
+    names_to = "family_stat",      
+    values_to = "value"                 
+  ) %>%
+  separate(family_stat, into = c("code", "stat"), sep = "_(?=[^_]+$)") %>%
+  left_join(fma_key, by = "code") %>%
+  select(year, site_cat, site, code, genera, stat, value) %>%
+  filter(!is.na(genera))
+
+fma_gen_year <- fma_gen_site %>%
+  filter(stat == "avg") %>%
+  select(-stat, avg = value) %>%
+  group_by(year, site_cat, genera) %>%
+  summarize(mean = mean(avg),
+            sd = sd(avg))
+```
+
+### Bar plots
+```{r}
+ggplot(fma_gen_year %>% 
+         filter(year == 2025) %>%
+         group_by(genera) %>%
+         filter(sum(mean) > 0),
+       aes(x = genera, y = mean)) +
+  geom_col() +
+  facet_wrap(. ~ site_cat) +
+  geom_errorbar(
+    aes(ymin = mean, ymax = mean + sd),
+    width = 0.2      # width of the error bars
+  ) +
+  labs(x = NULL, y = "Mean Percent Cover (2025)") +
+  coord_flip() +
+  theme_bw()
+```
+
+
+## Algal canopy height
+
+- 2017-2019: AlgaePointCoverScaledBySite.xlsx, sheet = data
+  - FHavg: FMA height (site average)
+- 2025: BenthicAlgalHeight.xlsx, sheet = scaled
+  - tFMA-H: FMA height (site average)
+
+### Import + wrangle
+```{r}
+algal_height_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "AlgaePointCoverScaled", "AlgaePointCoverScaledBySite.xlsx"), sheet = "Data") %>%
+  rename_with(fix_names) %>%
+  mutate(year = year(date)) %>%
+  select(year, site, fma_height = fh_avg)
+  
+algal_height_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicAlgalHeight.xlsx"), sheet = "Scaled") %>% 
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicAlgalHeight.xlsx"), sheet = "Scaled")) %>% 
+  rename_with(fix_names) %>%
+  mutate(year = 2025,
+         site = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
+  select(year, site, fma_height = 't_fma-h')
+
+algal_height_site <- bind_rows(algal_height_hist, algal_height_2025) %>%
+  mutate(site = if_else(str_detect(site, "^Site \\d+"), 
+                        str_extract(site, "^Site \\d+"), 
+                        site), # dealing with NPA sites that have site numbers with different name variations afterwards
+         site_cat = if_else(str_detect(site, "^Site \\d+"), "NDNP",
+                            if_else(str_detect(site, "Redonda"), "Redonda",
+                                    "NEMMA"))) %>%
+  filter(year != 2022 & site_cat %in% c("NEMMA", "NDNP"))
+
+algal_height_year <- algal_height_site %>%
+  group_by(year, site_cat) %>%
+  summarize(mean = mean(fma_height),
+            sd = sd(fma_height))
+```
+
+### Bar plots
+```{r}
+ggplot(algal_height_year, aes(x = factor(year), y = mean)) +
+  geom_col() +
+  facet_wrap(. ~ site_cat) +
+  geom_errorbar(
+    aes(ymin = mean - sd, ymax = mean + sd),
+    width = 0.2      # width of the error bars
+  ) +
+  labs(x = NULL, y = "Mean FMA canopy height (cm)") +
+  theme_bw()
+```
+
+### Delta plots
+```{r}
+fma_delta <- algal_height_site %>%
+  group_by(site, site_cat) %>%
+  summarise(
+    delta = fma_height[year == max(year)] -
+            fma_height[year == min(year)],
+    .groups = "drop"
+  ) %>%
+  group_by(site_cat) %>%
+  summarise(
+    mean_delta = mean(delta, na.rm = TRUE),
+    ci_lower   = mean_delta - qt(0.975, df = n() - 1) * sd(delta, na.rm = TRUE) / sqrt(n()),
+    ci_upper   = mean_delta + qt(0.975, df = n() - 1) * sd(delta, na.rm = TRUE) / sqrt(n()),
+    metric     = "Fleshy macroalgal height",
+    .groups = "drop"
+  )
+
+ggplot(fma_delta,
+       aes(x = mean_delta, y = metric)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_errorbarh(
+    aes(xmin = ci_lower, xmax = ci_upper),
+    height = 0.2
+  ) +
+  geom_point(size = 3) +
+  facet_wrap(~ site_cat) +
+  labs(
+    x = "Mean change (Δ)",
+    y = NULL
+  ) +
+  theme_bw() +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    panel.grid.major.y = element_blank()
+  )
+
 
 ```
 
 
-## Coral species composition
+## Coral spp. composition
 
 Data overview:
 
@@ -1116,81 +1257,30 @@ coral_spp_site <- bind_rows(coral_spp_hist, coral_spp_2025) %>%
   filter(n_distinct(year) > 1) %>% # only keeping sites with over time comparisons
   ungroup()
 
-### need to add 0s when nothing was present
-# coral_spp_year <- coral_spp_site %>%
-#   group_by(year, site_cat, family, genus, species_code, species) %>%
-#   summarize(mean = mean(avg), 
-#             sd = sd(avg)) %>%
-#   group_by(year, site_cat) %>%
-#   mutate(rel_mean = mean / sum(mean)) %>%
-#   group_by(year, site_cat, species) %>%
-#   filter(sum(mean) > 0) %>% # removing species that were 0 in all years/site_cats
-#   ungroup()
-
 coral_fam_site <- coral_spp_site %>%
   group_by(year, site_cat, site, family) %>%
-  summarize(mean = sum(avg)) 
+  summarize(avg = sum(avg, na.rm = TRUE)) %>%
+  ungroup()
 
+# aggregate to year level
 coral_fam_year <- coral_fam_site %>%
   group_by(year, site_cat, site) %>%
   complete( # adding 0s for when nothing was present
     family = unique(coral_spp_year$family),
-    fill = list(mean = 0)
+    fill = list(avg = 0)
   ) %>%
   ungroup() %>%
   group_by(year, site_cat, family) %>%
-  mutate(mean = mean(mean), 
-         sd = sd(mean)) %>%
-  group_by(year, site_cat, family) %>%
-  mutate(rel_mean = mean/sum(mean)) %>%
-  ungroup()
-
-coral_fam_year <- coral_spp_site %>%
-  # 1️⃣ sum species within families per site × year × site_cat
-  group_by(year, site_cat, site, family) %>%
-  summarize(
-    value = sum(avg, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  
-  # 2️⃣ complete missing families per site
-  group_by(year, site_cat, site) %>%
-  complete(
-    family = unique(coral_spp_site$family),
-    fill = list(value = 0)
-  ) %>%
-  
-  # 3️⃣ calculate mean and SD per family × year × site_cat (including zeros)
-  group_by(year, site_cat, family) %>%
-  summarize(
-    mean = mean(value, na.rm = TRUE),
-    sd   = sd(value, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  
-  # 4️⃣ calculate relative mean per year × site_cat
+  summarize(mean = mean(avg, na.rm = TRUE), 
+         sd = sd(avg, na.rm = TRUE)) %>%
+  ungroup() %>%
   group_by(year, site_cat) %>%
-  mutate(
-    rel_mean = ifelse(sum(mean) > 0, mean / sum(mean), 0)
-  ) %>%
+  mutate(rel_mean = mean / sum(mean, na.rm = TRUE)) %>%
   ungroup()
-
-
-# coral_fam_year <- coral_spp_year %>%
-#   group_by(year, site_cat, family) %>%
-#   summarize(mean = sum(mean)) %>%
-#   group_by(year, site_cat) %>%
-#   mutate(rel_mean = mean/sum(mean)) %>%
-#   group_by(year, site_cat) %>%
-#   complete( # adding 0s for when nothing was present
-#     family = unique(coral_spp_year$family),
-#     fill = list(mean = 0, rel_mean = 0)
-#   ) %>%
-#   ungroup()
 
 chk <- coral_fam_year %>%
   group_by(year, site_cat) %>%
-  summarize(tot = sum(rel_mean))
+  summarize(tot = sum(rel_mean, na.rm = TRUE))
 
 coral_fam_year_wide <- coral_fam_year %>%
   pivot_wider(names_from = family,
@@ -1251,7 +1341,16 @@ ggplot(coral_fam_year, aes(x = year, y = rel_mean, group = site_cat, color = sit
 2025 only
 
 ```{r}
-
+ggplot(coral_fam_year %>% filter(year == 2025), aes(x = family, y = mean)) +
+  geom_col() +
+  facet_wrap(. ~ site_cat) +
+  geom_errorbar(
+    aes(ymin = mean, ymax = mean + sd),
+    width = 0.2      # width of the error bars
+  ) +
+  labs(x = NULL, y = "Mean Percent Cover") +
+  coord_flip() +
+  theme_bw()
 ```
 
 ### Radar plots
@@ -1473,20 +1572,32 @@ recruits_fam_site <- bind_rows(recruits_hist, recruits_2025) %>%
   group_by(site) %>%
   filter(n_distinct(year) > 1) %>% # only keeping sites with over time comparisons
   ungroup()
-  
 
 recruits_fam_year <- recruits_fam_site %>%
   group_by(year, site_cat, family_code, family, size) %>%
-  summarize(mean = mean(avg), 
+  summarize(mean = mean(avg), # 0s already included for absent families
             sd = sd(avg)) %>%
   group_by(year, site_cat) %>%
   mutate(rel_mean = mean / sum(mean)) %>%
   group_by(year, site_cat, family_code, family, size) %>%
   filter(sum(mean) > 0) %>% # removing species that were 0 in all years/site_cats
   ungroup()
-
-
 ```
+
+### Bar plots
+```{r}
+ggplot(recruits_fam_year %>% filter(year == 2025 & size == "total" & family != "All species"), aes(x = family, y = mean)) +
+  geom_col() +
+  facet_wrap(. ~ site_cat) +
+  geom_errorbar(
+    aes(ymin = mean, ymax = mean + sd),
+    width = 0.2      # width of the error bars
+  ) +
+  labs(x = NULL, y = "Mean density") +
+  coord_flip() +
+  theme_bw()
+```
+
 
 ### Line plots by site
 
