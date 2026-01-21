@@ -355,7 +355,7 @@ kable(delta_table)
 ```{r}
 # plotting - all metrics
 
-ggplot(delta_table,
+p_delta_pc <- ggplot(delta_table,
        aes(x = mean_delta, y = metric)) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
   geom_errorbarh(
@@ -363,9 +363,9 @@ ggplot(delta_table,
     height = 0.2
   ) +
   geom_point(size = 3) +
-  facet_wrap(~ site_cat, scales = "free_y") +
+  facet_wrap(~ site_cat) +
   labs(
-    x = "Mean change (Δ)",
+    x = "Mean change (% cover)",
     y = NULL
   ) +
   theme_bw() +
@@ -375,7 +375,7 @@ ggplot(delta_table,
     panel.grid.major.y = element_blank()
   )
 
-ggsave(here("agrra_monitoring", "figs", "benthic_delta.png"), width = 6, height = 6)
+delta_benthic
 ```
 
 #### Select metrics
@@ -444,7 +444,6 @@ p_fma <- plot_delta(benthic_cover_site_chg, "Fleshy macroalgae")
 p_lc <- plot_delta(benthic_cover_site_chg, "Live coral")
 
 p_delta_indv <- p_fma / p_lc  # patchwork uses / for vertical layout
-ggsave(here("agrra_monitoring", "figs", "benthic_delta_indv.png"), plot = p_delta_indv, width = 6, height = 8)
 
 print(p_delta_indv)
 ```
@@ -538,8 +537,6 @@ p4 <- make_bp(benthic_cover_site, "NDNP",
 
 final_plot <- (p1 | p2) / (p3 | p4)
 final_plot
-
-ggsave(here("agrra_monitoring", "figs", "lc_fma_cover.png"), plot = final_plot, width = 8, height = 6)
 ```
 
 
@@ -1077,6 +1074,8 @@ ggplot(fma_gen_year %>%
   labs(x = NULL, y = "Mean Percent Cover (2025)") +
   coord_flip() +
   theme_bw()
+
+ggsave(here("agrra_monitoring", "figs", "fma_genera.png"), width = 6, height = 4)
 ```
 
 
@@ -1147,7 +1146,7 @@ fma_delta <- algal_height_site %>%
     .groups = "drop"
   )
 
-ggplot(fma_delta,
+p_delta_fmah <- ggplot(fma_delta,
        aes(x = mean_delta, y = metric)) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
   geom_errorbarh(
@@ -1157,7 +1156,7 @@ ggplot(fma_delta,
   geom_point(size = 3) +
   facet_wrap(~ site_cat) +
   labs(
-    x = "Mean change (Δ)",
+    x = "Mean change (cm)",
     y = NULL
   ) +
   theme_bw() +
@@ -1167,7 +1166,10 @@ ggplot(fma_delta,
     panel.grid.major.y = element_blank()
   )
 
+p_delta_pc / p_delta_fmah +
+  plot_layout(heights = c(3, 1))
 
+ggsave(here("agrra_monitoring", "figs", "benthic_delta_panel.png"), width = 6, height = 4)
 ```
 
 
@@ -1266,7 +1268,7 @@ coral_fam_site <- coral_spp_site %>%
 coral_fam_year <- coral_fam_site %>%
   group_by(year, site_cat, site) %>%
   complete( # adding 0s for when nothing was present
-    family = unique(coral_spp_year$family),
+    family = unique(coral_spp_site$family),
     fill = list(avg = 0)
   ) %>%
   ungroup() %>%
@@ -1284,27 +1286,17 @@ chk <- coral_fam_year %>%
 
 coral_fam_year_wide <- coral_fam_year %>%
   pivot_wider(names_from = family,
-              values_from = c(mean, rel_mean),
+              values_from = c(mean, rel_mean, sd),
               names_glue = "{family}_{.value}")
 ```
 
 ### Line plots
 ```{r}
 coral_fams <- c("Acroporidae", "Merulinidae", "Milleporidae", "Montastraeidae",  "Poritidae", "Siderastreidae", "Unknown spp.")
-ggplot(coral_fam_site_year %>%
-         filter(family %in% coral_fams),
-       aes(x = year, y = rel_mean, group = site)) +
-  geom_point() +
-  geom_line() + 
-  scale_y_continuous(labels = percent_format()) +
-  labs(x = "Year", y = "Relative percent cover of live coral") +
-  facet_grid(site_cat ~ family) +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-ggplot(coral_fam_site_year %>%
+ggplot(coral_fam_site %>%
          filter(family %in% coral_fams),
-       aes(x = year, y = mean, group = site)) +
+       aes(x = year, y = avg, group = site)) +
   geom_point() +
   geom_line() + 
   scale_y_continuous(labels = percent_format()) +
@@ -1312,6 +1304,18 @@ ggplot(coral_fam_site_year %>%
   facet_grid(site_cat ~ family) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# no longer have rel_mean by site
+# ggplot(coral_fam_site %>%
+#          filter(family %in% coral_fams),
+#        aes(x = year, y = rel_mean, group = site)) +
+#   geom_point() +
+#   geom_line() + 
+#   scale_y_continuous(labels = percent_format()) +
+#   labs(x = "Year", y = "Relative percent cover of live coral") +
+#   facet_grid(site_cat ~ family) +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 
@@ -1578,10 +1582,10 @@ recruits_fam_year <- recruits_fam_site %>%
   summarize(mean = mean(avg), # 0s already included for absent families
             sd = sd(avg)) %>%
   group_by(year, site_cat) %>%
-  mutate(rel_mean = mean / sum(mean)) %>%
-  group_by(year, site_cat, family_code, family, size) %>%
-  filter(sum(mean) > 0) %>% # removing species that were 0 in all years/site_cats
-  ungroup()
+  mutate(rel_mean = mean / sum(mean))
+  # group_by(year, site_cat, family_code, family, size) %>%
+  # filter(sum(mean) > 0) %>% # removing species that were 0 in all years/site_cats
+  # ungroup()
 ```
 
 ### Bar plots
@@ -1663,9 +1667,90 @@ p2 <- make_bp(recruits_tot_site, "NDNP",
 
 final_plot <- (p1 | p2)
 final_plot
-
-ggsave(here("agrra_monitoring", "figs", "recruits.png"), plot = final_plot, width = 6, height = 4)
 ```
+## Coral spp. panel
+```{r}
+fam_levels <- rev(sort(unique(coral_fam_year$family)))
+
+recruits_fam_2025 <- recruits_fam_year %>%
+  ungroup() %>%
+  filter(
+    year == 2025,
+    size == "total",
+    family != "All species"
+  ) %>%
+  mutate(
+    family = factor(family, levels = fam_levels),
+    metric = "Coral recruits"
+  ) %>%
+  select(site_cat, family, metric, mean, sd)
+
+coral_fam_2025 <- coral_fam_year %>%
+  filter(year == "2025") %>%
+  mutate(
+    family = factor(family, levels = fam_levels),
+    metric = "Coral cover"
+  ) %>%
+  select(site_cat, family, metric, mean, sd) %>%
+  bind_rows(recruits_fam_2025)
+
+
+make_family_plot <- function(df, site, metric_name, y_limits = NULL, y_label = NULL) {
+  df_filtered <- df %>% 
+    filter(site_cat == site, metric == metric_name)
+  
+  ggplot(df_filtered, aes(x = family, y = mean)) +
+    geom_col() +
+    geom_errorbar(aes(ymin = mean, ymax = mean + sd), width = 0.2) +
+    coord_flip() +
+    {if(!is.null(y_limits)) ylim(y_limits)} +   # optional y-axis limits
+    labs(
+      y = y_label,
+      x = NULL,
+      title = site
+    ) +
+    theme_bw()
+}
+
+cover_ylim <- c(
+  0,
+  max(coral_fam_2025 %>% 
+        filter(metric == "Coral cover") %>% 
+        mutate(upper = mean + sd) %>% 
+        pull(upper))
+)
+
+recruit_ylim <- c(
+  0,
+  max(coral_fam_2025 %>% 
+        filter(metric == "Coral recruits") %>% 
+        mutate(upper = mean + sd) %>% 
+        pull(upper))
+)
+
+
+p1 <- make_family_plot(coral_fam_2025, "NEMMA", "Coral cover", y_limits = cover_ylim, y_label = "Mean Benthic Cover") +
+  scale_y_continuous(labels = percent_format(accuracy = .1))
+p2 <- make_family_plot(coral_fam_2025, "NDNP", "Coral cover", y_limits = cover_ylim) +
+  scale_y_continuous(labels = percent_format(accuracy = .1))
+p3 <- make_family_plot(coral_fam_2025, "NEMMA", "Coral recruits", y_limits = recruit_ylim, y_label = "Mean Recruit Density") +
+  labs(title = NULL) +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+p4 <- make_family_plot(coral_fam_2025, "NDNP", "Coral recruits", y_limits = recruit_ylim) +
+  labs(title = NULL) +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+p <- (p2 | p4) / (p1 | p3)
+p
+
+ggsave(plot = p, here("agrra_monitoring", "figs", "coral_fam_comb.png"), width = 6, height = 5)
+```
+
+
 
 # Diadema
 
