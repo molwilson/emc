@@ -10,48 +10,685 @@ output:
     theme: cerulean
     highlight: haddock
 ---
+# Set up
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(scales)
+library(lubridate)
+library(sf)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+## Importing, cleaning, and merging datasets
+
+Data cleaning notes for future:
+- April 2024 had two testing dates instead of one in May
+- Missing 1m depth for CRS in Jan 2025
+- YSI omissions and corrections are now made directly within kor_cleaning.Rmd (output = ysi_clean.csv)
 
 ```{r}
+# setting folder locations
+
+fig_folder <- here("water_quality", "figs", "2026 Jan")
+
+# import various datasets
+
 sites <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sites") %>% 
   clean_names()
 
-ysi_raw <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi complete") %>% 
-  rename_with(tolower) %>% # prevents clean_names() from adding extra underscores before caps
+ysi <- read_csv(here("water_quality", "data_outputs", "ysi_clean.csv"))
+
+entero <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "enterococcus") %>% 
   clean_names() %>%
-  rename(site_code_depth = site_name)
+  mutate(n_colonies = as.numeric(str_replace_all(n_colonies, ">", "")))
 
-ysi_omissions <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi report omissions") %>%
-  clean_names()
+boat_activity <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "boat activity") %>% 
+  clean_names() %>%
+  mutate(site_code = if_else(site_code == "GIA/LBI", "GIA", site_code)) %>% # coding merged GIA/LBI sites as GIA for now
+  select(date, site_code, n_boats)
 
-# need to clean this with new var names
-# clean site names - caps, corington
-ysi <- ysi_raw %>%
-  anti_join(
-    ysi_omissions,
-    by = c("date", "time", "site_code_depth")) %>%
-  select(date, site_code_depth, temperature_c = temperature_c_24, ph, do_mg_l, do_percent_sat, conductivity_us_cm, sal_psu, phycoerythrin_rfu, chlorophyll_rfu) %>%
-  drop_na() %>%
-  left_join(ysi_raw %>%
-              select(date, site_code_depth, turbidity_fnu) %>%
-              drop_na(),
-            by = c("date", "site_code_depth")) %>%
-  mutate(site_code = str_replace(site_code_depth, "[:digit:]", ""),
-         depth_m = parse_number(site_code_depth),
-         depth_m = replace_na(depth_m, 1)) # surface-only sites are assumed to be approx 1m
+precip <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "precipitation") %>% 
+  clean_names() %>%
+  right_join(data.frame(date = seq(ymd('2023-10-10'), as.Date(today()), by='day'))) %>%
+  mutate(precipitation_in = replace_na(precipitation_in, 0))
 
-ysi_dup <- ysi %>% group_by(site_code_depth, date) %>%
-  summarize(count = n()) %>%
-  filter(count >2) # should be only 2 samples (1 per probe) at each site/depth per day
+sargassum_local <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sargassum") %>%
+  clean_names() %>%
+  mutate(date = as.Date(date)) %>%
+  select(date, site_code, sargassum, leachate)
 
+# merge into one dataset
+
+data_mon <- ysi %>%
+  # drop_na() %>%
+  left_join(sites, by = c("site_code")) %>%
+  left_join(entero, by = c("date", "site_code")) %>%
+  left_join(boat_activity, by = c("date", "site_code")) %>%
+  left_join(sargassum_local, by = c("date", "site_code")) %>%
+  mutate(depth = if_else(site_code_depth == "CRS3" & date == as.Date("2025-01-20"), 1, depth)) %>% # missing 1m depth for CRS in Jan 2025, so switching 3m to use as 1m instead before dropping depth
+  filter(!is.na(site_name) & depth == 1) %>% # using only long-term monitoring sites and surface measurements
+  mutate(longitude = as.numeric(longitude),
+         latitude = as.numeric(latitude),
+         n_colonies = replace_na(as.numeric(str_replace(n_colonies, ">" ,"")), 0),
+         entero_yn = if_else(n_colonies == 0, "Absent",
+                             if_else(n_colonies > 0, "Present", "NA")),
+         n_boats = replace_na(n_boats, 0),
+         leachate = replace_na(leachate, 0),
+         doy = yday(date),
+         month = month(ymd(date), label = TRUE),
+         year = year(ymd(date)),
+         date_label = paste(as.character(month), as.character(year)),
+         date_label = if_else(as.character(date) == "2024-04-29", "May 2024", date_label), # label as next month due to spread
+         date_cat = if_else(substr(date_label, 1, 3) %in% c("Dec", "Jan", "Feb", "Mar", "Apr"), "High season", "Low season"),
+         site_cat = if_else(site_code %in% c("YIE", "GIE", "YIC", "GIC", "JC", "CRS"), "Control", "Treatment")) %>%
+  relocate(date, doy, year, date_label, date_cat, site_code, site_name, latitude, longitude)
+  # distinct()
+
+chk <- data_mon %>%
+  complete(date_label, site_code, fill = list(depth = NA)) %>% # fill can be NA or other defaults
+  select(date_label, site_code, date) %>%
+  mutate(
+    date_label_date = parse_date_time(date_label, orders = "b Y"), # "Apr 2024" → 2024-04-01
+    date_label_date = as.Date(date_label_date)
+  ) %>%
+  arrange(site_code, date_label_date)
 ```
 
-# Archive
+## Setting target references, plotting ranges, and parameter labels for graphs
 
 ```{r}
-         # mutate(
-#date_adj = if_else(day(date) > 25, date %m+% months(1), date),
-         #monitoring_month = floor_date(date_adj, unit = "month"),
-         #month_label = format(monitoring_month, "%b %Y")
-# )
+# sampling date ranges
+date_min <- min(data_mon$date)
+date_max <- max(data_mon$date)
+
+# pH
+lab_ph <- "pH"
+ref_ph = data.frame(xmin = -Inf, xmax = Inf, ymin = 7.7, ymax = 8.5)
+lab_ref_ph <- "Target range (Rogers et al. 2001)"
+ylims_ph <- c((min(data_mon$ph, na.rm = T) - .7), 9)
+
+# turbidity (need to update reference here)
+lab_turb <- "Turbidity (FNU)"
+ref_turb = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 2)
+lab_ref_turb <- "Target range (EPA)"
+ylims_turb <- c((min(data_mon$turbidity_fnu, na.rm = T) - 1), (max(data_mon$turbidity_fnu, na.rm = T) + 1))
+
+# do
+lab_do <- expression("Dissolved oxygen (mg "*L^-1*")")
+ref_do = data.frame(xmin = -Inf, xmax = Inf, ymin = 5, ymax = Inf)
+lab_ref_do <- "Target range (Long et al. 2013)"
+ref_do_hypoxia = 2
+lab_ref_do_hypoxia <- "Hypoxia threshold"
+ylims_do <- c(0, (max(data_mon$do_mg_l, na.rm = T) + 1))
+
+# temp
+lab_temp <- expression("Temperature ("*~degree*C*")")
+ref_temp = data.frame(xmin = -Inf, xmax = Inf, ymin = 23, ymax = 29.6)
+lab_ref_temp <- "Target range (Coral Reef Alliance)"
+ref_temp_bleaching = 30.63
+lab_ref_temp_bleaching <- "Coral bleaching threshold (NOAA)"
+ylims_temp <- c(22, (max(data_mon$temp_c, na.rm = T) + 1))
+
+# enterococcus
+lab_entero <- expression(paste(italic("Enterococcus" ), " spp. (CFU "*mL^-1*")"))
+ref_entero = data.frame(xmin = -Inf, xmax = Inf, ymin = 0, ymax = 7/100) # below 7cfu/100mL (EPA)
+lab_ref_entero <- "Target range (EPA)"
+ylims_entero <- c(0, (max(data_mon$n_colonies, na.rm = T) + 10))
+
+# phycoerythrin
+lab_phyco <- "Phycoerythrin (RFU)"
+ylims_phyco <- c((min(data_mon$tal_pe_rfu, na.rm = T) - 1), (max(data_mon$tal_pe_rfu, na.rm = T) + 1))
+
+# chlorophyll a
+lab_chlor <- expression(paste("Chlorophyll ", italic("a"), " (RFU)"))
+ylims_chlor <- c((min(data_mon$chlorophyll_rfu, na.rm = T) - 1), (max(data_mon$chlorophyll_rfu, na.rm = T) + 1))
+
+# precipitation
+lab_precip <- expression("Precipitation (in. "*day^-1*")")
+
+# aesthetics for reference rectangles
+c_range <- "gray20" # setting color for target range in graphs
+a_range <- 0.15 # setting alpha (transparency) for target range in graphs
+```
+
+## Writing functions for graph types
+
+```{r}
+# flipped point plots by site, with and without reference boxes
+
+flpoint_site <- function(data_wq, y, ylab, ylims) {
+  ggplot() +
+    geom_point(data = data_wq, 
+             aes(site_name, {{y}}),
+             alpha = 0.6) +
+    labs(x = "", y = ylab) +
+    ylim(ylims) +
+    theme_bw() +
+    coord_flip()
+}
+
+flpoint_site_ref <- function(ref_data, data_wq, y, ylab, ylims) {
+  ggplot() +
+    geom_rect(data = ref_data, 
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = "What"),
+              alpha = a_range) +
+    scale_fill_manual(values = c_range, guide = "none") +
+    geom_point(data = data_wq, 
+             aes(site_name, {{y}}),
+             alpha = 0.6) +
+    labs(x = "", y = ylab) +
+    ylim(ylims) +
+    theme_bw() +
+    coord_flip()
+}
+
+# line plots over time, with and without reference boxes
+
+line_time <- function(data_wq, y, ylab, ylims) {
+  ggplot() +
+    geom_line(data = data_wq %>%
+                filter(site_cat == "Treatment"),
+            aes(x = date, y = {{y}}, group = site_code),
+            color = "lightblue",
+            alpha = 0.9) +
+    geom_point(data = data_wq %>%
+                filter(site_cat == "Treatment"),
+            aes(x = date, y = {{y}}, group = site_code),
+            color = "lightblue",
+            alpha = 0.9) +
+    geom_line(data = data_wq %>%
+                filter(site_cat == "Control"),
+            aes(x = date, y = {{y}}, group = site_code), 
+            color = "dodgerblue4",
+            alpha = 0.9) +
+    geom_point(data = data_wq %>%
+                filter(site_cat == "Control"),
+            aes(x = date, y = {{y}}, group = site_code), 
+            color = "dodgerblue4",
+            alpha = 0.9) +
+    geom_hline(data = data_wq, # adding geom_hline to work create color legend now that layers are split up 
+              aes(yintercept = -100, color = site_cat)) +
+    scale_color_manual(values = c("dodgerblue4", "lightblue"), labels = c("Control sites", "Treatment sites")) +
+    guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
+    scale_x_datetime(date_breaks = "2 months",
+                   date_labels = "%b %Y",
+                   expand = c(0.02, 0.02)) +
+    labs(x = "", y = ylab, color = "") +
+    ylim(ylims) +
+    theme_bw() +
+    theme(legend.position = "top",
+          axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+
+line_time_ref <- function(data_ref, lab_ref, data_wq, y, ylab, ylims) {
+  ggplot() +
+    geom_rect(data = data_ref, 
+              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), ymin = ymin, ymax = ymax, fill = lab_ref),
+              alpha = a_range) +
+    scale_fill_manual(values = c_range) +
+    geom_line(data = data_wq %>%
+                filter(site_cat == "Treatment"),
+            aes(x = date, y = {{y}}, group = site_code),
+            color = "lightblue",
+            label = "Treatment",
+            alpha = 0.9) +
+    geom_point(data = data_wq %>%
+                filter(site_cat == "Treatment"),
+            aes(x = date, y = {{y}}, group = site_code),
+            color = "lightblue",
+            alpha = 0.9) +
+    geom_line(data = data_wq %>%
+                filter(site_cat == "Control"),
+            aes(x = date, y = {{y}}, group = site_code), 
+            color = "dodgerblue4",
+            alpha = 0.9) +
+    geom_point(data = data_wq %>%
+                filter(site_cat == "Control"),
+            aes(x = date, y = {{y}}, group = site_code), 
+            color = "dodgerblue4",
+            alpha = 0.9) +
+    geom_hline(data = data_wq,
+              aes(yintercept = -100, color = site_cat)) +
+    scale_color_manual(values = c("dodgerblue4", "lightblue"), labels = c("Control sites", "Treatment sites")) +
+    guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
+    scale_x_datetime(date_breaks = "2 months",
+                   date_labels = "%b %Y",
+                   expand = c(0.02, 0.02)) +
+    labs(x = "", y = ylab, fill = "", color = "") +
+    ylim(ylims) +
+    theme_bw() +
+    theme(legend.position = "top",
+          axis.text.x = element_text(angle = 45, hjust = 1))
+}
+```
+
+# Methods - site map
+
+```{r}
+# Site only data
+
+# Antigua shapefile
+atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
+  st_union() %>%
+  st_sf()
+
+# Antigua boundaries
+lons = c(-61.92, -61.65)
+lats = c(16.98, 17.19)
+
+ggplot() +
+  geom_sf(data = atg, fill = "slategray", color = "slategray") + # ATG basemap
+  coord_sf(xlim = lons, ylim = lats, expand = FALSE) + # setting map boundaries
+  geom_point(data_mon %>% 
+               select(site_code, site_cat, latitude, longitude) %>%
+               distinct(), 
+             mapping = aes(x = longitude, y = latitude, shape = site_cat), 
+             alpha = 0.9, color = "black", size = 1) + # add sites
+  scale_shape_manual(values = c(1, 16)) +
+  labs(shape = "") +
+  theme_minimal() +
+  theme(axis.title = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        legend.position = "top",
+        panel.background = element_rect(fill = "lightblue", color = NA)  # map panel background
+        #plot.background = element_rect(fill = "lightblue", color = NA)    # entire plot background
+ )
+
+### missing Jumby Control lat/lon
+ggsave(here(fig_folder, "sites_map.png"), width = 5, height = 4)
+```
+
+# Results
+
+## Plotting standard graphs by parameter
+
+```{r}
+# plot dimensions
+plot_dim_w <- 8.2
+plot_dim_h <- 4
+
+# ph
+ph_point <- flpoint_site_ref(ref_ph, data_mon, ph, lab_ph, ylims_ph)
+ph_line <- line_time_ref(ref_ph, lab_ref_ph, data_mon, ph, lab_ph, ylims_ph)
+
+ggarrange(ph_point, ph_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here(fig_folder, "ph.png"),  width = plot_dim_w, height = plot_dim_h)
+
+# turbidity
+turb_point <- flpoint_site_ref(ref_turb, filter(data_mon, as.character(date) != "2023-10-10"), turbidity_fnu, lab_turb, ylims_turb) # removing first date, calibration was off
+turb_line <- line_time_ref(ref_turb, lab_ref_turb, filter(data_mon, as.character(date) != "2023-10-10"), turbidity_fnu, lab_turb, ylims_turb)
+
+ggarrange(turb_point, turb_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here(fig_folder, "turbidity.png"),  width = plot_dim_w, height = plot_dim_h)
+
+# do
+do_point <- flpoint_site_ref(ref_do, data_mon, do_mg_l, lab_do, ylims_do)
+do_line <- line_time_ref(ref_do, lab_ref_do, data_mon, do_mg_l, lab_do, ylims_do) +
+  geom_hline(aes(yintercept = ref_do_hypoxia, linetype = lab_ref_do_hypoxia),
+             color = "salmon") +
+  scale_linetype_manual(values = "dashed", name = "")
+
+ggarrange(do_point, do_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here(fig_folder, "do.png"),  width = plot_dim_w, height = plot_dim_h)
+
+# temp
+data_mon_temp <- data_mon %>% filter(site_code != "GEB")
+temp_point <- flpoint_site_ref(ref_temp, data_mon_temp, temp_c, lab_temp, ylims_temp) +
+  geom_hline(yintercept = ref_temp_bleaching, color = "salmon", linetype = "dashed")
+temp_line <- line_time_ref(ref_temp, lab_ref_temp, data_mon_temp, temp_c, lab_temp, ylims_temp) +
+  geom_hline(aes(yintercept = ref_temp_bleaching, linetype = lab_ref_temp_bleaching),
+             color = "salmon") +
+  scale_linetype_manual(values = "dashed", name = "")
+
+ggarrange(temp_point, temp_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here(fig_folder, "temp.png"),  width = plot_dim_w, height = plot_dim_h)
+
+# chlorophyll a
+chlor_point <- flpoint_site(data_mon, chlorophyll_rfu, lab_chlor, ylims_chlor)
+chlor_line <- line_time(data_mon, chlorophyll_rfu, lab_chlor, ylims_chlor)
+
+ggarrange(chlor_point, chlor_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here(fig_folder, "chlor.png"),  width = plot_dim_w, height = plot_dim_h)
+
+# phycoerythrin
+phyco_point <- flpoint_site(data_mon, tal_pe_rfu, lab_phyco, ylims_phyco)
+phyco_line <- line_time(data_mon, tal_pe_rfu, lab_phyco, ylims_phyco)
+
+ggarrange(phyco_point, phyco_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here(fig_folder, "phyco.png"),  width = plot_dim_w, height = plot_dim_h)
+
+# enterococcus
+entero_point <- flpoint_site_ref(ref_entero, data_mon, n_colonies, lab_entero, ylims_entero)
+entero_line <- line_time_ref(ref_entero, lab_ref_entero, data_mon, n_colonies, lab_entero, ylims_entero)
+
+ggarrange(entero_point, entero_line, 
+          ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
+ggsave(here(fig_folder, "entero.png"),  width = plot_dim_w, height = plot_dim_h)
+```
+
+## Additional enterococcus graphs
+
+##### Enterocuccus interannual comparisons
+
+```{r}
+# separate data by year
+# group by site_year, color by year
+
+temp <- data_mon %>% 
+         select(date, month, year, site_code, n_colonies) %>%
+         distinct() %>%
+  group_by(month, year, site_code) %>%
+  summarize(count = n()) %>%
+  filter(count > 1)
+
+month_breaks <- yday(ymd(paste0("2023-", 1:12, "-15")))  # mid-month DOYs
+month_labels <- month(ymd(paste0("2023-", 1:12, "-01")), label = TRUE, abbr = TRUE)
+
+ggplot(data_mon %>% 
+         filter(doy <180) %>%
+         select(doy, year, site_code, n_colonies) %>%
+         distinct(), 
+       aes(x = doy, y = n_colonies, group = interaction(site_code, year), color = factor(year))) +
+  geom_line(alpha = .6, size = 1) +
+  scale_x_continuous(
+    breaks = month_breaks,
+    labels = month_labels,
+    name = "Month"
+  ) +
+  labs(color = "Year", y = lab_entero) +
+  theme_minimal()
+ggsave(here(fig_folder, "entero_interannual.png"), width = 6, height = 4)
+```
+
+##### Enterococcus maps
+
+```{r, error = FALSE}
+# Antigua shapefile
+atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
+  st_union() %>%
+  st_sf()
+
+# check lat/long
+summary(data_mon$longitude)
+summary(data_mon$latitude)
+
+# set lat/lon for graph (map) boundaries
+xlim <- range(data_mon$longitude, na.rm = TRUE) + c(-.01, .01)
+ylim <- range(data_mon$latitude, na.rm = TRUE) + c(-.01, .01)
+
+# Nonsuch only boundaries
+lons = c(-61.72, -61.65)
+lats = c(17.03, 17.10)
+
+ggplot() +
+  geom_sf(data = atg, fill = "slategray", color = "slategray") + # ATG basemap
+  coord_sf(xlim = lons, ylim = lats, expand = FALSE) + # setting map boundaries
+  geom_point(data_mon, 
+             mapping = aes(x = longitude, y = latitude, color = entero_yn, size = n_colonies), 
+             alpha = 0.7) + # add sites
+  scale_color_manual(values = c("turquoise", "tomato")) +
+  facet_wrap(. ~ factor(date_label, levels = c("Oct 2023", "Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024", "Jul 2024", "Aug 2024", "Sep 2024", "Oct 2024", "Nov 2024", "Dec 2024", "Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025")),
+             ncol = 12) +
+  labs(size = expression("Concentration (CFU "*mL^-1*")"),
+       color = expression("Enterococci detection")) +
+  theme_bw() +
+  theme(axis.title = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        legend.position = "top")
+
+ggsave(here(fig_folder, "entero_map.png"), width = 10, height = 9)
+```
+
+##### Boat play
+
+```{r}
+ggplot(data_mon %>% filter(site_code %in% c("GIA", "RBA", "NBA", "GOE")), 
+       aes(x = n_boats, y = n_colonies, shape = site_name, color = site_name)) +
+  geom_point(alpha = 0.6, size = 2) +
+  labs(x = "Number of boats in anchorages", y = lab_entero, color = "", shape = "") +
+  theme_bw()
+ggsave(here(fig_folder, "entero_boats.png"), width = 6, height = 4)
+```
+
+##### Enterococcus ~ chlorophyll play
+
+```{r}
+entero_phyco <- ggplot(data_mon,
+       aes(x = tal_pe_rfu, y = n_colonies)) +
+  geom_point(alpha = 0.6, size = 2) +
+  sm_statCorr() +
+  labs(x = lab_phyco, y = lab_entero) +
+  theme_bw()
+
+entero_chlor <- ggplot(data_mon, 
+       aes(x = chlorophyll_rfu, y = n_colonies)) +
+  geom_point(alpha = 0.6, size = 2) +
+  sm_statCorr() +
+  labs(x = lab_chlor, y = lab_entero) +
+  theme_bw()
+
+ggarrange(entero_phyco, entero_chlor, 
+          ncol = 2, nrow = 1)
+ggsave(here(fig_folder, "entero_chlor.png"), width = 6, height = 3)
+```
+
+## Precipitation
+
+Didn't find much relationship between precipitation and any parameters at this point, it will be helpful to have more data over time. Including exploratory graphs at this point for reference.
+
+```{r}
+ggplot() +
+  geom_line(data = precip %>% 
+              filter(as.Date(date) < date_max), 
+             aes(x = as.Date(date), y = precipitation_in)) +
+  labs(x = "", y = lab_precip) +
+  scale_x_date(
+    limits = as.Date(c("2023-11-01", "2025-06-30")),
+    date_breaks = "2 months",
+    date_labels = "%b %Y") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here(fig_folder, "precip.png"), width = 6, height = 4)
+
+# trying to calculate the amount of rainfall preceding a testing day
+ysi_dates <- ysi %>%
+  select(date) %>%
+  distinct() # need to clarify which dates were actual monitoring days
+
+# this should be period between testing intervals
+precip_mo <- data_mon %>%
+  filter(!as.character(date) %in% c("2024-03-11", "2024-08-20", "2023-10-10")) %>% # test dates within 1 day of another test date or dates with no prior data
+  select(end_date = date) %>%
+  distinct() %>%
+  mutate(start_date = end_date - days(31)) %>%
+  # mutate(interval = interval(ymd(start_date), ymd(end_date))) %>% # find a way to label this
+  fuzzy_left_join(precip, by = c("start_date" = "date", "end_date" = "date"),
+                          match_fun = list(`<=`, `>`)) %>%
+  group_by(end_date) %>%
+  summarize(precip_prior = sum(precipitation_in)) %>%
+  mutate(interval = "Month")
+
+precip_wk <- data_mon %>%
+  filter(!as.character(date) %in% c("2024-03-11", "2024-08-20", "2023-10-10")) %>% # dates within 1 day of another test or dates with no prior data
+  select(end_date = date) %>%
+  distinct() %>%
+  mutate(start_date = end_date - days(7)) %>%
+  # mutate(interval = interval(ymd(start_date), ymd(end_date))) %>% # find a way to label this
+  fuzzy_left_join(precip, by = c("start_date" = "date", "end_date" = "date"),
+                          match_fun = list(`<=`, `>`)) %>%
+  group_by(end_date) %>%
+  summarize(precip_prior = sum(precipitation_in)) %>%
+  mutate(interval = "Week")
+
+precip_48hr <- data_mon %>%
+  filter(!as.character(date) %in% c("2024-03-11", "2024-08-20", "2023-10-10")) %>% # dates within 1 day of another test or dates with no prior data
+  select(end_date = date) %>%
+  distinct() %>%
+  mutate(start_date = end_date - days(2)) %>%
+  # mutate(interval = interval(ymd(start_date), ymd(end_date))) %>% # find a way to label this
+  fuzzy_left_join(precip, by = c("start_date" = "date", "end_date" = "date"),
+                          match_fun = list(`<=`, `>`)) %>%
+  group_by(end_date) %>%
+  summarize(precip_prior = sum(precipitation_in)) %>%
+mutate(interval = "48 hrs")
+
+precip_prior <- rbind(precip_mo, precip_wk, precip_48hr) %>%
+  mutate(month = month(ymd(end_date), label = TRUE),
+         year = year(ymd(end_date)),
+         date_label = paste(as.character(month), as.character(year)),
+         date_label = if_else(as.character(end_date) == "2024-04-29", "May 2024", date_label),
+         date_label = fct_reorder(date_label, end_date))
+
+ggplot(precip_prior, aes(x = date_label, y = precip_prior, group = factor(interval, levels = c("Month", "Week", "48 hrs")))) +
+  geom_col(aes(fill = interval), color = "black", position = "dodge") +
+  scale_fill_manual(values = c("cadetblue1", "seagreen", "goldenrod")) +
+  labs(x = "Test Date", y = "Prior precipitation (in)", fill = "Interval prior") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+ggsave(here(fig_folder, "precip_prior.png"), width = 6, height = 4)
+  
+```
+```{r}
+# dual y attempts
+
+scale = .01 # relates y axis 1 with y axis 2
+
+point_precip <- function(data, y, ylab, scale) {
+  ggplot() +
+    geom_point(data = data, 
+               aes(x = date, y = {{y}}),
+               color = "salmon") +
+    geom_line(data = precip,
+               aes(x = date, y = precipitation_in/scale),
+              color = "black") +
+    scale_y_continuous(
+      name = ylab,
+      sec.axis = sec_axis(~.*scale, name = "Precipitation (in/day)")
+  ) +
+    labs(x = "") +
+    theme_bw()
+}
+
+point_precip(data_mon, n_colonies, lab_entero, 0.01)
+```
+
+## Sargassum
+
+```{r}
+# sargassum accumulation 2023-2024 (from Ruleo)
+
+ggplot() +
+  geom_col(data = sargassum_regional, 
+             aes(x = as.POSIXct(date), y = sargassum_mil_tonnes),
+           fill = "orange3") +
+  labs(x = "", y = "Caribbean & GOM sargassum influx (mil tonnes)") +
+  scale_x_datetime(date_breaks = "2 months",
+                   date_labels = "%b %Y",
+                   expand = c(0.01, 0.01)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(here(fig_folder, "sargassum.png"), width = 6, height = 4)
+```
+
+
+```{r}
+sites_sarg <- c("EBB", "MRCH", "BDB", "LDB", "FHB", "NBRM", "NBRB")
+date_min_sarg <- min(sargassum_local$date) # date at which we started recording leachate levels
+
+# reference values from Aug. 2021 decay at FHB
+
+ref_sarg_ph <- 7.25
+ref_sarg_do <- 0.26 # mg/L # changing to hypoxia threshold here
+ref_sarg_turb <- 26.2 # NTU (YSI says no conversion to FNU needed if YSI was used to collect both)
+ref_sarg_entero <- 10/100 # CFU/mL
+
+label <- "Decay reference"
+ref_sarg_df <- data.frame(label, ref_sarg_ph, ref_sarg_do, ref_sarg_turb, ref_sarg_entero) # had to create df to be able to label reference line in a faceted plot
+
+sarg <- function(data_ref, ref_sarg, y, ylab, ylims) {
+  ggplot() +
+    geom_rect(data = data_ref, 
+              aes(xmin = as.POSIXct(-Inf), xmax = as.POSIXct(Inf), ymin = ymin, ymax = ymax, fill = "Target range"),
+              alpha = a_range) +
+    scale_fill_manual(values = c_range) +
+    geom_hline(data = ref_sarg_df, aes(yintercept = ref_sarg, linetype = label),
+             color = "salmon") +
+    scale_linetype_manual(values = "dashed") +
+    geom_point(data = wq_data %>% 
+                 filter(site_code %in% sites_sarg & date >= date_min_sarg) ,
+       aes(x = date, y = {{y}}, color = as.character(depth_m)),
+       alpha = 0.8, size = 2) +
+    scale_color_manual(values = c("cadetblue", "darkblue"), labels = c("1m", "3m")) +
+    # scale_shape_manual(values = c(16, 18), labels = c("1m", "3m")) +
+    facet_wrap(. ~ site_name, nrow = 1, labeller = labeller(site_name = label_wrap_gen(17))) +
+    scale_x_datetime(date_breaks = "4 months",
+                   date_labels = "%b %Y") +
+    ylim(ylims) +
+    labs(x = "", y = ylab, shape = "Depth", color = "Depth", fill = "", linetype = "") +
+    guides(color = guide_legend(order = 1), linetype = guide_legend(order = 2), linetype = guide_legend(order = 3)) +
+    theme_bw()
+}
+
+# sargassum leachate levels
+leachate_sarg <- ggplot() +
+  geom_col(data = wq_data %>% 
+             filter(site_code %in% sites_sarg & date >= date_min_sarg) %>%
+             select(date, site_name, leachate) %>%
+             distinct(),
+       aes(x = date, y = leachate),
+       fill = "orange3") +
+  scale_x_datetime(date_breaks = "2 months",
+                   date_labels = "%b %Y") +
+  ylim(0, 2) +
+  scale_y_continuous(breaks = seq(0, 1, by = 1)) +
+  labs(y = "Leachate score", x = "") +
+  facet_wrap(. ~ site_name, nrow = 1, labeller = labeller(site_name = label_wrap_gen(17))) +
+  theme_bw() +
+  theme(axis.text.x = (element_text(angle = 45, hjust = 1)))
+
+
+# do
+do_sarg <- sarg(ref_do, ref_do_hypoxia, do_mg_l, lab_do, ylims = c(0,9.5)) +
+  theme(legend.position = "top",
+        axis.text.x = element_blank())
+
+# ph
+ph_sarg <- sarg(ref_ph, ref_sarg_ph, ph, lab_ph, ylims_ph) +
+  theme(legend.position = "none",
+        axis.text.x = element_blank())
+
+# turbidity - excluded for now
+turb_sarg <- sarg(ref_turb, ref_sarg_turb, turbidity_fnu, lab_turb, c(0,30)) +
+  theme(legend.position = "none",
+        axis.text.x = (element_text(angle = 45, hjust = 1)))
+
+ggarrange(
+  # Top row: two plots with shared legend
+  ggarrange(do_sarg, ph_sarg, 
+            ncol = 1, 
+            common.legend = TRUE, 
+            legend = "top",
+            heights = c(4, 4)),
+  # Bottom row: third plot without legend
+  leachate_sarg + theme(legend.position = "none"),
+  nrow = 2,
+  heights = c(4, 2)  # Give 2/3 of the height to the top row, 1/3 to the bottom
+)
+ggsave(here(fig_folder, "sarg.png"),  width = 8, height = 8)
+
 ```
 

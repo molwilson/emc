@@ -24,10 +24,15 @@ raw <- read_csv(here("water_quality", "data_raw", "Kor Measurement File Export.c
   filter(!str_detect(X1, "MEAN VALUE|STANDARD DEVIATION|SENSOR SERIAL NUMBER"))
 
 # import list of entries to be omitted
-omissions <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi report omissions")
+omissions <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi omissions") %>%
+  mutate(time = format(time, "%H:%M:%S"),
+         date = as.Date(date))
 ### need to reformat date/times
 
 # import list of entries to be corrected
+corrections <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi corrections") %>%
+  mutate(time = format(time, "%H:%M:%S"),
+         date = as.Date(date))
 ```
 
 Cleaning YSI/Kor .csv
@@ -68,29 +73,70 @@ clean_sensor <- function(header_rows, data_rows, raw_df) {
   })
 
   tidy_df <- bind_rows(blocks) %>%
-    mutate(across(everything(), ~ type.convert(., as.is = TRUE)))
-
-  # if (all(c("date_m_d_yyyy", "time_h_mm_ss_tt") %in% names(tidy_df))) {
-  #   tidy_df <- tidy_df %>%
-  #     mutate(
-  #       datetime = as.POSIXct(
-  #         paste(date_m_d_yyyy, time_h_mm_ss_tt),
-  #         format = "%m/%d/%Y %I:%M:%S %p",
-  #         tz = "UTC"
-  #       ),
-  #       date = as.Date(datetime)
-  #     )
-  #}
+    mutate(across(everything(), ~ type.convert(., as.is = TRUE))) %>%
+    mutate(date = as.Date(date_m_d_yyyy, format = "%m/%d/%y"),
+           time = format(
+             lubridate::parse_date_time(time_h_mm_ss_tt, orders = "I:M:S p"),
+             "%H:%M:%S"))
 
   tidy_df
 }
 
-turbidity_df <- clean_sensor(header_rows_turbidity, data_rows_turbidity, raw) %>%
-  select(date_m_d_yyyy, time_h_mm_ss_tt, site_name, turbidity_fnu)
+# creating clean dfs for turbidity and general sensor data
+turbidity <- clean_sensor(header_rows_turbidity, data_rows_turbidity, raw) %>%
+  select(date, time, site_code_depth = site_name, turbidity_fnu) %>%
+  anti_join(omissions, by = c("date", "time", "site_code_depth")) %>%
+  left_join(corrections, by = c("date", "time", "site_code_depth")) %>%
+  mutate(site_code_depth = coalesce(site_corrected, site_code_depth)) %>%
+  select(-site_corrected)
 
-general_df <- clean_sensor(header_rows_gen, data_rows_gen, raw) %>%
-  select(date_m_d_yyyy, time_h_mm_ss_tt, site_name, tal_pe_rfu, chlorophyll_rfu, cond_s_cm, spcond_s_cm, tds_mg_l, sal_psu, odo_mg_l, ph, temp_c)
+general <- clean_sensor(header_rows_gen, data_rows_gen, raw) %>%
+  select(date, time, site_code_depth = site_name, tal_pe_rfu, chlorophyll_rfu, cond_s_cm, spcond_s_cm, tds_mg_l, sal_psu, odo_mg_l, ph, temp_c) %>%
+  anti_join(omissions, by = c("date", "time", "site_code_depth")) %>%
+  left_join(corrections, by = c("date", "time", "site_code_depth")) %>%
+  mutate(site_code_depth = coalesce(site_corrected, site_code_depth)) %>%
+  select(-site_corrected)
 
+# checking that corrections were applied
+chk_turbidity <- turbidity %>%
+  inner_join(corrections %>% select(date, time), 
+             by = c("date", "time"))
+chk_general <- general %>%
+  inner_join(corrections %>% select(date, time), 
+             by = c("date", "time"))
+
+# creating one df with both sensor groups
+ysi <- general %>%
+  select(-time) %>%
+  full_join(turbidity %>%
+              select(-time),
+            by = c("date", "site_code_depth")) %>%
+  mutate(site_code_depth = case_when(site_code_depth == "Corington" ~ "COV",
+                                     site_code_depth == "greenhEB" ~ "GEB",
+                                     site_code_depth == "SH1" ~ "SRS1",
+                                     TRUE ~ toupper(site_code_depth)),
+         site_code = str_extract_all(site_code_depth, "[A-Za-z]") %>% 
+           sapply(paste0, collapse = ""),
+         depth = str_extract_all(site_code_depth, "\\d") %>% 
+           sapply(paste0, collapse = "") %>% 
+           as.integer(),
+         depth = coalesce(depth, 1)) %>% # replacing sites with no depth as depth = 1
+  relocate(date, site_code_depth, site_code, depth) %>%
+  rename(do_mg_l = odo_mg_l) %>%
+  set_names(~ str_replace_all(., "_s_", "_us_")) # replacing "u" symbol lost when stripping data
+
+# checking for duplicated/incomplete data
+chk_ysi1 <- ysi %>% 
+  group_by(site_code_depth, date) %>%
+  summarize(count = n()) %>%
+  filter(count != 1)
+
+chk_ysi2 <- ysi %>%
+  filter(is.na(tal_pe_rfu) | is.na(turbidity_fnu))
+
+# export csv and clean env.
+write_csv(ysi, here("water_quality", "data_outputs", "ysi_clean.csv"))
+rm(list = ls(pattern = "^chk"))
 ```
 
 

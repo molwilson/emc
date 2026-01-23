@@ -13,7 +13,7 @@ library(janitor) # for cleaning variable names so they have consistent capitaliz
 library(lubridate) # for converting date formats
 ```
 
-# Identifying samples that should be omitted
+# Identifying samples that should be omitted based on descrepancies between full and cleaned ysi data
 ```{r}
 ysi_clean <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi cleaned") %>% 
   clean_names() %>%
@@ -44,29 +44,5 @@ omissions <- ysi_complete %>%
 
 write_csv(omissions, here("water_quality", "data_outputs", "ysi_omitted.csv"))
 ```
-
-### 12:12:54 PM	4/29/2024	EBB1 should be EBB3
-### 11:50:42 AM	12/4/2024	BDB1 should be BDB3
-### 9:35:12 AM	3/11/2025	LDB3 should be LDB1
-### 1:24:40 PM	12/2/2025	FHB3 should be FHB1
-### 1:53:03 PM	1/1/2026	GIA3 should be GIA1
-
-# Removing omissions
-```{r}
-ysi_complete_filtered <- ysi_complete %>%
-  anti_join(
-    omissions,
-    by = c("date", "time", "site_code_depth")
-  )
-```
-
-
-# Checking for duplicates
-```{r}
-ysi_dup <- ysi_complete_filtered %>% group_by(site_code_depth, date) %>%
-  summarize(count = n()) %>%
-  filter(count >2) # should be only 2 samples (1 per probe) at each site/depth per day
-```
-
 
 
