@@ -196,13 +196,13 @@ benthic_2025 <- benthic_cover_year %>%
       ta    = "Turf algae",
       tas   = "Turf + sediment",
       fma   = "Fleshy macroalgae",
-      cma   = "Crustose macroalgae",
+      cma   = "Calc. macroalgae",
       ainv  = "Other inverts"
     ),
     metric = factor(metric, levels = c(
       "Live coral",
       "CCA",
-      "Crustose macroalgae",
+      "Calc. macroalgae",
       "Turf algae",
       "Turf + sediment",
       "Fleshy macroalgae",
@@ -375,7 +375,7 @@ p_delta_pc <- ggplot(delta_table,
     panel.grid.major.y = element_blank()
   )
 
-delta_benthic
+p_delta_pc
 ```
 
 #### Select metrics
@@ -1130,21 +1130,41 @@ ggplot(algal_height_year, aes(x = factor(year), y = mean)) +
 
 ### Delta plots
 ```{r}
+# Function to compute bootstrapped mean CI
+boot_mean_ci <- function(x, n_boot = 1000, conf = 0.95) {
+  boot_fn <- function(data, indices) mean(data[indices])
+  b <- boot::boot(x, statistic = boot_fn, R = n_boot)
+  ci <- boot::boot.ci(b, type = "perc")$percent[4:5]  # lower, upper
+  return(ci)
+}
+
+# Prepare FMA delta table with bootstrap CIs
 fma_delta <- algal_height_site %>%
   group_by(site, site_cat) %>%
   summarise(
-    delta = fma_height[year == max(year)] -
-            fma_height[year == min(year)],
+    delta = fma_height[year == max(year)] - fma_height[year == min(year)],
     .groups = "drop"
   ) %>%
   group_by(site_cat) %>%
   summarise(
     mean_delta = mean(delta, na.rm = TRUE),
-    ci_lower   = mean_delta - qt(0.975, df = n() - 1) * sd(delta, na.rm = TRUE) / sqrt(n()),
-    ci_upper   = mean_delta + qt(0.975, df = n() - 1) * sd(delta, na.rm = TRUE) / sqrt(n()),
-    metric     = "Fleshy macroalgal height",
+    ci = list(boot_mean_ci(delta)),
+    wilcox_p = wilcox.test(delta, mu = 0)$p.value,
     .groups = "drop"
+  ) %>%
+  mutate(
+    ci_lower = sapply(ci, `[[`, 1),
+    ci_upper = sapply(ci, `[[`, 2),
+    metric = "Fleshy macroalgal height"
+  ) %>%
+  select(site_cat, metric, mean_delta, ci_lower, ci_upper, wilcox_p) %>%
+  mutate(
+    mean_delta = round(mean_delta, 2),
+    ci_lower = round(ci_lower, 2),
+    ci_upper = round(ci_upper, 2),
+    wilcox_p = signif(wilcox_p, 3)
   )
+
 
 p_delta_fmah <- ggplot(fma_delta,
        aes(x = mean_delta, y = metric)) +
@@ -1154,6 +1174,10 @@ p_delta_fmah <- ggplot(fma_delta,
     height = 0.2
   ) +
   geom_point(size = 3) +
+    scale_x_continuous(
+    limits = c(-max(abs(fma_delta$ci_upper), abs(fma_delta$ci_lower)) * 1.1,
+               max(abs(fma_delta$ci_upper), abs(fma_delta$ci_lower)) * 1.1)
+  ) +
   facet_wrap(~ site_cat) +
   labs(
     x = "Mean change (cm)",
@@ -1967,7 +1991,7 @@ fish_bm_site <- rbind(fish_bm_site_temp, herb_bm_site_temp) %>%
 fish_bm_year <- fish_bm_site %>%
   group_by(year, site_cat, family, code) %>%
   summarize(mean = mean(avg),
-            std = sd(avg)) %>%
+            sd = sd(avg)) %>%
   # don't actually need this complete() here, but including as precaution
   group_by(year, site_cat) %>%
   complete(
@@ -1979,13 +2003,47 @@ fish_bm_year <- fish_bm_site %>%
 fish_bm_year_wide <- fish_bm_year %>%
   select(-code) %>%
   pivot_wider(names_from = family,
-              values_from = c(mean, std),
+              values_from = c(mean, sd),
               names_glue = "{family}_{.value}")
 
 # clean environment and export
 # rm(list = ls(pattern = "_temp$"))
 write.csv(fish_bm_year, here("agrra_monitoring", "data_outputs", "fish_bm_year.csv"))
 ```
+
+### Bar plots
+```{r}
+p_tot <- ggplot(fish_bm_year %>% filter(family == "Total"), aes(x = factor(year), y = mean)) +
+  geom_col() +
+  facet_wrap(. ~ site_cat) +
+  geom_hline(yintercept = 1300*1000/100, linetype = "dashed", color = "black") + # Karr et al 2015 - 1300 kg/ha - converting to g/100m2
+  # annotate("text", x = 3.5, y = 13500, size = 3, hjust = 1, label=c('Caribbean mean unfished biomass')) +
+  geom_errorbar(
+    aes(ymin = mean - sd, ymax = mean + sd),
+    width = 0.2      # width of the error bars
+  ) +
+  labs(x = NULL, y = "Total biomass (g/100m2)") +
+  theme_bw()
+
+p_herb <- ggplot(fish_bm_year %>% filter(family == "Herbivores"), aes(x = factor(year), y = mean)) +
+  geom_col() +
+  facet_wrap(. ~ site_cat) +
+  geom_hline(yintercept = 29.2*100, linetype = "dashed", color = "black") + # Edwards et al 2014 - 29.2 g/m2 - converting to g/100m2
+  # annotate("text", x = 3.5, y = 3100, size = 3, hjust = 1, label=c('Caribbean mean unfished biomass')) +
+  geom_errorbar(
+    aes(ymin = mean - sd, ymax = mean + sd),
+    width = 0.2      # width of the error bars
+  ) +
+  labs(x = NULL, y = "Herbivore biomass (g/100m2)") +
+  theme_bw()
+
+p <- p_tot / p_herb
+p
+
+ggsave(plot = p, here("agrra_monitoring", "figs", "fish_bm_bar.png"), width = 6, height = 6)
+```
+
+
 
 ### Line plots
 
@@ -2329,12 +2387,76 @@ scar_length_long <- scar_length_trans %>%
 
 scar_length_site <- scar_length_long %>%
   group_by(year, site, site_cat, length_mid) %>%
-  summarise(mean_prop = mean(prop), .groups = "drop")
+  summarise(mean_prop = mean(prop), .groups = "drop") %>%
+  mutate(length_mid = if_else(is.na(length_mid), 40, length_mid)) # considering >40 to be 40 bc scarids are rarely larger
 
-scar_length_year <- scar_length_site %>%
+scar_length_year_prop <- scar_length_site %>%
   group_by(year, site_cat, length_mid) %>%
   summarise(mean_prop = mean(mean_prop), .groups = "drop")
+
+scar_length_year <- scar_length_site %>%
+  group_by(site, site_cat, year) %>%
+  summarise(
+    mean_size = weighted.mean(length_mid, mean_prop, na.rm = TRUE),
+    .groups = "drop"
+  )
+
 ```
+
+#### Delta plots
+```{r}
+scar_length_year_chg <- scar_length_year %>%
+  mutate(
+    period = if_else(year %in% c(2017, 2019), "baseline", "2025")
+  ) %>%
+  pivot_wider(
+    id_cols = c(site, site_cat),
+    names_from = period,
+    values_from = mean_size
+  ) %>%
+  mutate(delta_size = `2025` - baseline)
+
+scar_length_delta <- scar_length_year_chg %>%
+  group_by(site_cat) %>%
+  summarise(
+    mean_delta = mean(delta_size, na.rm = TRUE),
+    ci = list(boot_mean_ci(delta_size)),
+    wilcox_p = wilcox.test(delta_size, mu = 0)$p.value,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    ci_lower = sapply(ci, `[[`, 1),
+    ci_upper = sapply(ci, `[[`, 2)
+  ) %>%
+  select(-ci) %>%
+  mutate(metric = "Scarid length")
+
+ggplot(scar_length_delta,
+       aes(x = mean_delta, y = metric)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper), height = 0.2) +
+  geom_point(size = 3) +
+  facet_wrap(~ site_cat) +
+  labs(
+    x = "Mean change (cm)",
+    y = NULL
+  ) +
+  scale_x_continuous(
+    limits = c(-max(abs(scar_length_delta$ci_upper), abs(scar_length_delta$ci_lower)) * 1.1,
+               max(abs(scar_length_delta$ci_upper), abs(scar_length_delta$ci_lower)) * 1.1)
+  ) +
+  theme_bw() +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    panel.grid.major.y = element_blank()
+  )
+
+
+ggsave(here("agrra_monitoring", "figs", "scar_length_delta.png"), width = 6, height = 2)
+
+```
+
 
 #### Density plots
 ```{r}
@@ -2406,11 +2528,11 @@ tab <- scar_counts %>%
 mat <- as.matrix(tab %>% select(-size_bin))
 row.names(mat) <- tab$size_bin
 
-mosaicplot(mat, 
+mosaicplot(t(mat), 
            color = TRUE,           # color each year
-           main = paste("Fish size distribution by year —", "NEMMA"),
-           xlab = "Size Bin",
-           ylab = "Year",
+           main = paste("Scarid size distribution by year —", "NEMMA"),
+           xlab = "",
+           ylab = "Size Bin",
            las = 1)                # rotate y-axis labels
 
 ```
@@ -2427,20 +2549,29 @@ tab <- scar_counts %>%
 mat <- as.matrix(tab %>% select(-size_bin))
 row.names(mat) <- tab$size_bin
 
-mosaicplot(mat, 
+mosaicplot(t(mat), 
            color = TRUE,           # color each year
-           main = paste("Fish size distribution by year —", "NDNP"),
-           xlab = "Size Bin",
-           ylab = "Year",
+           main = paste("Scarid size distribution by year —", "NDNP"),
+           xlab = "",
+           ylab = "Size Bin",
            las = 1)                # rotate y-axis labels
 
 ```
 
 #### Phase changes
 
-Currently only 2025 data, because appears that 2017/2019 have no phase data...?
+
+Data summary: (must use raw data because phase is not in any summaries)
+- 2017-2019: phase data is within count data
+- 2025: phase data is within taxonomic ID
 
 ```{r}
+
+
+# chk <- fish_tax_hist %>% # make sure taxonomic lookups are consistent
+#   full_join(fish_tax_2025, by = "id", suffix = c("_hist", "_2025")) %>%
+#   mutate(match = species_hist == species_2025)
+# ### they are not.... does this matter....?
 
 # raw historical data
 
@@ -2468,7 +2599,9 @@ fish_raw_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022"
                              sapply(str_split(length_mid, "_"), function(x) mean(as.numeric(x))),
                              as.numeric(length_mid))) %>%
   left_join(fish_tax_hist, by = c("taxonomy" = "id")) %>%
-  select(year, site, site_cat, trans = transect, size_class, length_mid, common_name, common_family, family, species) # no terminal phase in this data?
+  mutate(phase = case_when(terminal_phase == TRUE ~ "Terminal",
+                           TRUE                  ~ "Initial")) %>%
+  select(year, site, site_cat, trans = transect, size_class, length_mid, common_name, common_family, family, species, phase)
 
 # raw 2025 data
 
@@ -2476,10 +2609,6 @@ fish_tax_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025
   clean_names() %>%
   unite(species, genus, species, sep = " ", remove = TRUE)
 # could replace NA species with 'spp.' before uniting
-
-chk <- fish_tax_hist %>% # make sure taxonomic lookups are consistent
-  full_join(fish_tax_2025, by = "id", suffix = c("_hist", "_2025")) %>%
-  mutate(match = species_hist == species_2025)
 
 fish_raw_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Raw", "FishRaw.xlsx"), sheet = "Counts Raw") %>%
   clean_names() %>%
@@ -2496,8 +2625,7 @@ fish_raw_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025
                           select(transect = id, survey, date = surveyed) %>%
                           left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Raw", "Metadata.xlsx"), sheet = "Survey") %>%
                                       clean_names() %>%
-                                      select(survey = id, site = name)))
-  ) %>%
+                                      select(survey = id, site = name)))) %>%
   clean_names() %>%
   mutate(year = year(date),
          size_class = str_replace_all(size_class, " - ", "_"),
@@ -2511,23 +2639,42 @@ fish_raw_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025
                              sapply(str_split(length_mid, "_"), function(x) mean(as.numeric(x))),
                              as.numeric(length_mid))) %>%
   left_join(fish_tax_2025, by = c("taxonomy" = "id")) %>%
-  select(year, site, site_cat, trans = transect, size_class, length_mid, common_name, common_family, family, species, terminal_phase)
+  mutate(phase = if_else(terminal_phase == "Yes", "Terminal", "Initial")) %>%
+  select(year, site, site_cat, trans = transect, size_class, length_mid, common_name, common_family, family, species, phase) 
 
 # merge all years
 
-# fish_raw <- bind_rows(fish_raw_hist, fish_raw_2025)
+fish_raw <- bind_rows(fish_raw_hist, fish_raw_2025) %>%
+  filter(year %in% c(2017, 2019, 2025)) %>%
+  mutate(baseline = if_else(year %in% c(2017, 2019), "baseline", "2025")) %>%
+  group_by(site, year) %>%
+  filter(n_distinct(trans) >= 8) %>%
+  ungroup() %>%
+  group_by(site) %>%
+  filter(n_distinct(year) > 1) %>%
+  ungroup()
+
+
+chk_n_trans <- fish_raw %>%
+  group_by(site, site_cat, year) %>%
+  summarise(
+    n_transects = n_distinct(trans),
+    .groups = "drop"
+  )
 
 # scarids only
 
-scarids <- fish_raw_2025 %>%
+scarids <- fish_raw %>%
   filter(species %in% c("Sparisoma viride", "Sparisoma aurofrenatum", "Scarus vetula", "Scarus iseri")) %>%
-  mutate(sex = case_when(terminal_phase == "No" ~ "Female",
-                         terminal_phase == "Yes" ~ "Male"),
+  mutate(
+    # sex = case_when(terminal_phase == "No" ~ "Female",
+    #                      terminal_phase == "Yes" ~ "Male"),
          size_class = factor(size_class, levels = c("0_5","6_10","11_20","21_30", "31_40", "41_50")))
 
-ggplot(scarids, aes(x = length_mid, fill = sex)) +
+ggplot(scarids, aes(x = length_mid, fill = phase)) +
   geom_histogram(stat = "count", alpha = 0.8, position = position_dodge()) +
-  facet_wrap(vars(species), ncol = 4) +
+  facet_grid(baseline ~ species) +
+  # facet_wrap(vars(species), ncol = 4) +
   geom_vline(data = filter(scarids, species == "Sparisoma viride"), aes(xintercept = 18, color = "Minimum length at maturity"), linetype = "dashed") +
   geom_vline(data = filter(scarids, species == "Scarus vetula"), aes(xintercept = 19, color = "Minimum length at maturity"), linetype = "dashed") +
   geom_vline(data = filter(scarids, species == "Sparisoma aurofrenatum"), aes(xintercept = 15, color = "Minimum length at maturity"), linetype = "dashed") +
@@ -2540,6 +2687,8 @@ ggplot(scarids, aes(x = length_mid, fill = sex)) +
         legend.title = element_blank(),
         legend.position = "top",
         axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here("agrra_monitoring", "figs", "scarid_phases.png"), width = 8, height = 6)
 ```
 
 
