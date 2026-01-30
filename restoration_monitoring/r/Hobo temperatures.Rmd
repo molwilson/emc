@@ -16,6 +16,8 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
 ```{r}
+fig_folder <- here("water_quality", "figs", "2026 Jan")
+
 cades <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Cades") %>%
   clean_names() %>%
   slice(-1) %>% # remove first row 
@@ -51,7 +53,14 @@ temp_data <- rbind(cades, tpb, jumby) %>%
   mutate(temp_diff = temp_c - lag(temp_c)) %>% # create helper column
   filter(is.na(temp_diff) | temp_diff <= 2) %>%  # keep if first row or <= 2 °C jump
   ungroup() %>%
-  select(-temp_diff) # drop helper column
+  select(-temp_diff) %>% # drop helper column
+  # accounting for data gaps - adding NA so they don't plot connecting lines
+  arrange(logger, date_time) %>%
+  group_by(logger) %>%
+  mutate(gap = difftime(date_time, lag(date_time), units = "hours"),
+         temp_c = if_else(gap > 6, NA_real_, temp_c)  # adjust threshold!
+  ) %>%
+  ungroup()
 
 # define references
 lab_temp <- expression("Temperature ("*~degree*C*")")
@@ -78,7 +87,7 @@ ggplot() +
   labs(x = "", y = "Temperature (°C)", color = "Nursery location", fill = "") +
   theme_bw() +
   theme(legend.position = "top")
-ggsave(here("restoration_monitoring", "figs", "hobo_summary_25-26_Q2.png"), width = 6, height = 4)
+ggsave(here(fig_folder, "hobo_summary.png"), width = 6, height = 4)
 
 ggplot(temp_data,
        aes(x = date_time, y = temp_c)) +
@@ -88,16 +97,16 @@ ggplot(temp_data,
   facet_grid(. ~ logger) +
   labs(x = "", y = "Temperature (°C)") +
   theme_bw()
-ggsave(here("restoration_monitoring", "figs", "hobo_nursery_25-26_Q2.png"), width = 6, height = 4)
+ggsave(here(fig_folder, "hobo_nursery.png"), width = 6, height = 4)
 
-ggplot(temp_data %>% filter(logger == "Cades"),
-       aes(x = date_time, y = temp_c)) +
-  geom_line(alpha = 0.9, size = 0.3, color = "cadetblue") +
-  geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed', color = "coral") +
-  scale_x_datetime(date_labels = "%b %Y", date_breaks = "3 months") +
-  scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
-  labs(x = "", y = "Temperature (°C)") +
-  theme_bw()
-ggsave(here("restoration_monitoring", "figs", "hobo_cades_25-26_Q2.png"), width = 6, height = 4)
+# ggplot(temp_data %>% filter(logger == "Cades"),
+#        aes(x = date_time, y = temp_c)) +
+#   geom_line(alpha = 0.9, size = 0.3, color = "cadetblue") +
+#   geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed', color = "coral") +
+#   scale_x_datetime(date_labels = "%b %Y", date_breaks = "3 months") +
+#   scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
+#   labs(x = "", y = "Temperature (°C)") +
+#   theme_bw()
+# ggsave(here(fig_folder, "hobo_cades.png"), width = 6, height = 4)
 ```
 
