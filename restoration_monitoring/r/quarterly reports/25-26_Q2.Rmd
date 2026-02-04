@@ -82,9 +82,6 @@ datatable(gb_perf,
 
 ## Nursery stats
 
-- Missing frag counts from TPB shallow table - just included genotypes there for species/genotype counts
-- Missing dome counts from Jumby - copied August numbers as placeholder 
-
 ```{r}
 nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
   clean_names() %>%
@@ -194,7 +191,7 @@ datatable(frags_structure,
 letter_names <- function(nms) LETTERS[seq_along(nms)]
 
 map_york <- read_excel(here("restoration_monitoring", "data_raw", "Nursery map.xlsx"), sheet = "York", 
-                   range = "A1:F9", col_names = FALSE, .name_repair = letter_names) %>%
+                   range = "A1:G9", col_names = FALSE, .name_repair = letter_names) %>%
   mutate(row = row_number()) %>%
   pivot_longer(cols = -row, 
                names_to = "col", 
@@ -285,11 +282,16 @@ diff_nmap <- anti_join(nursery_maps %>% select(nursery, location, genotype),
 
 diff_nmon <- anti_join(nurs_mon_last %>% select(nursery, location, genotype), 
                        nursery_maps %>% select(nursery, location, genotype), 
-                       by = c("nursery", "location", "genotype"))
+                       by = c("nursery", "location", "genotype")) %>%
+  anti_join( # removing GB locations because those are not in maps by genotype
+   rbind(map_york, map_tpb, map_cades, map_jumby) %>%
+     filter(str_detect(genotype, "GB")) %>% select(nursery, location),
+    by = c("nursery", "location")
+  )
 
 diff_locations <- bind_rows(
   mutate(diff_nmap, source = "nursery maps"),
-  mutate(diff_nmon, source = "nursery monitoring"))
+  mutate(diff_nmon, source = "nursery monitoring")) 
 
 kable(diff_locations)
 ```
