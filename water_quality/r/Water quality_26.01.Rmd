@@ -300,7 +300,7 @@ atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_ad
   st_sf()
 
 # Antigua boundaries
-lons = c(-61.92, -61.65)
+lons = c(-61.94, -61.62)
 lats = c(16.98, 17.19)
 
 ggplot() +
@@ -310,8 +310,8 @@ ggplot() +
                filter(active == "Y") %>% # don't include site_codes with overlapping site names
                select(site_code, site_cat, latitude, longitude) %>%
                distinct(), 
-             mapping = aes(x = longitude, y = latitude, shape = site_cat), 
-             alpha = 0.9, color = "black", size = 1) + # add sites
+             mapping = aes(x = longitude, y = latitude), # , shape = site_cat
+             alpha = 0.9, color = "orange", size = 2) + # add sites
   scale_shape_manual(values = c(1, 16)) +
   labs(shape = "") +
   theme_void() +
@@ -323,8 +323,7 @@ ggplot() +
         #plot.background = element_rect(fill = "lightblue", color = NA)    # entire plot background
  )
 
-### missing Jumby Control lat/lon
-ggsave(here(fig_folder, "sites_map.png"), width = 5, height = 4)
+ggsave(here(fig_folder, "sites_map_pres.png"), width = 5, height = 4)
 ```
 
 # Results
@@ -438,6 +437,22 @@ ggsave(here(fig_folder, "entero_interannual.png"), width = 6, height = 4)
 ##### Enterococcus maps
 
 ```{r, error = FALSE}
+# clean dataset (adding Aug 2025 = 0 here due to missing data)
+data_mon_entero <- data_mon %>%
+  select(year, date_label, site_name, latitude, longitude, n_colonies, entero_yn)
+
+aug_2025 <- data_mon_entero %>%
+  distinct(site_name, latitude, longitude) %>%
+  mutate(
+    date_label = "Aug 2025",
+    n_colonies = 0,
+    entero_yn = "Absent",
+    year = 2025
+  )
+
+data_mon_entero <- bind_rows(data_mon_entero, aug_2025)
+
+
 # Antigua shapefile
 atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
   st_union() %>%
@@ -458,12 +473,12 @@ lats = c(17.03, 17.10)
 ggplot() +
   geom_sf(data = atg, fill = "slategray", color = "slategray") + # ATG basemap
   coord_sf(xlim = lons, ylim = lats, expand = FALSE) + # setting map boundaries
-  geom_point(data_mon, 
+  geom_point(data_mon_entero %>% filter(year %in% c(2024, 2025)), 
              mapping = aes(x = longitude, y = latitude, color = entero_yn, size = n_colonies), 
              alpha = 0.7) + # add sites
   scale_color_manual(values = c("turquoise", "tomato")) +
   facet_wrap(. ~ factor(date_label, levels = c("Oct 2023", "Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024", "Jul 2024", "Aug 2024", "Sep 2024", "Oct 2024", "Nov 2024", "Dec 2024", "Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025", "Jul 2025", "Aug 2025", "Sep 2025", "Oct 2025", "Nov 2025", "Dec 2025", "Jan 2026")),
-             ncol = 6) +
+             ncol = 12) +
   labs(size = expression("Concentration (CFU "*mL^-1*")"),
        color = expression("Enterococci detection")) +
   theme_bw() +
@@ -472,7 +487,7 @@ ggplot() +
         axis.ticks = element_blank(),
         legend.position = "top")
 
-ggsave(here(fig_folder, "entero_map.png"), width = 10, height = 9)
+ggsave(here(fig_folder, "entero_map_24-25.png"), width = 10, height = 6)
 ```
 
 ##### Boat play
