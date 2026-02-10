@@ -10,6 +10,7 @@ output:
     theme: cerulean
     highlight: haddock
 ---
+# Setup
 
 ```{r, message = F, warning = F, echo = F}
 library(tidyverse)
@@ -33,7 +34,7 @@ q_start <- "2025-10-01"
 q_end <- "2026-01-15" # extending for recent data collection
 
 # biannual settings
-b_start <- "2025-07-01"
+b_start <- "2025-12-01" # adjusted for outplant monitoring
 b_end <- "2026-01-15" # extending for recent data collection
 ```
 
@@ -375,12 +376,16 @@ datatable(outplant_genotypes,
 ```{r}
 outplant_monitoring <- read_excel(here("restoration_monitoring", "data_raw", "genotype tracking.xlsx"), sheet = "outplant monitoring") %>% 
   clean_names() %>%
-  filter(!is.na(n_healthy) & # filtering out any genotypes with missing data
+  filter(!is.na(n_healthy) & # filtering out any genotypes with missing data which includes "not found"
           date_monitored >= as.Date(b_start) & 
           date_monitored <= as.Date(b_end)) %>% 
+  group_by(id, site) %>%
+  slice_max(date_monitored, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
   mutate(genotype = substr(id, 1, 6),
          species = substr(id, 1, 4),
-         n_planted = as.numeric(n_planted),
+         n_disease = replace_na(n_disease, 0),
+         n_planted = coalesce(as.numeric(n_planted), n_healthy + n_disease),
          date_monitored = ymd(date_monitored),
          date_planted = ymd(date_planted))
 ```
@@ -395,7 +400,8 @@ outplant_perf_site <- outplant_monitoring %>%
   mutate(survival = n_healthy/n_planted)
 
 datatable(outplant_perf_site,
-          rownames = FALSE)
+          rownames = FALSE) %>%
+  formatRound("survival", 3)
 ```
 
 ### By species
@@ -408,7 +414,8 @@ outplant_perf_spp <- outplant_monitoring %>%
   mutate(survival = n_healthy/n_planted)
 
 datatable(outplant_perf_spp,
-          rownames = FALSE)
+          rownames = FALSE) %>%
+  formatRound("survival", 3)
 ```
 
 ### By genotype
@@ -422,7 +429,8 @@ outplant_perf_genotype <- outplant_monitoring %>%
   select(genotype, n_outplanted = n_planted, n_outplants = n_healthy, outplant_survival = survival)
 
 datatable(outplant_perf_genotype,
-          rownames = FALSE)
+          rownames = FALSE) %>%
+  formatRound("outplant_survival", 3)
 ```
 
 # Genotype tracking

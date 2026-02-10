@@ -441,9 +441,9 @@ p_base <- ggplot() +
   theme(
     panel.background = element_rect(fill = "steelblue"),
     panel.grid = element_blank(),
-    legend.position = "right",
+    legend.position = "bottom",
     legend.key = element_blank(),
-    plot.title = element_text(hjust = 0.5))
+    plot.title = element_text(hjust = 0.5, size = 16))
 ```
 
 #### Static
@@ -492,8 +492,9 @@ p_anim <- p_base +
   geom_point(data = shark_df_plot,
              aes(x = x, y = y, group = pttid, color = pttid),
              size = 2) +
-  scale_color_discrete(
+  scale_color_manual(
     name = "Total length & Sex",
+    values = c("coral1", "goldenrod1", "seagreen1", "turquoise2"),
     labels = setNames(shark_key$length_sex, shark_key$pttid)
   ) +
   labs(x = NULL, y = NULL, color = "Total length & Sex",
@@ -504,9 +505,9 @@ p_anim <- p_base +
 anim <- gganimate::animate(
   p_anim,
   nframes = 150, fps = 10,
-  width = 1500,
+  width = 800,
   renderer = gifski_renderer())
-anim_save(here("tagging", "figs", "shark_track_mult_esri.gif"), animation = anim)
+anim_save(here("tagging", "figs", "shark_track_mult_esri1.gif"), animation = anim)
 ```
 
 ##### Individual sharks
