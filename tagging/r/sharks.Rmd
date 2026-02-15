@@ -17,6 +17,11 @@ library(ggplot2)
 library(ggspatial)
 library(gganimate)
 library(patchwork)
+library(png)
+library(jpeg)
+library(grid)
+library(cowplot)
+library(gridExtra)
 ```
 
 # Import + format data
@@ -116,7 +121,21 @@ pttid_list <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
   unique()
 
 pings <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
-  mutate(date = as.Date(as.numeric(date_detected), origin = "1899-12-30")) %>%
+  # mutate(date = as.Date(as.numeric(date_detected), origin = "1899-12-30")) %>%
+  mutate(
+    date = case_when(
+      # Excel numeric dates (including "45838" stored as character)
+      !is.na(suppressWarnings(as.numeric(date_detected))) ~
+        as.Date(as.numeric(date_detected), origin = "1899-12-30"),
+
+      # Everything else: let lubridate figure it out
+      TRUE ~
+        as.Date(parse_date_time(
+          date_detected,
+          orders = c("ymd", "mdy", "dmy")
+        ))
+    )
+  ) %>%
   # slice(-c(3, 4, 8)) %>% # 3 points displayed as on land
   select(pttid, date, lat = latitude_n, lon = longitude_w) %>%
   rbind(tagging %>%
@@ -130,18 +149,29 @@ pings <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
 
 temps <- map_dfr(all_blocks, ~ .x[["DTTEMP"]]) %>%
   select(pttid, date, sst = sea_surface_temp_c, adt = at_depth_temp_c) %>%
-  mutate(date = as.Date(date),
-         across(c(sst, adt), as.numeric))
+  mutate(date = case_when( # dealing with multiple excel date types
+    !is.na(suppressWarnings(as.numeric(date))) ~
+      as.Date(as.numeric(date), origin = "1899-12-30"),
+    TRUE ~
+      as.Date(parse_date_time(
+        date,
+        orders = c("ymd", "mdy", "dmy")))),
+    across(c(sst, adt), as.numeric))
 
-depth  <- map_dfr(all_blocks, ~ .x[["DTDPT"]]) %>%
+depth <- map_dfr(all_blocks, ~ .x[["DTDPT"]]) %>%
   select(pttid, date, contains("depth")) %>%
-  mutate(date = as.Date(date),
-         across(contains("depth"), as.numeric))
+  mutate(date = case_when( # dealing with multiple excel date types
+    !is.na(suppressWarnings(as.numeric(date))) ~
+      as.Date(as.numeric(date), origin = "1899-12-30"),
+    TRUE ~
+      as.Date(parse_date_time(
+        date,
+        orders = c("ymd", "mdy", "dmy")))),
+    across(contains("depth"), as.numeric))
 
-# join into one df
 shark_data <- left_join(temps, depth, by = c("pttid", "date")) %>%
   mutate(pttid = as.character(pttid)) %>%
-  left_join(pings, by = c("date", "pttid")) %>%
+  left_join(pings %>% select(pttid, date, lat, lon), by = c("pttid", "date")) %>%
   left_join(tagging %>%
               select(pttid, sex, species, length_tot, length_sex), 
             by = c("pttid"))
@@ -433,6 +463,21 @@ ylim_3857 <- bb_3857[c("ymin", "ymax")]
 ### Plot
 
 ```{r}
+# load logos
+logo_folder <- here("tagging", "logos")
+logo_anublue <- rasterGrob(readPNG(here(logo_folder, "AnuBlue.png")), interpolate = TRUE)
+logo_gef <- rasterGrob(readJPEG(here(logo_folder, "GEF.jpg")), interpolate = TRUE)
+logo_sgp <- rasterGrob(readJPEG(here(logo_folder, "SGP.jpg")), interpolate = TRUE)
+logo_sgp_small <- editGrob(logo_sgp, vp = viewport(width = 0.6, height = 0.6))
+logo_undp <- rasterGrob(readPNG(here(logo_folder, "UNDP.png")), interpolate = TRUE)
+
+# combine logos into strip
+logo_strip <- plot_grid(
+  logo_anublue, logo_gef, logo_sgp_small, logo_undp,
+  nrow = 1,
+  rel_widths = c(1, 1, 1, 1)  # tweak if one logo needs more space
+)
+
 # base / background (rendered once)
 p_base <- ggplot() +
   annotation_map_tile(type = esri_world_imagery, progress = "none", zoomin = 0) +
@@ -441,9 +486,16 @@ p_base <- ggplot() +
   theme(
     panel.background = element_rect(fill = "steelblue"),
     panel.grid = element_blank(),
-    legend.position = "bottom",
+    legend.position = "right",
     legend.key = element_blank(),
     plot.title = element_text(hjust = 0.5, size = 16))
+
+p_base_logos <- plot_grid(
+  p_base,
+  logo_strip,
+  ncol = 1,
+  rel_heights = c(.5, 0.15)  # logo height ~12% of total
+)
 ```
 
 #### Static
@@ -464,9 +516,11 @@ p_static <- p_base +
     data = shark_df_plot,
     aes(x = x, y = y, group = pttid, color = pttid),
     size = 1) +
-  scale_color_discrete(
-    name = "Total length - Sex",
-    labels = setNames(shark_key$length_sex, shark_key$pttid)) +
+scale_color_manual(
+    name = "Total length & Sex",
+    values = c("coral1", "goldenrod1", "seagreen1", "turquoise2"),
+    labels = setNames(shark_key$length_sex, shark_key$pttid)
+  ) +
   labs(x = NULL, y = NULL, title = NULL)
 
 ggsave(here("tagging", "figs", "shark_track_mult_esri.png"), plot = p_static, width = 10, height = 10)
@@ -498,16 +552,19 @@ p_anim <- p_base +
     labels = setNames(shark_key$length_sex, shark_key$pttid)
   ) +
   labs(x = NULL, y = NULL, color = "Total length & Sex",
-       title = "Tiger shark movement over time: {frame_along}") +
-  transition_reveal(along = date)
+       title = 'Tiger shark movement: {format(frame_along, "%B %d, %Y")}') +
+  transition_reveal(along = date) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0, size = 27, face = "bold"))
 
 # render + save
-anim <- gganimate::animate(
+anim <- animate(
   p_anim,
   nframes = 150, fps = 10,
-  width = 800,
-  renderer = gifski_renderer())
-anim_save(here("tagging", "figs", "shark_track_mult_esri1.gif"), animation = anim)
+  width = 600, height = 800,
+  renderer = gifski_renderer()
+)
+anim_save(here("tagging", "figs", "shark_track_mult_esri.gif"), animation = anim)
 ```
 
 ##### Individual sharks
@@ -683,7 +740,7 @@ p_temp <- ggplot(shark_data, aes(x = date, group = pttid)) +
                                    sst = "Sea surface temp.",
                                    adt = "At-depth temp.")),
             aes(y = temp, color = type, group = interaction(pttid, type)),
-            size = 0.4) +
+            linewidth = 0.4) +
   scale_color_manual(values = c("Sea surface temp." = "coral",
                                 "At-depth temp." = "goldenrod")) +
   theme_bw() +
@@ -707,7 +764,7 @@ p_depth <- ggplot(shark_data, aes(x = date)) +
                                    mean_depth_m = "Mean depth",
                                    max_depth_m = "Max. depth")),
             aes(y = depth, color = type, group = interaction(pttid, type)),
-            size = 0.8) +
+            linewidth = 0.8) +
   scale_y_reverse() +
   scale_color_manual(values = c("Min. depth" = "lightblue",
                                 "Mean depth" = "gray50",
@@ -729,20 +786,20 @@ p_depth_indv <- ggplot(shark_data, aes(x = date)) +
                                    mean_depth_m = "Mean depth",
                                    max_depth_m = "Max. depth")),
             aes(y = depth, color = type, group = interaction(pttid, type)),
-            size = 0.8) +
-  geom_point(data = shark_data %>%
-               filter(!is.na(lat)),
-             aes(y = min_depth_m),
-             shape = 21, fill = "indianred2", color = "indianred2", size = 2, alpha = 0.7) +
+            linewidth = 0.8) +
+  # geom_point(data = shark_data %>%
+  #              filter(!is.na(lat)),
+  #            aes(y = min_depth_m),
+  #            shape = 21, fill = "indianred2", color = "indianred2", size = 2, alpha = 0.7) +
   scale_y_reverse() +
   scale_color_manual(values = c("Min. depth" = "lightblue",
                                 "Mean depth" = "gray50",
                                 "Max. depth" = "steelblue")) +
-  facet_wrap(~ pttid) +
+  facet_wrap(~ pttid, ncol = 2) +
   theme_bw() +
   theme(legend.position = "top") +
   labs(color = "", y = "Depth (m)", x = "")
-ggsave(here("tagging", "figs", "shark_depth_indv.png"), plot = p_depth_indv, width = 6, height = 6)
+ggsave(here("tagging", "figs", "shark_depth_indv.png"), plot = p_depth_indv, width = 8, height = 6)
 
 # animated plots - turn off ribbon
 # p_anim <- p_depth +
@@ -751,13 +808,13 @@ ggsave(here("tagging", "figs", "shark_depth_indv.png"), plot = p_depth_indv, wid
 # anim <- gganimate::animate(p_anim, nframes = 100, fps = 10, width = 800, height = 600)
 # anim_save(here("tagging", "figs", "shark_depth.gif"), animation = anim)
 # 
-# p_anim <- p_depth +
-#   facet_wrap(~ pttid) +
-#   theme_bw(base_size = 18) +
-#   theme(legend.position = "top") +
-#   transition_reveal(date)
-# anim <- gganimate::animate(p_anim, nframes = 100, fps = 10, width = 800, height = 600)
-# anim_save(here("tagging", "figs", "shark_depth_indv.gif"), animation = anim)
+p_anim <- p_depth +
+  facet_wrap(~ pttid) +
+  theme_bw(base_size = 18) +
+  theme(legend.position = "top") +
+  transition_reveal(date)
+anim <- gganimate::animate(p_anim, nframes = 100, fps = 10, width = 800, height = 600)
+anim_save(here("tagging", "figs", "shark_depth_indv.gif"), animation = anim)
 ```
 
 ## Panels
