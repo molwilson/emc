@@ -1,0 +1,146 @@
+---
+title: "Manatee Sightings - Eastern Caribbean"
+author: "Molly Wilson"
+date: "2026-02-15"
+output: html_document
+---
+# Setup
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(here)
+library(janitor)
+library(lubridate)
+library(scales)
+library(sf)
+library(ggplot2)
+library(ggspatial)
+library(gganimate)
+```
+
+# Import data
+```{r}
+sightings <- read_excel(here("mapping", "data", "Manatee sightings.xlsx"), sheet = "sightings") %>%
+  clean_names() %>%
+  select(-source) %>%
+  mutate(date = as.Date(date),
+         date_num <- as.numeric(date))
+```
+
+# Mapping
+
+## ESRI plots
+*Projection = 3857 (compatible with Google Maps)*
+
+### Prep
+
+```{r}
+# link ESRI layers
+esri_ocean <- paste0('https://services.arcgisonline.com/arcgis/rest/services/','Ocean/World_Ocean_Base/MapServer/tile/${z}/${y}/${x}.jpeg')
+esri_world_imagery <- "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}.jpeg"
+
+# convert to sf and reproject with 3857 projection
+sightings_sf_3857 <- st_as_sf(sightings, coords = c("lon", "lat"), crs = 4326) %>% # og projection was 4326
+  st_transform(3857) 
+
+# extract point data
+sightings_df_3857 <- sightings_sf_3857 %>%
+  mutate(x = st_coordinates(.)[,1],
+         y = st_coordinates(.)[,2]) %>%
+  st_set_geometry(NULL)
+
+# manual bounding box in degrees
+lon_range <- c(-63.75, -60.53)  # min and max longitude
+lat_range <- c(15.5, 18.8)    # min and max latitude
+
+# sf bbox from degrees
+bb_deg <- st_as_sfc(st_bbox(c(
+  xmin = lon_range[1], xmax = lon_range[2],
+  ymin = lat_range[1], ymax = lat_range[2]
+), crs = 4326))  # assign CRS as degrees (EPSG 4326)
+
+# transform bbox to 3857
+bb_3857 <- st_transform(bb_deg, 3857)
+
+# extract numeric limits
+bb_3857_coords <- st_bbox(bb_3857)
+
+xlim_3857 <- c(bb_3857_coords["xmin"], bb_3857_coords["xmax"])
+ylim_3857 <- c(bb_3857_coords["ymin"], bb_3857_coords["ymax"])
+```
+
+### Plot
+
+```{r}
+# base / background (rendered once)
+p_base <- ggplot() +
+  annotation_map_tile(type = esri_world_imagery, progress = "none", zoomin = 0) +
+  coord_sf(crs = st_crs(3857), xlim = xlim_3857, ylim = ylim_3857, expand = FALSE) +
+  # annotate("rect",
+  #          xmin = -Inf, xmax = Inf,
+  #          ymin = -Inf, ymax = Inf,
+  #          alpha = 0.1, fill = "white") +
+  theme_bw(base_size = 18) +
+  theme(
+    panel.background = element_rect(fill = "steelblue"),
+    panel.grid = element_blank(),
+    axis.text = element_text(size = 10),
+    # axis.text.x = element_text(angle = 90),
+    plot.title = element_text(hjust = 0.5, size = 16))
+```
+
+#### Static
+```{r}
+date_min <- as.numeric(as.Date("2025-07-03"))
+date_max <- as.numeric(as.Date("2026-02-07"))
+
+p_static <- p_base +
+  geom_point(data = sightings_df_3857,
+             aes(x = x, y = y, color = date),
+             size = 2, shape = 1) +
+  scale_color_gradientn(colors = c("cyan", "coral"),
+                       limits = c(date_min, date_max),
+                       breaks = c(date_min, date_max),
+                       oob = squish,
+                       labels = function(x) format(as.Date(x, origin = "1970-01-01"), "%b %d %Y")) +
+  labs(x = NULL, y = NULL, title = NULL, color = NULL) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 12))
+
+ggsave(here("mapping", "figs", "manatees_esri.png"), plot = p_static, width = 6, height = 8)
+```
+
+#### Animation
+
+```{r}
+# Antigua only - for scale?
+
+# create a df of all dates to include dates with no sightings
+all_dates <- seq(min(sightings_df_3857$date), max(sightings_df_3857$date), by = "day")
+
+sightings_cumulative <- sightings_df_3857 %>%
+  tidyr::crossing(frame_date = all_dates) %>%
+  filter(date <= frame_date)  # only show points that have already appeared
+
+# animate overlay (rendered repeatedly)
+p_anim <- p_base +
+  geom_point(data = sightings_cumulative,
+             aes(x = x, y = y),
+             colour = "goldenrod1", size = 1, alpha = .8) +
+  labs(x = NULL, y = NULL,
+       title = 'Manatee sightings: {frame_time}') +
+transition_manual(frame_date) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0, size = 27, face = "bold"))
+
+# render + save
+anim <- animate(
+  p_anim,
+  nframes = 150, fps = 10,
+  width = 600, height = 800,
+  renderer = gifski_renderer()
+)
+anim_save(here("mapping", "figs", "manatees_esri.gif"), animation = anim)
+```
+

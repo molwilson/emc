@@ -17,12 +17,14 @@ library(ggplot2)
 library(ggspatial)
 library(gganimate)
 library(patchwork)
-library(png)
-library(jpeg)
-library(grid)
-library(cowplot)
-library(gridExtra)
+# library(png)
+# library(jpeg)
+# library(grid)
+# library(cowplot)
+# library(gridExtra)
 ```
+
+*CONVERT ALL DATES TO PLAIN TEXT WITHIN EXCEL FIRST TO AVOID FORMATTING ISSUES WITH INCONSISTENT DATA SOURCES*
 
 # Import + format data
 
@@ -33,7 +35,7 @@ tagging <- read_excel(here("tagging", "data_raw", "Shark tagging data.xlsx"), sh
   filter(!str_detect(as.character(date), "[A-Za-z]") & sat_ptt != "NA") %>% # remove any placeholder dates
   mutate(date = as.Date(as.numeric(date), origin = "1899-12-30"),
          length_sex = paste0(tl, "cm-", sex)) %>%
-  select(pttid = sat_ptt, date, lat = lattitude, lon = longitude, sex, species, length_tot = tl, length_sex)
+  select(pttid = sat_ptt, date, lat = latitude, lon = longitude, sex, species, length_tot = tl, length_sex)
 
 tagging <- read_excel(here("tagging", "data_raw", "Shark tagging data.xlsx"), sheet = "Tagging") %>% 
   clean_names() %>%
@@ -51,7 +53,7 @@ tagging <- read_excel(here("tagging", "data_raw", "Shark tagging data.xlsx"), sh
       sex_full)
   ) %>%
   select(
-    pttid = sat_ptt, date,lat = lattitude, lon = longitude, sex, species, length_tot = tl, length_sex)
+    pttid = sat_ptt, date,lat = latitude, lon = longitude, sex, species, length_tot = tl, length_sex)
 
 ```
 
@@ -120,8 +122,7 @@ pttid_list <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
   pull(pttid) %>%
   unique()
 
-pings <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
-  # mutate(date = as.Date(as.numeric(date_detected), origin = "1899-12-30")) %>%
+pings_argos <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
   mutate(
     date = case_when(
       # Excel numeric dates (including "45838" stored as character)
@@ -136,16 +137,15 @@ pings <- map_dfr(all_blocks, ~ .x[["DTPNG"]]) %>%
         ))
     )
   ) %>%
-  # slice(-c(3, 4, 8)) %>% # 3 points displayed as on land
   select(pttid, date, lat = latitude_n, lon = longitude_w) %>%
+  mutate(category = "Ping") %>%
   rbind(tagging %>%
           filter(pttid %in% pttid_list) %>%
-          select(pttid, date, lat, lon)) %>%
-  arrange(date) %>%
+          select(pttid, date, lat, lon) %>%
+          mutate(category = "Deployment")) %>%
   left_join(tagging %>%
-              select(pttid, sex, species, length_tot, length_sex), 
+              select(pttid, sex, species, length_tot, length_sex),
             by = c("pttid"))
-# create shark label here?
 
 temps <- map_dfr(all_blocks, ~ .x[["DTTEMP"]]) %>%
   select(pttid, date, sst = sea_surface_temp_c, adt = at_depth_temp_c) %>%
@@ -171,24 +171,479 @@ depth <- map_dfr(all_blocks, ~ .x[["DTDPT"]]) %>%
 
 shark_data <- left_join(temps, depth, by = c("pttid", "date")) %>%
   mutate(pttid = as.character(pttid)) %>%
-  left_join(pings %>% select(pttid, date, lat, lon), by = c("pttid", "date")) %>%
+  left_join(pings_argos %>% select(pttid, date, lat, lon), by = c("pttid", "date")) %>%
   left_join(tagging %>%
               select(pttid, sex, species, length_tot, length_sex), 
             by = c("pttid"))
+```
+## Raw Swimway data
+
+```{r}
+pings_swimway <- read_excel(here("tagging", "data_raw", "Sattag data OpSwimaway 2023.xlsx"), sheet = "Tag data formatted") %>% 
+  clean_names() %>%
+  fill(pttid, sex, species) %>%
+  mutate(date = dmy(date)) %>%
+  left_join(tagging %>% select(pttid, length_tot, length_sex), by = "pttid") %>%
+  select(pttid, date, lat = latitude, lon = longitude, category, sex, species, length_tot, length_sex)
 ```
 
 
 ## Integrate data sources
 
-# Mapping
+```{r}
+pings <- rbind(pings_argos, pings_swimway) %>%
+  mutate(species = as.character(species)) %>% # for filtering in maps
+  arrange(date)
+```
+
+
+# Mapping - ESRI
+
+*Projection = 3857 (must reproject dataset)*
+
+## Prep
+
+```{r}
+# link ESRI layers
+esri_ocean <- paste0('https://services.arcgisonline.com/arcgis/rest/services/','Ocean/World_Ocean_Base/MapServer/tile/${z}/${y}/${x}.jpeg')
+esri_world_imagery <- "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}.jpeg"
+
+# function to prep data and bounding boxes based on dif data subsets
+prepare_shark_df <- function(pings, pttids = NULL, buffer_prop = 0.5, crs_out = 3857) {
+  
+  # filter PTTIDs if provided
+  data_sub <- if (!is.null(pttids)) {
+    pings %>% filter(pttid %in% pttids)
+  } else {
+    pings
+  }
+  
+  # convert to numeric
+  data_sub$lon <- as.numeric(data_sub$lon)
+  data_sub$lat <- as.numeric(data_sub$lat)
+  
+  # convert to sf and project
+  sf_proj <- st_as_sf(data_sub, coords = c("lon", "lat"), crs = 4326) %>%
+    st_transform(crs_out)
+  
+  # extract x, y
+  df_proj <- sf_proj %>%
+    mutate(
+      x = st_coordinates(.)[,1],
+      y = st_coordinates(.)[,2]
+    ) %>%
+    st_set_geometry(NULL)
+  
+  # calculate buffered bbox from subset
+  expand_range <- function(x, buffer = 0.05) {
+    r <- range(x, na.rm = TRUE)
+    r + diff(r) * buffer * c(-1, 1)
+  }
+  
+  lon_lim <- expand_range(data_sub$lon, buffer_prop)
+  lat_lim <- expand_range(data_sub$lat, buffer_prop)
+  
+  bb_buffered <- st_as_sfc(st_bbox(c(
+    xmin = lon_lim[1], xmax = lon_lim[2],
+    ymin = lat_lim[1], ymax = lat_lim[2]
+  ), crs = 4326))
+  
+  bb_3857 <- st_bbox(st_transform(bb_buffered, crs_out))
+  xlim_3857 <- bb_3857[c("xmin", "xmax")]
+  ylim_3857 <- bb_3857[c("ymin", "ymax")]
+  
+  list(
+    df_proj = df_proj,
+    xlim = xlim_3857,
+    ylim = ylim_3857
+  )
+}
+
+# color palette for tracks (add more if needed, or combine with linetypes?)
+shark_palette <- c(
+  "coral1",
+  "goldenrod1",
+  "seagreen1",
+  "turquoise2",
+  "magenta",
+  "azure1",
+  "orange",
+  "aquamarine",
+  "darkolivegreen1",
+  "hotpink",
+  "slategray1",
+  "orangered"
+)
+
+# function for plotting shark tracks
+p_shark <- function(pings,
+                    pttids_subset = NULL,
+                    species_filter = NULL,
+                    buffer_prop = 0.5,
+                    target_ratio = NULL,
+                    start_date = NULL,
+                    show_legend = TRUE,
+                    animate = FALSE) {
+  
+  # ---- filter data ----
+  data_sub <- pings
+  
+  if(!is.null(species_filter)) {
+    data_sub <- data_sub %>% filter(species == species_filter)
+  }
+  
+  if(!is.null(pttids_subset)) {
+    data_sub <- data_sub %>% filter(pttid %in% pttids_subset)
+  }
+  
+  if(!is.null(start_date)) {
+    data_sub <- data_sub %>% filter(date >= as.Date(start_date))
+  }
+  
+  # ---- projection + bbox ----
+  prep <- prepare_shark_df(data_sub, buffer_prop = buffer_prop)
+  df_proj <- prep$df_proj
+  
+  # ---- adjust bbox for target ratio if requested ----
+  xlim_adj <- prep$xlim
+  ylim_adj <- prep$ylim
+  
+  if(!is.null(target_ratio)){
+    x_rng <- diff(prep$xlim)
+    y_rng <- diff(prep$ylim)
+    
+    if((x_rng / y_rng) < target_ratio){
+      # make x wider
+      x_mid <- mean(prep$xlim)
+      x_half <- (target_ratio * y_rng) / 2
+      xlim_adj <- x_mid + c(-x_half, x_half)
+    } else {
+      # make y taller
+      y_mid <- mean(prep$ylim)
+      y_half <- x_rng / target_ratio / 2
+      ylim_adj <- y_mid + c(-y_half, y_half)
+    }
+  }
+  
+  # ---- base map ----
+  p <- ggplot() +
+    annotation_map_tile(type = esri_world_imagery,
+                        progress = "none",
+                        zoomin = 0) +
+    coord_sf(crs = st_crs(3857),
+             xlim = xlim_adj,   # USE adjusted limits
+             ylim = ylim_adj,   # USE adjusted limits
+             expand = FALSE) +
+    theme_bw(base_size = 18) +
+    theme(
+      panel.background = element_rect(fill = "steelblue"),
+      panel.grid = element_blank(),
+      legend.position = ifelse(animate, "none", "right"),
+      legend.key = element_blank()
+    ) +
+    geom_path(
+      data = df_proj,
+      aes(x = x, y = y, group = pttid, color = pttid),
+      linewidth = 1,
+      alpha = 0.7,
+      linetype = "11"
+    ) +
+    geom_point(
+      data = df_proj,
+      aes(x = x, y = y, group = pttid, color = pttid, shape = category),
+      size = ifelse(animate, 2, 1),
+      alpha = 0.7
+    ) +
+    scale_shape_manual(
+      name = "Type",
+      values = c(
+        "Deployment" = 8,
+        "Ping" = 16)
+    ) +
+    labs(x = NULL, y = NULL)
+  
+  # ---- automatic palette ----
+  pttid_levels <- sort(unique(df_proj$pttid))
+  colors <- shark_palette[seq_along(pttid_levels)] # Trim palette to needed length
+  colors <- setNames(colors, pttid_levels) # Name colors so they match PTTIDs
+  p <- p + scale_color_manual(values = colors,
+                              name = "PTTID")
+  
+  # safety check
+  if(length(pttid_levels) > length(shark_palette)) {
+    stop("Not enough colors in shark_palette! Add more to shark_palette vector.")
+  }
+  
+  # ---- turn animation ON if requested ----
+  if(animate) {
+    p <- p +
+      labs(title = 'Tiger shark movement: {format(frame_along, "%B %d, %Y")}') +
+      transition_reveal(along = date) +
+      theme(
+        plot.title = element_text(
+          hjust = 0,
+          size = 26,
+          face = "bold"
+        )
+      )
+  }
+  
+  # ---- turn legend ON/OFF if requested ----
+  if (!show_legend) {
+    p <- p + theme(legend.position = "none")
+  }
+  
+  return(p)
+}
+```
+
+## Plot
+
+### GEF
+
+```{r}
+gef_pttids <- c("283833", "260593", "26354", "36353")
+
+# static plot
+p_static_gef <- p_shark(pings,
+                        pttids_subset = gef_pttids)
+ggsave(here("tagging", "figs", "shark_track_gef.png"), plot = p_static_gef, width = 10, height = 10)
+
+# animated plots
+p_anim_gef <- p_shark(
+  pings,
+  pttids_subset = gef_pttids,
+  animate = TRUE
+)
+
+anim_save(
+  here("tagging", "figs", "shark_track_gef.gif"),
+  animate(
+    p_anim_gef,
+    nframes = 150,
+    fps = 10,
+    width = 600,
+    height = 800,
+    renderer = gifski_renderer()
+  )
+)
+
+animate( # add library(av) if encountering issues
+  p_anim_gef,
+  nframes = 150,
+  fps = 10,
+  width = 600,
+  height = 800,
+  renderer = av_renderer(
+    here("tagging", "figs", "shark_track_gef.mp4")
+  )
+)
+```
+
+### ISRA - all sharks by species
+```{r}
+# G. cuvier
+p_static_tigers <- p_shark(pings, 
+                           species_filter  = "Galeocerdo cuvier",
+                           target_ratio = 1.5)
+ggsave(here("tagging", "figs", "shark_track_gcuvier.png"), plot = p_static_tigers, width = 10, height = 8)
+
+# C. falciformis
+p_static_silkies <- p_shark(pings, 
+                            species_filter = "Carcharhinus falciformis",
+                            target_ratio = 1.5)
+ggsave(here("tagging", "figs", "shark_track_cfalciformis.png"), plot = p_static_silkies, width = 10, height = 8)
+```
+
+### ISRA - individual sharks
+
+```{r}
+# for loop for each pttid
+all_pttids <- unique(pings$pttid)
+for(ptt in all_pttids) {
+  
+  # Generate static map
+  p <- p_shark(pings, 
+               pttids_subset = ptt,
+               target_ratio = 1,
+               buffer_prop = .75)
+  
+  # Save as PNG
+  ggsave(
+    filename = here("tagging", "figs", "indv_pttids", paste0("shark_", ptt, ".png")),
+    plot = p,
+    width = 8,
+    height = 10,
+    dpi = 300
+  )
+}
+```
+
+
+# Mapping - bathy
+
+## Prep
+```{r}
+library(terra)
+
+# bathymetry raster (user-defined GeoTIFF): Sentinel2 2022 ATG-specific from TNC: https://caribbeanscienceatlas.tnc.org/maps/28371a902f414fef830cc2e6ff9b3d8f
+
+# set lims for crop to save processing time
+lon_lim <- c(-62.22, -61.6)
+lat_lim <- c(16.9, 17.3)
+
+# create bbox in same CRS as raster (EPSG:4326)
+bbox_4326 <- st_as_sfc(st_bbox(c(
+  xmin = lon_lim[1],
+  xmax = lon_lim[2],
+  ymin = lat_lim[1],
+  ymax = lat_lim[2]
+), crs = 4326))
+
+# load, crop, and convert to df
+sentinel_df <- rast(here("mapping", "rasters", "sentinel_atg", "atg_bath_Sentinel2_2022_clip.tif")) %>%
+  crop(bbox_4326) %>%
+  as.data.frame(xy = TRUE) %>%
+  setNames(c("x", "y", "depth"))
+
+# downsample for faster rendering if needed
+sentinel_df_small <- sentinel_df %>% sample_frac(0.5)
+```
+
+
+## Plot
+```{r}
+# static background (rendered once)
+p_base <- ggplot() +
+  geom_raster(data = sentinel_df, aes(x = x, y = y, fill = depth)) +
+  scale_fill_gradient2(low = "tan", mid = "lightblue", high = "steelblue4", midpoint = 0, name = "Depth (m)") +
+  coord_fixed(xlim = c(-62.15, -61.6), ylim = c(16.9, 17.3)) +
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "steelblue4"),
+        panel.grid = element_blank())
+
+# animate overlay
+p_anim <- p_base +
+  geom_path(data = shark_df_3857, aes(x = x, y = y, group = pttid, color = pttid),
+            size = 1, alpha = 0.7, linetype = 2) +
+  geom_point(data = shark_df_3857, aes(x = x, y = y, group = pttid, color = pttid),
+             size = 2) +
+  scale_color_manual(values = c("coral2", "gold")) +
+  labs(x = NULL, y = NULL, color = "Shark ID",
+       title = "Shark movement over time: {frame_along}") +
+  transition_reveal(along = date)
+
+gganimate::animate(p_anim, nframes = 150, fps = 10)
+anim_save(here("mapping", "figs", "shark_track_bathy.gif"), animation = anim)
+```
+
+
+# Depth / Temp
+
+## Temperature
+
+```{r}
+p_temp_mult <- ggplot(shark_data, aes(x = date, group = pttid)) +
+  geom_line(data = shark_data %>%
+              pivot_longer(cols = c(sst, adt),
+                           names_to = "type", values_to = "temp") %>%
+              mutate(type = recode(type,
+                                   sst = "Sea surface temp.",
+                                   adt = "At-depth temp.")),
+            aes(y = temp, color = type, group = interaction(pttid, type)),
+            linewidth = 0.4) +
+  scale_color_manual(values = c("Sea surface temp." = "coral",
+                                "At-depth temp." = "goldenrod")) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  labs(color = NULL, y = "Temperature (C)", x = "")
+ggsave(here("tagging", "figs", "shark_temp_mult.png"), plot = p_temp_mult, width = 6, height = 6)
+
+p_temp_panel <- p_temp +
+  facet_wrap(~ pttid, ncol = 2)
+ggsave(here("tagging", "figs", "shark_temp_panel.png"), plot = p_temp_panel, width = 6, height = 6)
+```
+
+## Depth
+
+```{r}
+# still plot - mult
+p_depth_mult <- ggplot(shark_data, aes(x = date)) +
+  geom_ribbon(aes(ymin = min_depth_m, ymax = max_depth_m, group = pttid),
+              fill = "gray", alpha = 0.4) +
+  geom_line(data = shark_data %>%
+              pivot_longer(cols = c(min_depth_m, mean_depth_m, max_depth_m),
+                           names_to = "type", values_to = "depth") %>%
+              mutate(type = recode(type,
+                                   min_depth_m = "Min. depth",
+                                   mean_depth_m = "Mean depth",
+                                   max_depth_m = "Max. depth")),
+            aes(y = depth, color = type, group = interaction(pttid, type)),
+            linewidth = 0.8) +
+  scale_y_reverse() +
+  scale_color_manual(values = c("Min. depth" = "lightblue",
+                                "Mean depth" = "gray50",
+                                "Max. depth" = "steelblue")) +
+  theme_bw() +
+  theme(legend.position = "top") +
+  labs(color = "", y = "Depth (m)", x = "")
+ggsave(here("tagging", "figs", "shark_depth_mult.png"), plot = p_depth_mult, width = 6, height = 6)
+
+# still plot - indv
+p_depth_panel <- p_depth_mult +
+  facet_wrap(~ pttid, ncol = 2)
+ggsave(here("tagging", "figs", "shark_depth_panel.png"), plot = p_depth_panel, width = 8, height = 6)
+
+# animated plots - turn off ribbon?
+p_anim <- p_depth_panel +
+  facet_wrap(~ pttid) +
+  theme_bw(base_size = 18) +
+  theme(legend.position = "top") +
+  transition_reveal(date)
+anim <- gganimate::animate(p_anim, nframes = 100, fps = 10, width = 800, height = 600)
+anim_save(here("tagging", "figs", "shark_depth_indv.gif"), animation = anim)
+```
+
+## Panels
+
+```{r}
+# Plot panels
+p_overlay <- p_temp / p_depth
+ggsave(here("tagging", "figs", "depth_temp_OG.png"), plot = p_overlay, width = 6, height = 6)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Archive
 
 ## Basic plots
 
 *Projection = 4326 (same as dataset)*
 
-### Prep
+
 
 ```{r}
+### Prep
 # load Antigua shapefile (switch to Caribbean shapefile eventually)
 atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
   st_union() %>%
@@ -214,12 +669,14 @@ expand_range <- function(x, buffer = 0.3) { # buffer as proportion of data range
 }
 ```
 
+
+
+```{r}
 ### Plot
 
 #### Static
-
-```{r}
 # plot pings - static
+buffer_prop = .5
 lon_lim <- expand_range(shark_df_4326$x, buffer_prop)
 lat_lim <- expand_range(shark_df_4326$y, buffer_prop)
 
@@ -239,11 +696,12 @@ ggplot() +
 #ggsave(here("tagging", "figs", "pings_static.png"))
 ```
 
+
+
+```{r}
 #### Animation
 
 ##### Compiled sharks
-
-```{r}
 # animated plot - mult sharks
 p_anim <- ggplot() +
   geom_sf(data = atg, fill = "lightblue", color = "lightblue") +  # islands
@@ -251,7 +709,8 @@ p_anim <- ggplot() +
             size = 1, alpha = 0.7, linetype = 2) +
   geom_point(data = shark_df_4326, aes(x = x, y = y, group = pttid, color = pttid),
              size = 2) +
-  xlim(c(lon_min, lon_max)) + ylim(c(lat_min, lat_max)) +
+  # xlim(c(lon_min, lon_max)) + ylim(c(lat_min, lat_max)) +
+  coord_sf(xlim = lon_lim, ylim = lat_lim, expand = FALSE) +
   labs(x = NULL, y = NULL, color = "ID", title = "Shark movement over time: {frame_along}") +
   theme_bw() +
   theme(panel.background = element_rect(fill = "steelblue"),
@@ -262,9 +721,10 @@ anim <- gganimate::animate(p_anim, nframes = 150, fps = 10, width = 600, height 
 anim_save(here("tagging", "figs", "shark_track_mult.gif"), animation = anim)
 ```
 
-##### Indvidual sharks
+
 
 ```{r}
+##### Indvidual sharks
 animate_indv <- function(
   pttid,
   shark_df,
@@ -404,80 +864,92 @@ purrr::walk(unique_ids, animate_indv, shark_df = shark_df_4326, atg = atg)
 
 ```
 
-
-
-## ESRI plots
-*Projection = 3857 (must reproject dataset)*
-
-### Prep
+## Old ESRIs
 
 ```{r}
-# link ESRI layers
-esri_ocean <- paste0('https://services.arcgisonline.com/arcgis/rest/services/','Ocean/World_Ocean_Base/MapServer/tile/${z}/${y}/${x}.jpeg')
-esri_world_imagery <- "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}.jpeg"
-
-# convert to sf and reproject with 3857 projection
-shark_sf_3857 <- st_as_sf(pings, coords = c("lon", "lat"), crs = 4326) %>% # og projection was 4326
-  st_transform(3857) 
-
-# extract point data
-shark_df_3857 <- shark_sf_3857 %>%
-  mutate(x = st_coordinates(.)[,1],
-         y = st_coordinates(.)[,2]) %>%
-  st_set_geometry(NULL)
-
-# set range and reproject with 3857 projection
-# bb_3857 <- st_bbox(
-#   st_transform(
-#     st_as_sfc(st_bbox(c(xmin = lon_min, xmax = lon_max, ymin = lat_min, ymax = lat_max), crs = 4326)), 3857))
-# xlim_3857 <- bb_3857[c("xmin", "xmax")]
-# ylim_3857 <- bb_3857[c("ymin", "ymax")]
-
-# set coordinate range using buffer
-buffer_prop <- 0.5  # adjust padding around the tracks
-
-expand_range <- function(x, buffer = 0.05) {
-  r <- range(x, na.rm = TRUE)
-  r + diff(r) * buffer * c(-1, 1)
+# plot formula
+p_static <- function(pings, pttids_subset = NULL, species_subset = NULL, buffer_prop = 0.5) {
+  
+  # Filter by species if provided
+  data_sub <- pings
+  if(!is.null(species_subset)) {
+    data_sub <- data_sub %>% filter(species == species_subset)
+  }
+  
+  # Filter by PTTIDs if provided
+  if(!is.null(pttids_subset)) {
+    data_sub <- data_sub %>% filter(pttid %in% pttids_subset)
+  }
+  
+  # Prepare subset + bbox
+  prep <- prepare_shark_df(data_sub, buffer_prop = buffer_prop)
+  df_proj <- prep$df_proj
+  
+  # Build base plot with bbox from subset
+  p_base <- ggplot() +
+    annotation_map_tile(type = esri_world_imagery, progress = "none", zoomin = 0) +
+    coord_sf(crs = st_crs(3857), xlim = prep$xlim, ylim = prep$ylim, expand = FALSE) +
+    theme_bw(base_size = 18) +
+    theme(
+      panel.background = element_rect(fill = "steelblue"),
+      panel.grid = element_blank(),
+      legend.position = "right",
+      legend.key = element_blank()
+    )
+  
+  # Add paths + points
+  p <- p_base +
+    geom_path(
+      data = df_proj,
+      aes(x = x, y = y, group = pttid, color = pttid),
+      linewidth = 1, alpha = 0.7, linetype = "11"  # denser dashes
+    ) +
+    geom_point(
+      data = df_proj,
+      aes(x = x, y = y, group = pttid, color = pttid, shape = category),
+      size = 1
+    ) +
+    scale_shape_manual(
+      name = "Type",
+      values = c(1, 16)  # 1 = hollow, 16 = solid
+    )
+  
+  # Optional: if exactly 4 PTTIDs, assign custom colors
+  pttid_levels <- unique(df_proj$pttid)
+  if(length(pttid_levels) == 4) {
+    colors <- c("coral1", "goldenrod1", "seagreen1", "turquoise2")
+    colors <- setNames(colors, pttid_levels)
+    p <- p + scale_color_manual(name = "Shark PTTID", values = colors)
+  }
+  
+  # No title
+  p <- p + labs(x = NULL, y = NULL)
+  
+  return(p)
 }
 
-pings$lon <- as.numeric(pings$lon)
-pings$lat <- as.numeric(pings$lat)
-lon_lim <- expand_range(pings$lon, buffer_prop)
-lat_lim <- expand_range(pings$lat, buffer_prop)
+# GEF PTTIDs only
+p_static_gef <- p_static(pings, pttids_subset = c("283833", "260593", "26354", "36353")) +
+  scale_color_manual(
+    name = "Shark PTTID",
+    values = c("coral1", "goldenrod1", "seagreen1", "turquoise2")
+  )
+ggsave(here("tagging", "figs", "shark_track_gef.png"), plot = p_static_gef, width = 10, height = 10)
 
-# create bbox with range
-bb_buffered <- st_as_sfc(st_bbox(c(
-  xmin = lon_lim[1], xmax = lon_lim[2],
-  ymin = lat_lim[1], ymax = lat_lim[2]
-), crs = 4326))
+# All PTTIDs
+p_static_all <- p_static(pings)
+ggsave(here("tagging", "figs", "shark_track_all.png"), plot = p_static_all, width = 10, height = 8)
 
-# reproject bbox with 3857 projection
-bb_3857 <- st_bbox(st_transform(bb_buffered, 3857))
+# G. cuvier
+p_static_tigers <- p_static(pings, species_subset = "Galeocerdo cuvier")
+ggsave(here("tagging", "figs", "shark_track_gcuvier.png"), plot = p_static_tigers, width = 10, height = 8)
 
-xlim_3857 <- bb_3857[c("xmin", "xmax")]
-ylim_3857 <- bb_3857[c("ymin", "ymax")]
-
+# C. falciformis
+p_static_silkies <- p_static(pings, species_subset = "Carcharhinus falciformis")
+ggsave(here("tagging", "figs", "shark_track_cfalciformis.png"), plot = p_static_silkies, width = 10, height = 8)
 ```
 
-### Plot
-
-```{r}
-# load logos
-logo_folder <- here("tagging", "logos")
-logo_anublue <- rasterGrob(readPNG(here(logo_folder, "AnuBlue.png")), interpolate = TRUE)
-logo_gef <- rasterGrob(readJPEG(here(logo_folder, "GEF.jpg")), interpolate = TRUE)
-logo_sgp <- rasterGrob(readJPEG(here(logo_folder, "SGP.jpg")), interpolate = TRUE)
-logo_sgp_small <- editGrob(logo_sgp, vp = viewport(width = 0.6, height = 0.6))
-logo_undp <- rasterGrob(readPNG(here(logo_folder, "UNDP.png")), interpolate = TRUE)
-
-# combine logos into strip
-logo_strip <- plot_grid(
-  logo_anublue, logo_gef, logo_sgp_small, logo_undp,
-  nrow = 1,
-  rel_widths = c(1, 1, 1, 1)  # tweak if one logo needs more space
-)
-
+```{r, eval = FALSE}
 # base / background (rendered once)
 p_base <- ggplot() +
   annotation_map_tile(type = esri_world_imagery, progress = "none", zoomin = 0) +
@@ -489,55 +961,17 @@ p_base <- ggplot() +
     legend.position = "right",
     legend.key = element_blank(),
     plot.title = element_text(hjust = 0.5, size = 16))
-
-p_base_logos <- plot_grid(
-  p_base,
-  logo_strip,
-  ncol = 1,
-  rel_heights = c(.5, 0.15)  # logo height ~12% of total
-)
 ```
 
-#### Static
-```{r}
-shark_key <- tagging %>%
-  select(pttid, length_sex) %>%
-  distinct()
-
-shark_df_plot <- shark_df_3857 %>%
-  left_join(shark_key, by = "pttid")
-
-p_static <- p_base +
-  geom_path(
-    data = shark_df_plot,
-    aes(x = x, y = y, group = pttid, color = pttid),
-    linewidth = 1, alpha = 0.7, linetype = 2) +
-  geom_point(
-    data = shark_df_plot,
-    aes(x = x, y = y, group = pttid, color = pttid),
-    size = 1) +
-scale_color_manual(
-    name = "Total length & Sex",
-    values = c("coral1", "goldenrod1", "seagreen1", "turquoise2"),
-    labels = setNames(shark_key$length_sex, shark_key$pttid)
-  ) +
-  labs(x = NULL, y = NULL, title = NULL)
-
-ggsave(here("tagging", "figs", "shark_track_mult_esri.png"), plot = p_static, width = 10, height = 10)
-```
-
-#### Animation
-
-##### Compiled sharks
-
-```{r}
+```{r, eval= FALSE}
 # animate overlay (rendered repeatedly)
 shark_key <- tagging %>%
   select(pttid, length_sex) %>%
   distinct()
 
 shark_df_plot <- shark_df_3857 %>%
-  left_join(shark_key, by = "pttid")
+  left_join(shark_key, by = "pttid") %>%
+  filter(date > as.Date("2025-01-01"))
 
 p_anim <- p_base +
   geom_path(data = shark_df_plot, 
@@ -558,272 +992,22 @@ p_anim <- p_base +
         plot.title = element_text(hjust = 0, size = 27, face = "bold"))
 
 # render + save
-anim <- animate(
+# anim <- animate(
+#   p_anim,
+#   nframes = 150, fps = 10,
+#   width = 600, height = 800,
+#   renderer = av_renderer("animation.mp4")
+# )
+# anim_save(here("tagging", "figs", "shark_track_mult_esri.gif"), animation = anim)
+
+animate(
   p_anim,
-  nframes = 150, fps = 10,
-  width = 600, height = 800,
-  renderer = gifski_renderer()
+  nframes = 150,
+  fps = 10,
+  width = 600,
+  height = 800,
+  renderer = av_renderer(here::here("tagging", "figs", "shark_track_mult_esri.mp4"))
 )
-anim_save(here("tagging", "figs", "shark_track_mult_esri.gif"), animation = anim)
 ```
-
-##### Individual sharks
-
-```{r}
-make_base_esri_map <- function(xlim, ylim) {
-  ggplot() +
-    annotation_map_tile(
-      type = esri_world_imagery,
-      progress = "none",
-      zoomin = 0
-    ) +
-    coord_sf(
-      crs = st_crs(3857),
-      xlim = xlim,
-      ylim = ylim,
-      expand = FALSE
-    ) +
-    theme_bw(base_size = 18) +
-    theme(
-      panel.background = element_rect(fill = "steelblue"),
-      panel.grid = element_blank(),
-      legend.position = "none"
-    )
-}
-
-animate_indv_esri <- function(
-  pttid,
-  shark_df_3857,
-  buffer_prop = 0.5,
-  out_dir = "tagging/figs"
-) {
-
-  # ---- subset data ONCE ----
-  df_i <- shark_df_3857 %>%
-    dplyr::filter(pttid == !!pttid)
-
-  if (nrow(df_i) < 2) {
-    message("⚠️ Skipping ", pttid, " (not enough points)")
-    return(NULL)
-  }
-
-  # ---- per-shark map limits (in meters, EPSG:3857) ----
-  xlim <- expand_range(df_i$x, buffer_prop)
-  ylim <- expand_range(df_i$y, buffer_prop)
-
-  # ---- base map ----
-  p_base <- make_base_esri_map(xlim, ylim)
-
-  # ---- animated overlay ----
-  p_anim <- p_base +
-    geom_path(
-      data = df_i,
-      aes(x = x, y = y),
-      color = "coral2",
-      linewidth = 1,
-      alpha = 0.7,
-      linetype = 2
-    ) +
-    geom_point(
-      data = df_i,
-      aes(x = x, y = y),
-      color = "coral2",
-      size = 2
-    ) +
-    labs(
-      x = NULL,
-      y = NULL,
-      title = glue::glue("{length_sex} tiger shark movement over time: {{frame_along}}")
-    ) +
-    transition_reveal(along = date)
-
-  # ---- render ----
-  anim <- gganimate::animate(
-    p_anim,
-    nframes = 150,
-    fps = 10,
-    width = 1000,
-    height = 750,
-    renderer = gifski_renderer()
-  )
-
-  gif_path <- here::here(
-    out_dir,
-    paste0("shark_track_", pttid, ".gif")
-  )
-
-  anim_save(gif_path, animation = anim)
-
-  message("✅ Saved: ", gif_path)
-}
-
-unique_ids <- unique(shark_df_3857$pttid)
-
-purrr::walk(
-  unique_ids,
-  animate_indv_esri,
-  shark_df_3857 = shark_df_3857
-)
-
-```
-
-
-
-## Bathy plots
-
-### Prep
-```{r}
-library(terra)
-
-# bathymetry raster (user-defined GeoTIFF): Sentinel2 2022 ATG-specific from TNC: https://caribbeanscienceatlas.tnc.org/maps/28371a902f414fef830cc2e6ff9b3d8f
-
-# set lims for crop to save processing time
-lon_lim <- c(-62.22, -61.6)
-lat_lim <- c(16.9, 17.3)
-
-# create bbox in same CRS as raster (EPSG:4326)
-bbox_4326 <- st_as_sfc(st_bbox(c(
-  xmin = lon_lim[1],
-  xmax = lon_lim[2],
-  ymin = lat_lim[1],
-  ymax = lat_lim[2]
-), crs = 4326))
-
-# load, crop, and convert to df
-sentinel_df <- rast(here("mapping", "rasters", "sentinel_atg", "atg_bath_Sentinel2_2022_clip.tif")) %>%
-  crop(bbox_4326) %>%
-  as.data.frame(xy = TRUE) %>%
-  setNames(c("x", "y", "depth"))
-
-# downsample for faster rendering if needed
-sentinel_df_small <- sentinel_df %>% sample_frac(0.5)
-```
-
-
-### Plot
-```{r}
-# static background (rendered once)
-p_base <- ggplot() +
-  geom_raster(data = sentinel_df, aes(x = x, y = y, fill = depth)) +
-  scale_fill_gradient2(low = "tan", mid = "lightblue", high = "steelblue4", midpoint = 0, name = "Depth (m)") +
-  coord_fixed(xlim = c(-62.15, -61.6), ylim = c(16.9, 17.3)) +
-  theme_bw() +
-  theme(panel.background = element_rect(fill = "steelblue4"),
-        panel.grid = element_blank())
-
-# animate overlay
-p_anim <- p_base +
-  geom_path(data = shark_df_3857, aes(x = x, y = y, group = pttid, color = pttid),
-            size = 1, alpha = 0.7, linetype = 2) +
-  geom_point(data = shark_df_3857, aes(x = x, y = y, group = pttid, color = pttid),
-             size = 2) +
-  scale_color_manual(values = c("coral2", "gold")) +
-  labs(x = NULL, y = NULL, color = "Shark ID",
-       title = "Shark movement over time: {frame_along}") +
-  transition_reveal(along = date)
-
-gganimate::animate(p_anim, nframes = 150, fps = 10)
-anim_save(here("mapping", "figs", "shark_track_bathy.gif"), animation = anim)
-```
-
-
-# Depth / Temp
-
-## Temperature
-
-```{r}
-p_temp <- ggplot(shark_data, aes(x = date, group = pttid)) +
-  geom_line(data = shark_data %>%
-              pivot_longer(cols = c(sst, adt),
-                           names_to = "type", values_to = "temp") %>%
-              mutate(type = recode(type,
-                                   sst = "Sea surface temp.",
-                                   adt = "At-depth temp.")),
-            aes(y = temp, color = type, group = interaction(pttid, type)),
-            linewidth = 0.4) +
-  scale_color_manual(values = c("Sea surface temp." = "coral",
-                                "At-depth temp." = "goldenrod")) +
-  theme_bw() +
-  theme(legend.position = "top") +
-  labs(color = NULL, y = "Temperature (C)", x = "")
-ggsave(here("tagging", "figs", "shark_temp.png"), plot = p_temp, width = 6, height = 6)
-```
-
-## Depth
-
-```{r}
-# still plot - mult
-p_depth <- ggplot(shark_data, aes(x = date)) +
-  geom_ribbon(aes(ymin = min_depth_m, ymax = max_depth_m, group = pttid),
-              fill = "gray", alpha = 0.4) +
-  geom_line(data = shark_data %>%
-              pivot_longer(cols = c(min_depth_m, mean_depth_m, max_depth_m),
-                           names_to = "type", values_to = "depth") %>%
-              mutate(type = recode(type,
-                                   min_depth_m = "Min. depth",
-                                   mean_depth_m = "Mean depth",
-                                   max_depth_m = "Max. depth")),
-            aes(y = depth, color = type, group = interaction(pttid, type)),
-            linewidth = 0.8) +
-  scale_y_reverse() +
-  scale_color_manual(values = c("Min. depth" = "lightblue",
-                                "Mean depth" = "gray50",
-                                "Max. depth" = "steelblue")) +
-  theme_bw() +
-  theme(legend.position = "top") +
-  labs(color = "", y = "Depth (m)", x = "")
-ggsave(here("tagging", "figs", "shark_depth.png"), plot = p_depth, width = 6, height = 6)
-
-# still plot - indv
-p_depth_indv <- ggplot(shark_data, aes(x = date)) +
-  geom_ribbon(aes(ymin = min_depth_m, ymax = max_depth_m, group = pttid),
-              fill = "gray", alpha = 0.4) +
-  geom_line(data = shark_data %>%
-              pivot_longer(cols = c(min_depth_m, mean_depth_m, max_depth_m),
-                           names_to = "type", values_to = "depth") %>%
-              mutate(type = recode(type,
-                                   min_depth_m = "Min. depth",
-                                   mean_depth_m = "Mean depth",
-                                   max_depth_m = "Max. depth")),
-            aes(y = depth, color = type, group = interaction(pttid, type)),
-            linewidth = 0.8) +
-  # geom_point(data = shark_data %>%
-  #              filter(!is.na(lat)),
-  #            aes(y = min_depth_m),
-  #            shape = 21, fill = "indianred2", color = "indianred2", size = 2, alpha = 0.7) +
-  scale_y_reverse() +
-  scale_color_manual(values = c("Min. depth" = "lightblue",
-                                "Mean depth" = "gray50",
-                                "Max. depth" = "steelblue")) +
-  facet_wrap(~ pttid, ncol = 2) +
-  theme_bw() +
-  theme(legend.position = "top") +
-  labs(color = "", y = "Depth (m)", x = "")
-ggsave(here("tagging", "figs", "shark_depth_indv.png"), plot = p_depth_indv, width = 8, height = 6)
-
-# animated plots - turn off ribbon
-# p_anim <- p_depth +
-#   theme_bw(base_size = 18) +
-#   transition_reveal(date)
-# anim <- gganimate::animate(p_anim, nframes = 100, fps = 10, width = 800, height = 600)
-# anim_save(here("tagging", "figs", "shark_depth.gif"), animation = anim)
-# 
-p_anim <- p_depth +
-  facet_wrap(~ pttid) +
-  theme_bw(base_size = 18) +
-  theme(legend.position = "top") +
-  transition_reveal(date)
-anim <- gganimate::animate(p_anim, nframes = 100, fps = 10, width = 800, height = 600)
-anim_save(here("tagging", "figs", "shark_depth_indv.gif"), animation = anim)
-```
-
-## Panels
-
-```{r}
-# Plot panels
-p_overlay <- p_temp / p_depth
-ggsave(here("tagging", "figs", "depth_temp_OG.png"), plot = p_overlay, width = 6, height = 6)
-```
-
 
 
