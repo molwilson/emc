@@ -377,7 +377,7 @@ p_shark <- function(pings,
   # ---- turn animation ON if requested ----
   if(animate) {
     p <- p +
-      labs(title = 'Tiger shark movement: {format(frame_along, "%B %d, %Y")}') +
+      labs(title = 'Shark movement: {format(frame_along, "%B %d, %Y")}') +
       transition_reveal(along = date) +
       theme(
         plot.title = element_text(
@@ -413,7 +413,9 @@ ggsave(here("tagging", "figs", "shark_track_gef.png"), plot = p_static_gef, widt
 p_anim_gef <- p_shark(
   pings,
   pttids_subset = gef_pttids,
-  animate = TRUE
+  animate = TRUE,
+  target_ratio = 1.1,
+  buffer_prop = .2
 )
 
 anim_save(
@@ -435,7 +437,7 @@ animate( # add library(av) if encountering issues
   width = 600,
   height = 800,
   renderer = av_renderer(
-    here("tagging", "figs", "shark_track_gef.mp4")
+    here("tagging", "figs", "shark_track_gef_ig.mp4")
   )
 )
 ```
@@ -445,13 +447,15 @@ animate( # add library(av) if encountering issues
 # G. cuvier
 p_static_tigers <- p_shark(pings, 
                            species_filter  = "Galeocerdo cuvier",
-                           target_ratio = 1.5)
+                           target_ratio = 1,
+                            buffer_prop = .2)
 ggsave(here("tagging", "figs", "shark_track_gcuvier.png"), plot = p_static_tigers, width = 10, height = 8)
 
 # C. falciformis
 p_static_silkies <- p_shark(pings, 
                             species_filter = "Carcharhinus falciformis",
-                            target_ratio = 1.5)
+                            target_ratio = 1,
+                            buffer_prop = .2)
 ggsave(here("tagging", "figs", "shark_track_cfalciformis.png"), plot = p_static_silkies, width = 10, height = 8)
 ```
 
@@ -470,7 +474,7 @@ for(ptt in all_pttids) {
   
   # Save as PNG
   ggsave(
-    filename = here("tagging", "figs", "indv_pttids", paste0("shark_", ptt, ".png")),
+    filename = here("tagging", "figs", "indv_pttids", paste0(ptt, ".png")),
     plot = p,
     width = 8,
     height = 10,
