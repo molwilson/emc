@@ -5,6 +5,6 @@ account: mowils
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 16762931
-bundleId: 11629891
+bundleId: 11672974
 url: https://mowils.shinyapps.io/Coral-Restoration/
 version: 1

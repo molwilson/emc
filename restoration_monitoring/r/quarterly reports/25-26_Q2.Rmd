@@ -262,7 +262,7 @@ nursery_locations <- nurs_mon_last %>%
               pivot_wider(names_from = nursery, values_from = location) %>%
               rename(york_locations = "York",
                      tpb_locations = "Ten Pound Bay",
-                     # cades_locations = "Cades",
+                     cades_locations = "Cades",
                      jumby_locations = "Jumby")
 
 gb_locations <- gb_mon_last %>%
@@ -330,8 +330,7 @@ datatable(collection_spp,
 
 ## By site
 ```{r}
-collection_sites <-
-  collection %>%
+collection_sites <- collection %>%
   group_by(collection_site) %>%
   summarize(colonies = n()) %>%
   adorn_totals("row")
@@ -455,9 +454,7 @@ genotype_tracking <- collection %>%
          productive = if_else(if_all(contains("locations") & -all_of("gb_locations"),  ~ . == "" | is.na(.)),
                               "N", "Y")) %>% # genotypes with frags in nurseries other than genebanks
   arrange(genotype) %>%
-  select(updated, genotype, active, productive, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, 
-         # cades_locations, 
-         jumby_locations, gb_locations, n_frags, n_outplanted, n_outplants, outplant_survival)
+  select(updated, genotype, active, productive, collection_date, collection_site, collection_lat, collection_lon, york_locations, tpb_locations, cades_locations, jumby_locations, gb_locations, n_frags, n_outplanted, n_outplants, outplant_survival)
 
 datatable(genotype_tracking,
           options = list(pageLength = 20),

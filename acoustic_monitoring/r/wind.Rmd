@@ -1,0 +1,45 @@
+---
+title: "Wind data"
+author: "Molly Wilson"
+date: "2026-03-17"
+output: html_document
+---
+
+```{r}
+library(ncdf4)
+library(here)
+library(readr)
+```
+
+```{r}
+nc <- nc_open(here("acoustic_monitoring", "data_raw", "cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H_1773748606691.nc"))
+
+u <- ncvar_get(nc, "eastward_wind")
+v <- ncvar_get(nc, "northward_wind")
+time <- ncvar_get(nc, "time")
+
+df_hr <- expand.grid(
+  lon = as.numeric(nc$dim$longitude$vals),
+  lat = as.numeric(nc$dim$latitude$vals),
+  time = as.numeric(time)
+) %>%
+  mutate(
+    u = as.vector(u),
+    v = as.vector(v),
+    wind_speed_ms = sqrt(u^2 + v^2),
+    wind_speed_kn = wind_speed_ms * 1.94384,
+    time_converted = as.POSIXct(time, origin = "1970-01-01", tz = "UTC"),
+    date = as.Date(time_converted)
+  )
+
+df_dy <- df_hr %>%
+  group_by(date) %>%
+  summarize(wind_speed_ms_mean = mean(wind_speed_ms),
+            wind_speed_kn_mean = mean(wind_speed_kn))
+
+
+write_csv(df_hr, here("acoustic_monitoring", "data_outputs", "wind_hourly.csv"))
+write_csv(df_dy, here("acoustic_monitoring", "data_outputs", "wind_daily.csv"))
+```
+
+
