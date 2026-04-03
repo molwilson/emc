@@ -20,7 +20,7 @@ collection_dat <- read_excel("Genotype tracking.xlsx", sheet = "collection") %>%
          year = year(ymd(date))
      ) %>%
   mutate(across(c(lat, lon), as.numeric),
-         category = "collection") %>%
+         category = "coral collection") %>%
   select(name = genotype, category, latitude = lat, longitude = lon, date, year) # year
 
 site_dat <- read_excel("Genotype tracking.xlsx", sheet = "site locations") %>%
@@ -58,7 +58,7 @@ ui <- fluidPage(
         min = min(site_dat$date, na.rm = TRUE),
         max = max(site_dat$date, na.rm = TRUE),
         value = max(site_dat$date, na.rm = TRUE),
-        timeFormat = "%b %Y",
+        timeFormat = "%m/%d/%y",
         width = "100%"
       ),
 
@@ -168,7 +168,7 @@ server <- function(input, output, session) {
       if (i > length(dates)) return()  # stop at the end
 
       # Update slider to current date
-      updateSliderInput(session, "date", value = dates[i])
+      updateSliderInput(session, "date", value = dates[i], timeFormat = "%m/%d/%y")
 
       # Schedule next date (adjust 0.2 for speed, lower = faster)
       later::later(function() {
