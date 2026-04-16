@@ -23,6 +23,7 @@ library(janitor) # for cleaning variable names
 library(knitr) # for knitting tables
 # library(kableExtra) # for knitting tables - do I need this?
 library(scales) # for plotting percentages
+library(rstatix) # for calculating significance tables
 library(ggbeeswarm) # for jittering in change plots
 library(boot) # for bootstrapping CIs
 library(fmsb) # for radar plots
@@ -67,6 +68,9 @@ theme_pub <- function(base_size = 14, base_family = "") {
       strip.text = element_text(size = base_size * 1.1, face = "bold")
     )
 }
+
+# fig directory
+fig_dir <- here("agrra_monitoring", "figs")
 ```
 
 # Running comments to send AGRRA
@@ -160,6 +164,44 @@ benthic_cover_year <- benthic_cover_site %>%
   ungroup()
 
 write.csv(benthic_cover_year, here("agrra_monitoring", "data_outputs", "benthic_cover_year.csv"))
+
+##### integrating algal canopy heights - do this earlier??
+
+algal_height_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "AlgaePointCoverScaled", "AlgaePointCoverScaledBySite.xlsx"), sheet = "Data") %>%
+  rename_with(fix_names) %>%
+  mutate(year = year(date)) %>%
+  select(year, site, fma_height_mean = fh_avg)
+  
+algal_height_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicAlgalHeight.xlsx"), sheet = "Scaled") %>% 
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicAlgalHeight.xlsx"), sheet = "Scaled")) %>% 
+  rename_with(fix_names) %>%
+  mutate(year = 2025,
+         site = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
+  select(year, site, fma_height_mean = 't_fma-h')
+
+algal_height_site <- bind_rows(algal_height_hist, algal_height_2025) %>%
+  mutate(site = if_else(str_detect(site, "^Site \\d+"), 
+                        str_extract(site, "^Site \\d+"), 
+                        site), # dealing with NPA sites that have site numbers with different name variations afterwards
+         site_cat = if_else(str_detect(site, "^Site \\d+"), "NDNP",
+                            if_else(str_detect(site, "Redonda"), "Redonda",
+                                    "NEMMA"))) %>%
+  filter(year != 2022 & site_cat %in% c("NEMMA", "NDNP"))
+
+#### site-level summary data
+
+benthic_site <- left_join(benthic_cover_site, algal_height_site, by = c("site", "site_cat", "year"))
+
+benthic_year <- benthic_site %>%
+  select(!contains("_sd")) %>%
+  rename_with(~ str_remove(.x, "_mean")) %>%
+  group_by(year, site_cat) %>%
+  summarise(across(c(benthic_var),
+                   list(mean = ~ mean(.x, na.rm = TRUE),
+                        sd   = ~ sd(.x)),
+                   .names = "{.col}_{.fn}")) %>%
+  ungroup()
+
 ```
 
 ### Bar plots
@@ -246,7 +288,9 @@ ggsave(here("agrra_monitoring", "figs", "benthic_sum.png"), width = , height = 6
 
 ```
 
-### Line plots by site
+### Line plots
+
+#### By site
 
 ```{r, eval = F}
 make_lp <- function(df, yvar, ylab) {
@@ -268,6 +312,91 @@ make_lp(df = benthic_cover_site, ta_mean, "TA cover")
 make_lp(df = benthic_cover_site, tas_mean, "TA-sediment cover")
 
 ```
+
+#### By site categoty
+
+```{r}
+benthic_site_long <- benthic_site %>%
+  select(year, site_cat, site, contains("mean")) %>%
+  pivot_longer(cols = contains("mean"),
+               names_to = "variable",
+               values_to = "value") %>%
+  group_by(site_cat, site, variable, year) %>%
+  summarise(value = mean(value, na.rm = TRUE), .groups = "drop")
+
+benthic_year_long <- benthic_site_long %>%
+  group_by(year, site_cat, variable) %>%
+  summarise(
+    mean = mean(value, na.rm = TRUE),
+    sd   = sd(value, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+benthic_sig_table <- benthic_site_long %>%
+  group_by(site_cat, variable) %>%
+  summarise(
+    values_by_year = list(split(value, year)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # paired Wilcoxon test for nonparametric data
+    p_value = map_dbl(values_by_year, ~ wilcox.test(.x[[1]], .x[[2]], paired = TRUE)$p.value),
+    sig_label = ifelse(p_value < 0.05, "*", "ns")
+  ) %>%
+  select(site_cat, variable, p_value, sig_label)
+
+### plot
+make_lp_summary <- function(summary_df, sig_df, variable_name, ylab) {
+  
+  plot_df <- summary_df %>%
+    filter(variable == variable_name)
+  
+  sig_df_var <- sig_df %>%
+    filter(variable == variable_name)
+  
+  plot_df <- plot_df %>%
+    left_join(sig_df_var, by = c("site_cat", "variable")) %>%
+    mutate(
+      sig_x = as.numeric(year) + 0.3,      # offset to the right
+      sig_y = mean - .001
+    )
+  
+  p <- ggplot(plot_df, aes(x = year, y = mean, group = site_cat, color = site_cat)) +
+    geom_point(size = 3) +
+    geom_line(size = 1) +
+    geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
+    geom_text(
+      data = plot_df %>% filter(year == "2025"),
+      aes(x = sig_x, y = sig_y, label = sig_label, color = site_cat),
+      inherit.aes = FALSE,
+      size = 5,
+      show.legend = FALSE
+    ) +
+    scale_color_manual(values = c("black", "cadetblue")) +
+    # scale_y_continuous(labels = label_percent(accuracy = 1)) +
+    scale_x_continuous(breaks = seq(2017, 2025, by = 2),  # odd years from 2017 to 2025
+                       labels = seq(2017, 2025, by = 2)) +
+    labs(x = "", y = ylab, color = "Site Category", group = "Site Category") +
+    theme_pub() +
+    theme(legend.position = "bottom")
+  
+  return(p)
+}
+
+p_fma <- make_lp_summary(benthic_year_long, benthic_sig_table, variable_name = "fma_mean", ylab = "Fleshy macroalgal cover") +
+  scale_y_continuous(labels = label_percent(accuracy = 1)) +
+  theme(legend.position = "none")
+
+p_fma_height <- make_lp_summary(benthic_year_long, benthic_sig_table, variable_name = "fma_height_mean", ylab = "Fleshy macroalgae height (cm)") +
+  theme(legend.position = "none")
+
+p_lc <- make_lp_summary(benthic_year_long, benthic_sig_table, variable_name = "lc_mean", ylab = "Live coral cover") +
+  scale_y_continuous(labels = label_percent(accuracy = 1))
+
+benthic_change <- p_fma / p_fma_height / p_lc + plot_layout(heights = c(10, 10, 10))
+ggsave(here(fig_dir, "benthic_change.png"), plot = benthic_change, width = 7, height = 12)
+```
+
 
 
 ### Delta plots
@@ -351,7 +480,7 @@ delta_table <- benthic_cover_site_chg %>%
 kable(delta_table)
 ```
 
-#### All metrics
+
 ```{r}
 # plotting - all metrics
 
@@ -378,42 +507,10 @@ p_delta_pc <- ggplot(delta_table,
 p_delta_pc
 ```
 
-#### Select metrics
-```{r}
-# plotting select metrics
-
-pd <- position_dodge(width = 0.6)
-
-ggplot(delta_table,
-       aes(x = mean_delta, y = metric, color = site_cat)) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
-  geom_errorbarh(
-    aes(xmin = ci_lower, xmax = ci_upper),
-    height = 0.2,
-    position = pd
-  ) +
-  geom_point(
-    size = 3,
-    position = pd
-  ) +
-  labs(
-    x = "Mean change (Δ) in percent cover",
-    y = NULL,
-    color = "Location"
-  ) +
-  theme_bw() +
-  theme(
-    strip.background = element_blank(),
-    strip.text = element_text(face = "bold"),
-    panel.grid.major.y = element_blank()
-  )
-
-
-ggsave(here("agrra_monitoring", "figs", "benthic_delta_comb.png"), width = 6, height = 6)
-```
+```{r, eval = F}
 
 #### Invd. metrics
-```{r, eval = F}
+
 # plotting - indv. metrics
 
 plot_delta <- function(df, metric_name, y_label = NULL) {
@@ -748,16 +845,16 @@ p <- ggplot(site_scores, aes(x = NMDS1, y = NMDS2, color = period)) +
   stat_ellipse(aes(group = period), type = "t", linetype = 2) +
   facet_wrap(~ site_cat) +
   # excluding arrows in publication version
-  # geom_segment(data = pc_scores_scaled,
-  #              aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
-  #              arrow = arrow(length = unit(0.3, "cm")),
-  #              color = "black",
-  #              inherit.aes = FALSE) +
-  # geom_text(data = pc_scores_scaled,
-  #           aes(x = NMDS1 + label_nudge_x,
-  #               y = NMDS2 + label_nudge_y,
-  #               label = category),
-  #           color = "black", size = 3, inherit.aes = FALSE) +
+  geom_segment(data = pc_scores_scaled,
+               aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.3, "cm")),
+               color = "black",
+               inherit.aes = FALSE) +
+  geom_text(data = pc_scores_scaled,
+            aes(x = NMDS1 + label_nudge_x,
+                y = NMDS2 + label_nudge_y,
+                label = category),
+            color = "black", size = 3, inherit.aes = FALSE) +
   theme_pub() +
   labs(color = "Year") +
   theme(strip.text = element_text(size = 14, face = "bold"),
@@ -766,6 +863,8 @@ p
 
 ggsave(plot = p, here("agrra_monitoring", "figs", "benthic_nmds.png"), width = 8, height = 5)
 ```
+
+
 
 ```{r}
 # PERMANOVA
@@ -794,6 +893,24 @@ ft <- flextable(permanova_table) |>
 read_docx() |>
   body_add_flextable(ft) |>
   print(target = here("agrra_monitoring", "figs", "benthic_nmds_permanova.docx"))
+```
+
+
+
+```{r}
+### Paired tests?
+
+results <- benthic_cover_site_long %>%
+  pivot_wider(names_from = year, values_from = value) %>%
+  group_by(variable) %>%
+  summarise(
+    p_value = wilcox.test(`2019`, `2025`, paired = TRUE)$p.value,
+    mean_2019 = mean(`2019`, na.rm = TRUE),
+    mean_2025 = mean(`2025`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(p_adj = p.adjust(p_value, method = "fdr"))
+
 ```
 
 ```{r}
@@ -1128,6 +1245,7 @@ ggplot(algal_height_year, aes(x = factor(year), y = mean)) +
   theme_bw()
 ```
 
+
 ### Delta plots
 ```{r}
 # Function to compute bootstrapped mean CI
@@ -1195,6 +1313,8 @@ p_delta_pc / p_delta_fmah +
 
 ggsave(here("agrra_monitoring", "figs", "benthic_delta_panel.png"), width = 6, height = 4)
 ```
+
+
 
 
 ## Coral spp. composition
@@ -1312,12 +1432,13 @@ coral_fam_year_wide <- coral_fam_year %>%
   pivot_wider(names_from = family,
               values_from = c(mean, rel_mean, sd),
               names_glue = "{family}_{.value}")
+
+# select primary families for plots
+coral_fams <- c("Acroporidae", "Faviidae", "Merulinidae", "Milleporidae", "Montastraeidae",  "Poritidae", "Siderastreidae") #"Unknown spp."
 ```
 
 ### Line plots
 ```{r}
-coral_fams <- c("Acroporidae", "Merulinidae", "Milleporidae", "Montastraeidae",  "Poritidae", "Siderastreidae", "Unknown spp.")
-
 ggplot(coral_fam_site %>%
          filter(family %in% coral_fams),
        aes(x = year, y = avg, group = site)) +
@@ -1380,6 +1501,62 @@ ggplot(coral_fam_year %>% filter(year == 2025), aes(x = family, y = mean)) +
   coord_flip() +
   theme_bw()
 ```
+
+### Delta plots
+```{r}
+coral_delta_table <- coral_fam_site %>%
+  filter(site_cat == "NEMMA", year %in% c(2017, 2025), family %in% coral_fams) %>%
+  select(year, site, family, avg) %>%
+  # Pivot so each row is a site × family, with 2017 and 2025 in separate columns
+  tidyr::pivot_wider(
+    names_from = year,
+    values_from = avg,
+    names_prefix = "yr_"
+  ) %>%
+  # Keep only sites that have data for both years
+  filter(!is.na(yr_2017) & !is.na(yr_2025)) %>%
+  # Calculate delta per site
+  mutate(delta = yr_2025 - yr_2017) %>%
+  group_by(family) %>%
+  summarise(
+    mean_delta = mean(delta, na.rm = TRUE),
+    ci = list(if(length(unique(delta)) > 1) boot_mean_ci(delta) else c(NA, NA)),
+    wilcox_p = if(length(unique(delta)) > 1) wilcox.test(delta, mu = 0)$p.value else NA,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    ci_lower = sapply(ci, `[[`, 1),
+    ci_upper = sapply(ci, `[[`, 2)
+  ) %>%
+  select(-ci) %>%
+  mutate(
+    mean_delta = round(mean_delta, 3),
+    ci_lower = round(ci_lower, 3),
+    ci_upper = round(ci_upper, 3),
+    wilcox_p = signif(wilcox_p, 3)
+  ) %>%
+  arrange(family)
+
+p_delta_coral <- ggplot(coral_delta_table,
+                        aes(x = mean_delta, y = forcats::fct_rev(family))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper), height = 0.2) +
+  geom_point(size = 3) +
+  labs(
+    x = "Mean change (% cover)",
+    y = NULL,
+    title = NULL
+  ) +
+  # scale_x_continuous(labels = label_percent(accuracy = 0.1)) +
+  scale_x_continuous(labels = function(x) sprintf("%.1f", x * 100)) +
+  theme_pub() +
+  theme(panel.grid.major.x = element_line(color = "grey95"))
+
+p_delta_coral
+
+ggsave(here(fig_dir, "coral_fam_delta.png"), plot = p_delta_coral, width = 5, height = 6)
+```
+
 
 ### Radar plots
 
@@ -2047,6 +2224,8 @@ ggsave(plot = p, here("agrra_monitoring", "figs", "fish_bm_bar.png"), width = 6,
 
 ### Line plots
 
+#### By site
+
 ```{r}
 ggplot(fish_bm_site %>% filter(code == "all"), 
        aes(x = year, y = avg, group = site, color = site)) +
@@ -2075,7 +2254,11 @@ ggplot(fish_bm_site %>% filter(code == "serr"),
   geom_line() +
   labs(x = "Year", y = "Serranid biomass (g/100m2)", color = "Site", group = "Site") +
   theme_minimal()
+```
 
+#### By family
+
+```{r}
 ggplot(fish_bm_year, aes(x = year, y = mean, group = site_cat, color = site_cat)) +
   geom_point() +
   geom_line() + 
@@ -2084,6 +2267,74 @@ ggplot(fish_bm_year, aes(x = year, y = mean, group = site_cat, color = site_cat)
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+
+#### By site category
+```{r}
+fish_bm_sig_table <- fish_bm_site %>%
+  group_by(site_cat, family) %>%
+  summarise(
+    values_by_year = list(split(avg, year)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # paired Wilcoxon test for nonparametric data
+    p_value = map_dbl(values_by_year, ~ wilcox.test(.x[[1]], .x[[2]], paired = TRUE)$p.value),
+    sig_label = ifelse(p_value < 0.05, "*", "ns")
+  ) %>%
+  select(site_cat, variable = family, p_value, sig_label)
+
+fish_bm_year <- fish_bm_year %>%
+  rename(variable = family)
+
+### plot
+make_lp_summary <- function(summary_df, sig_df, variable_name, ylab) {
+  
+  plot_df <- summary_df %>%
+    filter(variable == variable_name)
+  
+  sig_df_var <- sig_df %>%
+    filter(variable == variable_name)
+  
+  plot_df <- plot_df %>%
+    left_join(sig_df_var, by = c("site_cat", "variable")) %>%
+    mutate(
+      sig_x = as.numeric(year) + 0.3,      # offset to the right
+      sig_y = mean - .001
+    )
+  
+  p <- ggplot(plot_df, aes(x = year, y = mean, group = site_cat, color = site_cat)) +
+    geom_point(size = 3) +
+    geom_line(size = 1) +
+    geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0.2) +
+    geom_text(
+      data = plot_df %>% filter(year == "2025"),
+      aes(x = sig_x, y = sig_y, label = sig_label, color = site_cat),
+      inherit.aes = FALSE,
+      size = 5,
+      show.legend = FALSE
+    ) +
+    scale_color_manual(values = c("black", "cadetblue")) +
+    # scale_y_continuous(labels = label_percent(accuracy = 1)) +
+    scale_x_continuous(breaks = seq(2017, 2025, by = 2),  # odd years from 2017 to 2025
+                       labels = seq(2017, 2025, by = 2)) +
+    labs(x = "", y = ylab, color = "Site Category", group = "Site Category") +
+    theme_pub() +
+    theme(legend.position = "bottom")
+  
+  return(p)
+}
+
+p1 <- make_lp_summary(fish_bm_year, fish_bm_sig_table, variable_name = "Total", ylab = "Total fish biomass") +
+  geom_hline(yintercept = 1300*1000/100, linetype = "dashed", color = "black") + # Karr et al 2015 - 1300 kg/ha - converting to g/100m2
+  theme(legend.position = "none")
+
+p2 <- make_lp_summary(fish_bm_year, fish_bm_sig_table, variable_name = "Herbivores", ylab = "Herbivore biomass") +
+  geom_hline(yintercept = 29.2*100, linetype = "dashed", color = "black") # Edwards et al 2014 - 29.2 g/m2 - converting to g/100m2
+
+fish_bm_change <- p1 / p2 + plot_layout(heights = c(10,10))
+ggsave(here(fig_dir, "fish_bm_change.png"), plot = fish_bm_change, width = 6, height = 8)
+```
+
 
 ### Radar plots
 
@@ -2459,7 +2710,7 @@ ggsave(here("agrra_monitoring", "figs", "scar_length_delta.png"), width = 6, hei
 
 
 #### Density plots
-```{r}
+```{r, eval = F}
 ggplot(scar_length_year %>% 
          mutate(year = as.character(year)), 
        aes(x = length_mid, weight = mean_prop, group = year, color = year, fill = year)) +
@@ -2564,6 +2815,7 @@ mosaicplot(t(mat),
 Data summary: (must use raw data because phase is not in any summaries)
 - 2017-2019: phase data is within count data
 - 2025: phase data is within taxonomic ID
+- need to check that phases are present for all scaridae
 
 ```{r}
 
@@ -2601,7 +2853,7 @@ fish_raw_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022"
   left_join(fish_tax_hist, by = c("taxonomy" = "id")) %>%
   mutate(phase = case_when(terminal_phase == TRUE ~ "Terminal",
                            TRUE                  ~ "Initial")) %>%
-  select(year, site, site_cat, trans = transect, size_class, length_mid, common_name, common_family, family, species, phase)
+  select(year, site, site_cat, trans = transect, size_class, length_mid, common_name, common_family, family, species, phase, count)
 
 # raw 2025 data
 
@@ -2640,7 +2892,7 @@ fish_raw_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025
                              as.numeric(length_mid))) %>%
   left_join(fish_tax_2025, by = c("taxonomy" = "id")) %>%
   mutate(phase = if_else(terminal_phase == "Yes", "Terminal", "Initial")) %>%
-  select(year, site, site_cat, trans = transect, size_class, length_mid, common_name, common_family, family, species, phase) 
+  select(year, site, site_cat, trans = transect, size_class, length_mid, common_name, common_family, family, species, phase, count) 
 
 # merge all years
 
@@ -2671,6 +2923,7 @@ scarids <- fish_raw %>%
     #                      terminal_phase == "Yes" ~ "Male"),
          size_class = factor(size_class, levels = c("0_5","6_10","11_20","21_30", "31_40", "41_50")))
 
+#### NEED TO FIX COUNT HERE ######
 ggplot(scarids, aes(x = length_mid, fill = phase)) +
   geom_histogram(stat = "count", alpha = 0.8, position = position_dodge()) +
   facet_grid(baseline ~ species) +
@@ -2789,12 +3042,92 @@ ggplot(serr_length_year %>%
   theme_minimal()
 ```
 
-# Herbivores
-```{r, eval = F}
-# diadema_site
-# fish_bm_site
+## Fish size compositions
+```{r}
+herb_spp_dens <- fish_raw %>%
+  mutate(species = if_else(species == "NA NA" & family == "Scaridae", "Scaridae spp.",
+                           if_else(species == "Kyphosus NA", "Kyphosus spp.", species)),
+         year = ifelse(year %in% c(2017, 2019), "2017-2019", as.character(year))) %>%
+  filter(family %in% c("Scaridae", "Acanthuridae", "Kyphosidae") & !is.na(species)) %>%
+  group_by(year, site, site_cat, trans, family, species, size_class) %>%
+  summarise(n = sum(count, na.rm = TRUE), .groups = "drop") %>%
+  complete(year, site, site_cat, trans, family, species, size_class, fill = list(n = 0)) %>%
+  mutate(density = n / 60) %>%
+  group_by(year, site, site_cat, family, species, size_class) %>%
+  summarise(
+    mean_density = mean(density, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(year, site_cat, family, species, size_class) %>%
+  summarise(
+    mean_density = mean(mean_density, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(size_class = factor(size_class, levels = c("0_5", "6_10", "11_20", "21_30", "31_40")))
 
-# herb_fam_site <- 
+herb_fam_dens <- fish_raw %>%
+  mutate(year = ifelse(year %in% c(2017, 2019), "2017-2019", as.character(year))) %>%
+  filter(family %in% c("Scaridae", "Acanthuridae", "Kyphosidae") & !is.na(species)) %>%
+  group_by(year, site, site_cat, trans, family, size_class) %>%
+  summarise(n = sum(count, na.rm = TRUE), .groups = "drop") %>%
+  complete(year, site, site_cat, trans, family, size_class, fill = list(n = 0)) %>%
+  mutate(density = n / 60) %>%
+  group_by(year, site, site_cat, family, size_class) %>%
+  summarise(
+    mean_density = mean(density, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(year, site_cat, family, size_class) %>%
+  summarise(
+    mean = mean(mean_density, na.rm = TRUE),
+    sd = sd(mean_density, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # mutate(size_class = factor(size_class, levels = c("0_5", "6_10", "11_20", "21_30", "31_40")))
+  mutate(size_class = fct_recode(size_class,
+                                 "0-5" = "0_5",
+                                 "6-10" = "6_10",
+                                 "11-20" = "11_20",
+                                 "21-30" = "21_30",
+                                 "31-40" = "31_40") %>% 
+                           fct_relevel("0-5", "6-10", "11-20", "21-30", "31-40"))
+
+ggplot(herb_fam_dens, aes(x = as.numeric(size_class), y = mean,
+                          group = year, fill = year)) +
+  geom_area(alpha = 0.4, position = "identity") +
+  geom_line(aes(color = year), size = 1.2) +  # optional outline
+  geom_point(aes(color = year), size = 2) +
+  facet_grid(site_cat~family, scales = "fixed") +
+  scale_x_continuous(
+    breaks = 1:5,
+    labels = levels(herb_fam_dens$size_class)
+  ) +
+  labs(
+    x = "Size Class (cm)",
+    y = "Mean Density (individuals / m²)",
+    fill = "Year",
+    color = "Year"
+  ) +
+  theme_pub()
+
+herb_sizes <- ggplot(herb_fam_dens %>% filter(family != "Kyphosidae"), 
+       aes(x = size_class, y = mean*10000, color = year)) +
+  geom_point(position = position_dodge(width = 0.6), size = 2) +
+  geom_errorbar(aes(ymin = (mean- sd)*10000, ymax = (mean + sd)*10000),
+                width = 0.2,
+                position = position_dodge(width = 0.6)) +
+  facet_grid(site_cat ~ family, scales = "fixed") +
+  scale_color_manual(values = c("cadetblue", "gray20")) +
+  labs(
+    x = "Size Class (cm)",
+    y = "Mean Density (individuals / ha)",
+    color = "Year"
+  ) +
+  theme_pub() +
+  theme(legend.position = "bottom")
+  # theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(here(fig_dir, "herb_sizes.png"), plot = herb_sizes, width = 10, height = 6)
 ```
 
 
@@ -2810,6 +3143,24 @@ benth_fish_site <- fish_bm_site %>%
               values_from = c(mean, std),
               names_glue = "{code}_{.value}") %>%
   left_join(benthic_cover_site, by = c("site", "site_cat", "year"))
+
+benth_fish_site_chg <- benth_fish_site %>%
+  filter(year %in% c(2017, 2019, 2025)) %>%
+  mutate(year = paste0("y", year)) %>%   # make names safe for pivot
+  select(site, year, fma_mean, herb_mean, scar_mean) %>%
+  tidyr::pivot_wider(
+    names_from = year,
+    values_from = c(fma_mean, herb_mean, scar_mean)
+  ) %>%
+  mutate(
+    fma_baseline = coalesce(fma_mean_y2017, fma_mean_y2019),
+    fma_2025 = fma_mean_y2025,
+    fma_change   = fma_mean_y2025 - fma_baseline,
+    fma_pct_change = (fma_change / fma_baseline) * 100,
+    herb_2025    = herb_mean_y2025,
+    scar_2025 = scar_mean_y2025
+  ) %>%
+  select(site, fma_baseline, fma_2025, fma_change, fma_pct_change, herb_2025, scar_2025)
 ```
 
 ## Exploratory models and plots
@@ -2841,6 +3192,21 @@ ggplot(benth_fish_site, aes(x = herb_mean, y = fma_mean)) +
   geom_point() +
   geom_smooth(method = "lm", se = TRUE, color = "steelblue") +
   labs(x = "Herbivore biomass", y = "FMA cover") +
+  annotate("text", x = Inf, y = Inf,
+           label = paste0("R² = ", round(r2, 2), 
+                          "\nP = ", signif(pval, 2)),
+           hjust = 1.1, vjust = 1.2, size = 4) +
+  theme_bw()
+
+mod <- lm(fma_change ~ herb_2025, data = benth_fish_site_chg)
+summary(mod)
+r2 <- summary(mod)$r.squared
+pval <- summary(mod)$coefficients[2,4]
+
+ggplot(benth_fish_site_chg, aes(x = herb_2025, y = fma_change)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "steelblue") +
+  labs(x = "Herbivore biomass", y = "Change in FMA cover") +
   annotate("text", x = Inf, y = Inf,
            label = paste0("R² = ", round(r2, 2), 
                           "\nP = ", signif(pval, 2)),

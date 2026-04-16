@@ -13,29 +13,39 @@ library(later)
 
 ################################## data ##################################
 
+species_codes <- read_excel("Genotype tracking.xlsx", sheet = "species codes") %>%
+  clean_names() %>%
+  mutate(species_full = paste0("<i>", species_latin, "</i>",
+                               " (", species_common, ")"))
+
 collection_dat <- read_excel("Genotype tracking.xlsx", sheet = "collection") %>%
   clean_names() %>%
   filter(!lat %in% c("NA", "n/a")) %>%
   mutate(date = as.Date(as.numeric(date), origin = "1899-12-30"),
          year = year(ymd(date))
      ) %>%
+  mutate(species_code = toupper(substr(genotype, 1, 4))) %>%
+  left_join(species_codes, by = "species_code") %>%
   mutate(across(c(lat, lon), as.numeric),
          category = "coral collection") %>%
-  select(name = genotype, category, latitude = lat, longitude = lon, date, year) # year
+  select(name = species_full, category, latitude = lat, longitude = lon, date, year) # year
 
-site_dat <- read_excel("Genotype tracking.xlsx", sheet = "site locations") %>%
+site_dat <- read_excel("Website map - sites.xlsx", sheet = "site locations") %>%
   clean_names() %>%
   mutate(date = as.Date(date),
          year = year(ymd(date))
   ) %>%
+  filter(category != "ray surveys") %>% # too messy with these
   bind_rows(collection_dat) %>%
-  mutate(category = str_to_title(category))
+  mutate(category = str_to_title(category)) %>%
+  select(name, category, latitude, longitude, date, year, photo) %>%
+  arrange(category)
 
 
 ############################## Shiny App #################################
 
 ui <- fluidPage(
-  titlePanel("AnuBlue Coral Restoration"),
+  titlePanel("AnuBlue Restoration & Research"),
 
   sidebarLayout(
     sidebarPanel(
@@ -77,37 +87,13 @@ server <- function(input, output, session) {
   categories <- unique(site_dat$category)
 
   pal <- colorFactor(
-    palette = c("#FEE100", "#FF284B", "#FF7E5A"),
+    palette = c("palegreen", "#FF284B", "#FF7E5A", "gold", "thistle1"),
     domain = categories
   )
-
-  # Custom HTML legend function
-  addLegendCustom <- function(map, position = "bottomright") {
-    legend_html <- "
-  <div style='background: white; padding: 10px; border-radius: 5px;'>
-
-    <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-      <div style='width:6px; height:6px; border:1px solid #FEE100; border-radius:50%; background-color:#FEE100; opacity:0.7; margin-right:5px;'></div>
-      <span>Collection</span>
-    </div>
-
-    <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-      <div style='width:14px; height:14px; border:2px solid #FF7E5A; border-radius:50%; background-color:#FF7E5A; opacity:0.7; margin-right:5px;'></div>
-      <span>Restoration</span>
-    </div>
-
-    <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-      <div style='width:14px; height:14px; border:2px solid #FF284B; border-radius:50%; background-color:#FF284B; opacity:0.7; margin-right:5px;'></div>
-      <span>Nursery</span>
-    </div>
-
-  </div>
-  "
-
-    addControl(map, html = legend_html, position = position)
-  }
+  
 
   # Reactive filter: cumulative points up to selected date
+  
   filtered_data <- reactive({
     site_dat %>%
       filter(
@@ -120,44 +106,75 @@ server <- function(input, output, session) {
   output$map <- renderLeaflet({
     leaflet(options = leafletOptions(preferCanvas = TRUE)) %>%
       addProviderTiles("Esri.WorldImagery") %>%
-      setView(lng = -61.8, lat = 17.08, zoom = 11.4) %>%
-      addLegendCustom()
+      setView(lng = -61.8, lat = 17.08, zoom = 11.4)
+      # addLegendCustom()
   })
 
   # Dynamic markers
   observe({
+    
     fd <- filtered_data()
-
+    
     leafletProxy("map") %>%
-      clearMarkers() %>%
-    #   clearControls() %>%
-
-      # collection sites
+      clearGroup("small") %>%
+      clearGroup("large") %>%
+      
+      # SMALL MARKERS
       addCircleMarkers(
-        data = fd %>% filter(category == "Collection"),
+        data = fd %>% filter(category %in% c("Coral Collection", "Shark Tagging")),
         lng = ~longitude, lat = ~latitude,
         radius = 3, stroke = FALSE,
         fillColor = ~pal(category),
         fillOpacity = 0.7,
-        popup = ~paste0("<strong>", name, "</strong><br>", category)
+        popup = ~paste0("<strong>", name, "</strong><br>", category),
+        group = "small"
       ) %>%
-
-      # nursery + restoration
+      
+      # LARGE MARKERS
       addCircleMarkers(
-        data = fd %>% filter(category != "Collection"),
+        data = fd %>% filter(!(category %in% c("Coral Collection", "Shark Tagging"))),
         lng = ~longitude, lat = ~latitude,
         radius = 7, stroke = TRUE, weight = 2,
         color = ~pal(category),
         opacity = 1, fillColor = ~pal(category),
         fillOpacity = 0.5,
         popup = ~paste0("<strong>", name, "</strong><br>", category),
-        layerId = ~name
+        layerId = ~name,
+        group = "large"
       )
-      # %>%
-      # addLegendCustom()
- })
-
-
+  })
+  
+  # observe({
+  #   
+  #   fd <- filtered_data()
+  #   
+  #   leafletProxy("map") %>%
+  #     clearGroup(c("small", "large")) %>%
+  #     
+  #     # SMALL MARKERS (collection + shark tagging)
+  #     addCircleMarkers(
+  #       data = fd %>% filter(category %in% c("Coral Collection", "Shark Tagging")),
+  #       lng = ~longitude, lat = ~latitude,
+  #       radius = 3, stroke = FALSE,
+  #       fillColor = ~pal(category),
+  #       fillOpacity = 0.7,
+  #       popup = ~paste0("<strong>", name, "</strong><br>", category),
+  #       group = "small"
+  #     ) %>%
+  #     
+  #     # LARGE MARKERS (sites)
+  #     addCircleMarkers(
+  #       data = fd %>% filter(!(category %in% c("Coral Collection", "Shark Tagging"))),
+  #       lng = ~longitude, lat = ~latitude,
+  #       radius = 7, stroke = TRUE, weight = 2,
+  #       color = ~pal(category),
+  #       opacity = 1, fillColor = ~pal(category),
+  #       fillOpacity = 0.5,
+  #       popup = ~paste0("<strong>", name, "</strong><br>", category),
+  #       layerId = ~name,
+  #       group = "large"
+  #     )
+  # })
 
   # Animate by date using later
   observeEvent(input$play_anim, {
@@ -192,36 +209,49 @@ server <- function(input, output, session) {
 
   # Show nursery photo/description when clicked
   observeEvent(input$map_marker_click, {
+    
     click <- input$map_marker_click
-
-    # Check that click$id exists
+    
+    # safety check
     if (is.null(click$id)) {
-      output$nursery_info <- renderUI({ NULL })  # hide panel
+      output$nursery_info <- renderUI({ NULL })
       return()
     }
-
-    # Only proceed if the clicked marker is a nursery
-    nursery <- site_dat %>%
-      filter(name == click$id, category == "Nursery")
-
-    if (nrow(nursery) == 0 || is.na(nursery$photo[1])) {
-      output$nursery_info <- renderUI({ NULL })  # hide panel
-    } else {
-      output$nursery_info <- renderUI({
-        div(
-          style = "text-align: center; margin-top: 20px;",
-          h4(nursery$name),
-          img(
-            src = nursery$photo[1],
-            style = "width:90%; max-width:300px; margin-bottom:10px;"
-          ),
-          p(
-            nursery$description[1],
-            style = "max-width:300px; margin:auto;"
-          )
-        )
-      })
+    
+    # match ANY clicked site (no category restriction anymore)
+    site <- site_dat %>%
+      filter(name == click$id)
+    
+    # no match
+    if (nrow(site) == 0) {
+      output$nursery_info <- renderUI({ NULL })
+      return()
     }
+    
+    # check if photo exists and is not NA/blank
+    if (is.na(site$photo[1]) || site$photo[1] == "") {
+      output$nursery_info <- renderUI({ NULL })
+      return()
+    }
+    
+    # render panel
+    output$nursery_info <- renderUI({
+      div(
+        style = "text-align: center; margin-top: 20px;",
+        
+        h4(site$name[1]),
+        
+        img(
+          src = site$photo[1],
+          style = "width:90%; max-width:300px; margin-bottom:10px;"
+        ),
+        
+        p(
+          site$description[1],
+          style = "max-width:300px; margin:auto;"
+        )
+      )
+    })
   })
 
 }
@@ -249,6 +279,16 @@ shinyApp(ui, server)
 # rsconnect::deployApp(appDir = ".", appName = "coral-restoration")
 
 ############################## archive ##############################
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -499,3 +539,54 @@ shinyApp(ui, server)
 # }
 # 
 # shinyApp(ui, server)
+
+
+
+####### html legend (within server)
+
+# Custom HTML legend function
+# addLegendCustom <- function(map, position = "bottomright") {
+#   
+#   legend_html <- "
+# <div style='background: white; padding: 10px; border-radius: 5px;'>
+# 
+#   <!-- SMALL MARKERS -->
+#   <div style='display: flex; align-items: center; margin-bottom: 6px;'>
+#     <div style='width:6px; height:6px; border-radius:50%;
+#                 background-color:palegreen; opacity:0.8; margin-right:6px;'></div>
+#     <span>Coral Collection</span>
+#   </div>
+# 
+#   <div style='display: flex; align-items: center; margin-bottom: 10px;'>
+#     <div style='width:6px; height:6px; border-radius:50%;
+#                 background-color:thistle1; opacity:0.8; margin-right:6px;'></div>
+#     <span>Shark Tagging</span>
+#   </div>
+# 
+#   <!-- LARGE MARKERS -->
+#   <div style='display: flex; align-items: center; margin-bottom: 6px;'>
+#     <div style='width:14px; height:14px; border:2px solid #FF284B;
+#                 background-color:#FF284B; border-radius:50%;
+#                 opacity:0.6; margin-right:6px;'></div>
+#     <span>Coral Nursery</span>
+#   </div>
+# 
+#   <div style='display: flex; align-items: center; margin-bottom: 6px;'>
+#     <div style='width:14px; height:14px; border:2px solid #FF7E5A;
+#                 background-color:#FF7E5A; border-radius:50%;
+#                 opacity:0.6; margin-right:6px;'></div>
+#     <span>Coral Restoration Site</span>
+#   </div>
+# 
+#   <div style='display: flex; align-items: center;'>
+#     <div style='width:14px; height:14px; border:2px solid gold;
+#                 background-color:gold; border-radius:50%;
+#                 opacity:0.6; margin-right:6px;'></div>
+#     <span>Marine Mammal Monitoring</span>
+#   </div>
+# 
+# </div>
+# "
+#   
+#   addControl(map, html = legend_html, position = position)
+# }
