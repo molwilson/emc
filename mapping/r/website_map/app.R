@@ -1,5 +1,6 @@
 library(tidyverse)
 library(shiny)
+# library(shinyWidgets)
 library(leaflet)
 library(readxl)
 library(janitor)
@@ -41,43 +42,140 @@ site_dat <- read_excel("Website map - sites.xlsx", sheet = "site locations") %>%
   select(name, category, latitude, longitude, date, year, photo) %>%
   arrange(category)
 
+site_style <- data.frame(
+  category = c(
+    "Coral Collection",
+    "Coral Nursery",
+    "Coral Restoration",
+    "Marine Mammal Monitoring",
+    "Shark Tagging"
+  ),
+  
+  color = c(
+    "palegreen",
+    "#FF284B",
+    "paleturquoise",
+    "goldenrod",
+    "thistle"
+  ),
+  
+  size = c(
+    10,
+    14,
+    14,
+    14,
+    10
+  ),
+  
+  stroke = c(FALSE, TRUE, TRUE, TRUE, FALSE),
+  
+  fillOpacity = c(0.7, 0.5, 0.5, 0.5, 0.7)
+)
+
+categories <- site_style$category
+site_colors <- setNames(site_style$color, site_style$category)
 
 ############################## Shiny App #################################
 
 ui <- fluidPage(
-  titlePanel("AnuBlue Restoration & Research"),
+  
+  
+  fluidRow(
+    
+    # LEFT SIDE (filters + info stacked)
+    column(
+      3,
+      
+      wellPanel(
+        checkboxGroupInput(
+          inputId = "category",
+          label = "Site Type:",
+          
+    #      choices = site_style$category,
+          choiceNames = lapply(seq_len(nrow(site_style)), function(i) {
 
-  sidebarLayout(
-    sidebarPanel(
-      checkboxGroupInput(
-        inputId = "category",
-        label = "Select Site Type:",
-        choices = unique(site_dat$category),
-        selected = unique(site_dat$category)
-      ),
+            HTML(paste0(
+              "<div style='display:flex;align-items:center;'>",
 
-      actionButton(
-        "play_anim",
-        label = "▶  Click to watch our growth!",
-        width = "100%"
-      ),
+              "<span style='
+      width:", site_style$size[i], "px;
+      height:", site_style$size[i], "px;
+      border-radius:50%;
+      display:inline-block;
+      margin-right:8px;
 
-      sliderInput(
-        inputId = "date",
-        label = "Date:",
-        min = min(site_dat$date, na.rm = TRUE),
-        max = max(site_dat$date, na.rm = TRUE),
-        value = max(site_dat$date, na.rm = TRUE),
-        timeFormat = "%m/%d/%y",
-        width = "100%"
-      ),
+      background:", adjustcolor(site_style$color[i], alpha.f = site_style$fillOpacity[i]), ";
 
-      # Placeholder for photo/description panel
-      uiOutput("nursery_info")
+      border:",
+              if (site_style$stroke[i]) {
+                paste0("2px solid ", site_style$color[i])
+              } else {
+                "none"
+              },
+              ";
+    '></span>",
+
+              site_style$category[i],
+              "</div>"
+            ))
+          }),
+          
+          choiceValues = names(site_colors),
+          selected = names(site_colors)
+        ),
+        
+        # awesomeCheckboxGroup(
+        #   inputId = "category",
+        #   label = "Site Type:",
+        #   
+        #   choices = names(site_colors),
+        #   selected = names(site_colors),
+        #   
+        #   status = "primary",
+        #   inline = FALSE
+        # ),
+
+        uiOutput("nursery_info")
+      )
     ),
-
-    mainPanel(
-      leafletOutput("map", height = 600)
+    
+    # RIGHT SIDE (map + controls)
+    column(
+      9,
+      
+      # MAP on top
+      fluidRow(
+        column(
+          12,
+          leafletOutput("map", height = 600)
+        )
+      ),
+      
+      # CONTROLS under map
+      fluidRow(
+        column(
+          12,
+          
+          wellPanel(
+            
+            actionButton(
+              "play_anim",
+              label = "▶ Click to watch our growth!",
+              width = "100%"
+            ),
+            
+            sliderInput(
+              inputId = "date",
+              label = "Date:",
+              min = min(site_dat$date, na.rm = TRUE),
+              max = max(site_dat$date, na.rm = TRUE),
+              value = max(site_dat$date, na.rm = TRUE),
+              timeFormat = "%m/%d/%y",
+              width = "100%"
+            )
+          )
+        )
+      )
     )
   )
 )
@@ -85,12 +183,16 @@ ui <- fluidPage(
 server <- function(input, output, session) {
 
   categories <- unique(site_dat$category)
-
+  
   pal <- colorFactor(
-    palette = c("palegreen", "#FF284B", "#FF7E5A", "gold", "thistle1"),
+    palette = site_colors,
     domain = categories
   )
   
+  # pal <- colorFactor(
+  #   palette = site_colors,
+  #   domain = categories
+  # )
 
   # Reactive filter: cumulative points up to selected date
   
@@ -134,7 +236,7 @@ server <- function(input, output, session) {
       addCircleMarkers(
         data = fd %>% filter(!(category %in% c("Coral Collection", "Shark Tagging"))),
         lng = ~longitude, lat = ~latitude,
-        radius = 7, stroke = TRUE, weight = 2,
+        radius = 5, stroke = TRUE, weight = 2,
         color = ~pal(category),
         opacity = 1, fillColor = ~pal(category),
         fillOpacity = 0.5,
@@ -144,37 +246,7 @@ server <- function(input, output, session) {
       )
   })
   
-  # observe({
-  #   
-  #   fd <- filtered_data()
-  #   
-  #   leafletProxy("map") %>%
-  #     clearGroup(c("small", "large")) %>%
-  #     
-  #     # SMALL MARKERS (collection + shark tagging)
-  #     addCircleMarkers(
-  #       data = fd %>% filter(category %in% c("Coral Collection", "Shark Tagging")),
-  #       lng = ~longitude, lat = ~latitude,
-  #       radius = 3, stroke = FALSE,
-  #       fillColor = ~pal(category),
-  #       fillOpacity = 0.7,
-  #       popup = ~paste0("<strong>", name, "</strong><br>", category),
-  #       group = "small"
-  #     ) %>%
-  #     
-  #     # LARGE MARKERS (sites)
-  #     addCircleMarkers(
-  #       data = fd %>% filter(!(category %in% c("Coral Collection", "Shark Tagging"))),
-  #       lng = ~longitude, lat = ~latitude,
-  #       radius = 7, stroke = TRUE, weight = 2,
-  #       color = ~pal(category),
-  #       opacity = 1, fillColor = ~pal(category),
-  #       fillOpacity = 0.5,
-  #       popup = ~paste0("<strong>", name, "</strong><br>", category),
-  #       layerId = ~name,
-  #       group = "large"
-  #     )
-  # })
+  
 
   # Animate by date using later
   observeEvent(input$play_anim, {
@@ -246,10 +318,10 @@ server <- function(input, output, session) {
           style = "width:90%; max-width:300px; margin-bottom:10px;"
         ),
         
-        p(
-          site$description[1],
-          style = "max-width:300px; margin:auto;"
-        )
+        # p(
+        #   site$description[1],
+        #   style = "max-width:300px; margin:auto;"
+        # )
       )
     })
   })
@@ -276,7 +348,7 @@ shinyApp(ui, server)
 
 # Only run this in terminal to deploy
 # library(rsconnect)
-# rsconnect::deployApp(appDir = ".", appName = "coral-restoration")
+# rsconnect::deployApp(appDir = ".", appName = "anublue-map")
 
 ############################## archive ##############################
 
@@ -590,3 +662,40 @@ shinyApp(ui, server)
 #   
 #   addControl(map, html = legend_html, position = position)
 # }
+
+
+
+
+
+
+# observe({
+#   
+#   fd <- filtered_data()
+#   
+#   leafletProxy("map") %>%
+#     clearGroup(c("small", "large")) %>%
+#     
+#     # SMALL MARKERS (collection + shark tagging)
+#     addCircleMarkers(
+#       data = fd %>% filter(category %in% c("Coral Collection", "Shark Tagging")),
+#       lng = ~longitude, lat = ~latitude,
+#       radius = 3, stroke = FALSE,
+#       fillColor = ~pal(category),
+#       fillOpacity = 0.7,
+#       popup = ~paste0("<strong>", name, "</strong><br>", category),
+#       group = "small"
+#     ) %>%
+#     
+#     # LARGE MARKERS (sites)
+#     addCircleMarkers(
+#       data = fd %>% filter(!(category %in% c("Coral Collection", "Shark Tagging"))),
+#       lng = ~longitude, lat = ~latitude,
+#       radius = 7, stroke = TRUE, weight = 2,
+#       color = ~pal(category),
+#       opacity = 1, fillColor = ~pal(category),
+#       fillOpacity = 0.5,
+#       popup = ~paste0("<strong>", name, "</strong><br>", category),
+#       layerId = ~name,
+#       group = "large"
+#     )
+# })
