@@ -1,0 +1,181 @@
+---
+title: "AGRRA 2017-2025 - cleaned"
+author: "Molly Wilson"
+date: "2026-04-17"
+output: html_document
+---
+
+# Setup
+
+```{r setup, message = F, warning = F, echo = F}
+# Install packages
+library(tidyverse)
+library(here) # for accessing files within directory
+library(readxl) # for reading indv. sheets within excel files
+library(purrr) # for joining multiple sheets successively
+library(janitor) # for cleaning variable names
+library(scales) # for plotting percentages
+library(rstatix) # for calculating significance tables
+library(ggbeeswarm) # for jittering in change plots
+library(boot) # for bootstrapping CIs
+library(forcats) # for wrangling data for forest plots
+library(broom) # for visualizing variances
+library(patchwork) # for combining plots
+library(ggpubr) # for adding significances into plots
+
+# Define settings
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
+# Define functions
+fix_names <- function(x) { # fixing issues with AGRRA col names (e.g. tAPALmean -> t_apa_lmean)
+  x %>%
+    gsub(" ", "_", .) %>%                        # spaces → underscores
+    gsub("([a-z])([A-Z])", "\\1_\\2", .) %>%     # split camelCase
+    gsub("^t([A-Z]{4})(avg|med|std)$", "t_\\1_\\2", ., perl = TRUE) %>% # tACANavg → t_ACAN_avg
+    gsub("(.*?)(avg|med|std)$", "\\1_\\2", ., perl = TRUE) %>%          # ensure _ before suffix
+     gsub("^t([A-Z]{4})(large|small|total)$", "t_\\1_\\2", ., perl = TRUE) %>% 
+    gsub("(.*?)(large|small|total)$", "\\1_\\2", ., perl = TRUE) %>%
+    tolower()
+}
+
+se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+
+# Define ggplot themes
+theme_pub <- function(base_size = 14, base_family = "") {
+  theme_bw(base_size = base_size, base_family = base_family) +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA),
+      axis.line = element_line(color = "black"),
+      axis.title = element_text(size = base_size * 1.2),
+      axis.text = element_text(size = base_size),
+      legend.title = element_text(size = base_size * 1.1),
+      legend.text = element_text(size = base_size * 0.9),
+      strip.background = element_rect(fill = "white", color = "black"),
+      strip.text = element_text(size = base_size * 1.1, face = "bold")
+    )
+}
+
+# fig directory
+fig_dir <- here("agrra_monitoring", "figs")
+```
+
+# Site metadata
+
+```{r}
+sites_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Raw", "MSAccess-Metadata.xlsx"), sheet = "Survey") %>% 
+  clean_names() %>%
+  mutate(name = if_else(str_detect(name, "^Site \\d+"), 
+                        str_extract(name, "^Site \\d+"), 
+                        name)) %>%
+  select(site = name, t_benth_hist = benthic_transects, t_fish_hist = fish_transects)
+
+sites_meta <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Raw", "Metadata.xlsx"), sheet = "Survey") %>% 
+  mutate(site_cat = "NEMMA") %>%
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Raw", "Metadata.xlsx"), sheet = "Survey") %>%
+              mutate(site_cat = "NDNP")) %>%
+  clean_names() %>%
+  mutate(name = if_else(str_detect(name, "^Site \\d+"), 
+                        str_extract(name, "^Site \\d+"), 
+                        name),
+         name = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
+  select(site = name, site_cat, latitude, longitude, t_benth_2025 = benthic_transects, t_fish_2025 = fish_transects) %>%
+  left_join(sites_hist, by = "site") %>%
+  distinct() %>%
+  filter(!is.na(t_benth_hist)) # removing sites with no historical data
+
+write.csv(sites_meta, here("agrra_monitoring", "data_outputs", "sites_meta.csv"))
+```
+
+# Benthic data
+
+Data overview: 
+
+- Need to work with transect-level data to get accurate standard deviations for dif. TA groupings
+- 2017-2022: "BenthicPointCoverScaledByTransect.xlsx"
+  - scaled to not include non-reef substrate
+  - cover is in percent format (X/100)
+  - TAS and TAM included but not STA
+  - some transect numbers include surveyor initials
+- 2025: "BenthicCoverScaledByTransect.xlsx"
+  - scaled to not include non-reef substrate)
+  - cover is in proportion format (X/1)
+  - TAS/TAM/STA only included within tTA sheet (on "overall" sheet TA includes all forms of turf)
+  - Little Bird Patch = Little Bird Backreef
+- Here "TAS" will refer to TAS + TAM (+ STA in 2025)
+
+```{r}
+# define variables to include (will remove CYAN and PEYS from some analyses)
+benthic_var <- c("lc", "cca", "ta", "tas", "fma", "cma", "cyan", "ainv", "peys")
+
+benthic_cover_trans <- 
+  # historical data
+  read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "BenthicPointCoverScaled", "BenthicPointCoverScaledByTransect.xlsx"), sheet = "Data") %>% 
+  clean_names() %>%
+  mutate(year = year(date),
+         trans = as.character(trans), # to bind with 2025 NPA data that includes initials
+         t_tas = tas + tam) %>% 
+  select(site, year, trans, benthic_var) %>%
+  mutate(across(benthic_var, ~ . / 100)) %>% # convert to proportion format
+  # bind 2025 data
+  bind_rows(
+    bind_rows(
+      # NEMMA
+      read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "Overall") %>%
+        clean_names() %>%
+        mutate(`transect_name` = as.character(`transect_name`)) %>%  # to bind with 2025 NPA data with initials
+        # incorporate TA sheet
+        left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "tTA") %>%
+                    clean_names() %>%
+                    select(transect_id, ta, sta, tas, tam)),
+      # NDNP
+      read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "Overall") %>%
+        clean_names() %>%
+        # incorporate TA sheet
+        left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "tTA") %>%
+                    clean_names() %>%
+                    select(transect_id, ta, sta, tas, tam))) %>%
+      mutate(year = 2025,
+             survey_name = if_else(survey_name == "Little Bird Patch", "Little Bird Backreef", survey_name),
+             tas_sum = tas + sta + tam) %>%
+      select(site = survey_name, year, trans = transect_name, lc = t_coral, cca = t_cca, ta, tas = tas_sum, fma = t_fma, cma = t_cma, cyan = t_cyan, ainv = t_ainv, peys = t_pey)) %>%
+  mutate(site = if_else(str_detect(site, "^Site \\d+"), 
+                        str_extract(site, "^Site \\d+"), 
+                        site)) %>% # dealing with NPA sites that have site numbers with different name variations afterwards
+  filter(year != 2022, # 2022 was incomplete data collection year for NPA
+         site %in% sites_meta$site) %>% 
+  left_join(sites_meta %>% select(site, site_cat), by = "site")
+
+# algal height 
+algal_height_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "AlgaePointCoverScaled", "AlgaePointCoverScaledBySite.xlsx"), sheet = "Data") %>%
+  rename_with(fix_names) %>%
+  mutate(year = year(date)) %>%
+  select(year, site, fma_height_mean = fh_avg)
+  
+algal_height_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicAlgalHeight.xlsx"), sheet = "Scaled") %>% 
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicAlgalHeight.xlsx"), sheet = "Scaled")) %>% 
+  rename_with(fix_names) %>%
+  mutate(year = 2025,
+         site = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
+  select(year, site, fma_height_mean = 't_fma-h')
+
+algal_height_site <- bind_rows(algal_height_hist, algal_height_2025) %>%
+  mutate(site = if_else(str_detect(site, "^Site \\d+"), 
+                        str_extract(site, "^Site \\d+"), 
+                        site), # dealing with NPA sites that have site numbers with different name variations afterwards
+         site_cat = if_else(str_detect(site, "^Site \\d+"), "NDNP",
+                            if_else(str_detect(site, "Redonda"), "Redonda",
+                                    "NEMMA"))) %>%
+  filter(year != 2022 & site_cat %in% c("NEMMA", "NDNP"))
+
+benthic_cover_site <- benthic_cover_trans %>%
+  group_by(site, site_cat, year) %>%
+  rename_with(~ str_remove(.x, "t_")) %>%
+  summarise(across(c(benthic_var),
+                   list(mean = ~ mean(.x, na.rm = TRUE),
+                        sd   = ~ sd(.x)),
+                   .names = "{.col}_{.fn}")) %>%
+  ungroup()
+```
+
