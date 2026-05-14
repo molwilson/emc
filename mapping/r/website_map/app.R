@@ -79,42 +79,39 @@ site_colors <- setNames(site_style$color, site_style$category)
 
 ui <- fluidPage(
   
-  
   fluidRow(
     
-    # LEFT SIDE (filters + info stacked)
+    # LEFT SIDE (all controls stacked)
     column(
       3,
       
       wellPanel(
+        
+        # Checkbox first
         checkboxGroupInput(
           inputId = "category",
           label = "Site Type:",
           
-    #      choices = site_style$category,
           choiceNames = lapply(seq_len(nrow(site_style)), function(i) {
-
             HTML(paste0(
               "<div style='display:flex;align-items:center;'>",
-
+              
               "<span style='
-      width:", site_style$size[i], "px;
-      height:", site_style$size[i], "px;
-      border-radius:50%;
-      display:inline-block;
-      margin-right:8px;
-
-      background:", adjustcolor(site_style$color[i], alpha.f = site_style$fillOpacity[i]), ";
-
-      border:",
+                width:", site_style$size[i], "px;
+                height:", site_style$size[i], "px;
+                border-radius:50%;
+                display:inline-block;
+                margin-right:8px;
+                background:", adjustcolor(site_style$color[i], alpha.f = site_style$fillOpacity[i]), ";
+                border:",
               if (site_style$stroke[i]) {
                 paste0("2px solid ", site_style$color[i])
               } else {
                 "none"
               },
               ";
-    '></span>",
-
+              '></span>",
+              
               site_style$category[i],
               "</div>"
             ))
@@ -124,58 +121,33 @@ ui <- fluidPage(
           selected = names(site_colors)
         ),
         
-        # awesomeCheckboxGroup(
-        #   inputId = "category",
-        #   label = "Site Type:",
-        #   
-        #   choices = names(site_colors),
-        #   selected = names(site_colors),
-        #   
-        #   status = "primary",
-        #   inline = FALSE
-        # ),
-
+        # Button second
+        actionButton(
+          "play_anim",
+          label = "▶ Click to watch our growth!",
+          width = "100%"
+        ),
+        
+        # Slider third
+        sliderInput(
+          inputId = "date",
+          label = "Date:",
+          min = min(site_dat$date, na.rm = TRUE),
+          max = max(site_dat$date, na.rm = TRUE),
+          value = max(site_dat$date, na.rm = TRUE),
+          timeFormat = "%m/%d/%y",
+          width = "100%"
+        ),
+        
+        # Nursery info last
         uiOutput("nursery_info")
       )
     ),
     
-    # RIGHT SIDE (map + controls)
+    # RIGHT SIDE (map only)
     column(
       9,
-      
-      # MAP on top
-      fluidRow(
-        column(
-          12,
-          leafletOutput("map", height = 600)
-        )
-      ),
-      
-      # CONTROLS under map
-      fluidRow(
-        column(
-          12,
-          
-          wellPanel(
-            
-            actionButton(
-              "play_anim",
-              label = "▶ Click to watch our growth!",
-              width = "100%"
-            ),
-            
-            sliderInput(
-              inputId = "date",
-              label = "Date:",
-              min = min(site_dat$date, na.rm = TRUE),
-              max = max(site_dat$date, na.rm = TRUE),
-              value = max(site_dat$date, na.rm = TRUE),
-              timeFormat = "%m/%d/%y",
-              width = "100%"
-            )
-          )
-        )
-      )
+      leafletOutput("map", height = 600)
     )
   )
 )
@@ -337,18 +309,23 @@ shinyApp(ui, server)
 
 
 
-
-
-
-
-
-
-
 ############################## deploy via rsconnect ##############################
 
 # Only run this in terminal to deploy
 # library(rsconnect)
 # rsconnect::deployApp(appDir = ".", appName = "anublue-map")
+
+############################## webshot ##############################
+
+# library(webshot2)
+webshot(
+  url = "https://mowils.shinyapps.io/anublue-map/",
+  file = "map_app.png",
+  vwidth = 1600,
+  vheight = 1000,
+  zoom = 2,
+  delay = 10
+)
 
 ############################## archive ##############################
 
