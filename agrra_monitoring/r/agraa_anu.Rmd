@@ -21,7 +21,7 @@ library(readxl) # for reading indv. sheets within excel files
 library(purrr) # for joining multiple sheets successively
 library(janitor) # for cleaning variable names
 library(knitr) # for knitting tables
-# library(kableExtra) # for knitting tables - do I need this?
+library(kableExtra) # for knitting tables - do I need this?
 library(scales) # for plotting percentages
 library(rstatix) # for calculating significance tables
 library(ggbeeswarm) # for jittering in change plots
@@ -412,7 +412,7 @@ benthic_cover_site_chg <- benthic_cover_site %>%
   pivot_wider(
     id_cols = c(site, site_cat),
     names_from = timepoint,
-    values_from = c(lc_mean, cca_mean, ta_mean, tas_mean, fma_mean, cma_mean, ainv_mean),
+    values_from = c(lc_mean, cca_mean, ta_mean, tas_mean, fma_mean, cma_mean, ainv_mean, peys_mean),
     names_sep = "_"
   ) %>%
   mutate(
@@ -422,7 +422,8 @@ benthic_cover_site_chg <- benthic_cover_site %>%
     d_tas = tas_mean_2025 - tas_mean_baseline,
     d_fma = fma_mean_2025 - fma_mean_baseline,
     d_cma = cma_mean_2025 - cma_mean_baseline,
-    d_ainv = ainv_mean_2025 - ainv_mean_baseline
+    d_ainv = ainv_mean_2025 - ainv_mean_baseline,
+    d_peys = peys_mean_2025 - peys_mean_baseline
   ) %>%
   pivot_longer(
     cols = starts_with("d_"),
@@ -437,7 +438,8 @@ benthic_cover_site_chg <- benthic_cover_site %>%
       d_tas = "Turf + sediment",
       d_fma = "Fleshy macroalgae",
       d_cma = "Calc. macroalgae",
-      d_ainv = "Aggressive inverts"
+      d_ainv = "Aggressive inverts",
+      d_peys = "Peysonnelids"
     )
   ) %>%
   select(site, site_cat, metric, delta) %>%
@@ -2332,6 +2334,7 @@ p2 <- make_lp_summary(fish_bm_year, fish_bm_sig_table, variable_name = "Herbivor
   geom_hline(yintercept = 29.2*100, linetype = "dashed", color = "black") # Edwards et al 2014 - 29.2 g/m2 - converting to g/100m2
 
 fish_bm_change <- p1 / p2 + plot_layout(heights = c(10,10))
+fish_bm_change
 ggsave(here(fig_dir, "fish_bm_change.png"), plot = fish_bm_change, width = 6, height = 8)
 ```
 
