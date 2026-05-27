@@ -212,8 +212,8 @@ algal_height_site <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2
   mutate(site = if_else(str_detect(site, "^Site \\d+"), 
                         str_extract(site, "^Site \\d+"), 
                         site), # dealing with NPA sites name inconsistencies
-         metric = "fma_height",
-         var = "height",
+         metric = "height",
+         var = "fma_height",
          unit = "cm") %>%
   filter(site %in% sites_meta$site & year != 2022) %>%
   left_join(sites_meta %>% select(site, zone))
@@ -759,57 +759,91 @@ options(scipen = 999) # avoid scientific notation in printing values
 # create zone-level summary
 sum_zone <- sum_site_pairs %>%
   group_by(zone, metric, var, unit) %>%
-  summarise(
-
-    mean_hist = mean(hist, na.rm = TRUE),
-    sd_hist   = sd(hist, na.rm = TRUE),
-
-    mean_2025 = mean(`2025`, na.rm = TRUE),
-    sd_2025   = sd(`2025`, na.rm = TRUE),
-
-    pct_change = ((mean(`2025`, na.rm = TRUE) -
-                     mean(hist, na.rm = TRUE)) /
-                     mean(hist, na.rm = TRUE)) * 100,
-
-    delta = mean(site_delta, na.rm = TRUE),
-
-    CI = list(
-      quantile(
-        replicate(
-          5000,
-          mean(sample(site_delta,
-                      replace = TRUE),
-               na.rm = TRUE)
-        ),
-        probs = c(0.025, 0.975),
-        na.rm = TRUE
-      )
-    ),
-
-    p = suppressWarnings(
-      wilcox.test(
-        hist,
-        `2025`,
-        paired = TRUE,
-        exact = FALSE
-      )$p.value
-    ),
-
-    .groups = "drop"
-  ) %>%
-  
-  mutate(
-    CI_low  = map_dbl(CI, 1),
-    CI_high = map_dbl(CI, 2)
-  ) %>%
-  
+  summarise(mean_hist = mean(hist, na.rm = TRUE),
+            sd_hist   = sd(hist, na.rm = TRUE),
+            mean_2025 = mean(`2025`, na.rm = TRUE),
+            sd_2025   = sd(`2025`, na.rm = TRUE),
+            pct_change = ((mean(`2025`, na.rm = TRUE) -
+                             mean(hist, na.rm = TRUE)) /
+                            mean(hist, na.rm = TRUE)) * 100,
+            delta = mean(site_delta, na.rm = TRUE),
+            CI = list(
+              quantile(
+                replicate(
+                  5000,
+                  mean(sample(site_delta,
+                              replace = TRUE),
+                       na.rm = TRUE)),
+                probs = c(0.025, 0.975),
+                na.rm = TRUE)),
+            p = suppressWarnings(
+              wilcox.test(
+                hist,
+                `2025`,
+                paired = TRUE,
+                exact = FALSE
+              )$p.value
+            ),
+            .groups = "drop") %>%
+  mutate(metric_pub = str_to_sentence(gsub("_", " ", metric)),
+         CI_low  = map_dbl(CI, 1),
+         CI_high = map_dbl(CI, 2),
+         var_pub = recode(var,
+                          lc   = "Live coral",
+                          cca  = "CCA",
+                          ta   = "Turf algae",
+                          tas  = "Turf-sediment complex",
+                          fma  = "Fleshy macroalgae",
+                          cma  = "Calc. macroalgae",
+                          ainv = "Aggressive inverts",
+                          peys = "Peysonnelids",
+                          fma_height = "Fleshy macroalgal height",
+                          .default = str_to_title(var)
+         )) %>%
   select(-CI) %>%
-  
   rstatix::add_significance(p.col = "p") %>%
-  rename(p_label = p.signif)
+  rename(p_label = p.signif) %>%
+  select(zone, metric, metric_pub, var, var_pub, unit, everything())
 
-kable(sum_zone)
+sum_zone_pub <- sum_zone %>% 
+  select(-metric, -var) %>%
+  unite(variable, metric_pub, var_pub, sep = " - ", remove = TRUE)
+kable(sum_zone_pub)
+write.csv(sum_zone_pub, here("agrra_monitoring", "data_outputs", "sum_zone.csv"))
 ```
+
+# Models
+```{r}
+delta_herb_fma <- sum_site_pairs %>%
+  filter(
+    (metric == "fish_biomass" & var == "herbivores") |
+      (metric == "benthic_cover" & var == "fma") |
+      (var == "fma_height")
+  ) %>%
+  select(site, zone, var, `2025`, site_delta) %>%
+  pivot_wider(
+    names_from = var,
+    values_from = c(`2025`, site_delta)
+  ) %>%
+  filter(!is.na(`2025_herbivores`))
+
+spearman_herb_fma_deltas <- cor.test(delta_herb_fma$site_delta_herbivores,
+         delta_herb_fma$site_delta_fma,
+         method = "spearman")
+spearman_herb_fma_deltas
+
+spearman_herb2025_fmadelta <- cor.test(delta_herb_fma$`2025_herbivores`,
+         delta_herb_fma$site_delta_fma,
+         method = "spearman")
+spearman_herb2025_fmadelta
+
+spearman_herb2025_fma2025 <- cor.test(delta_herb_fma$`2025_herbivores`,
+         delta_herb_fma$`2025_fma`,
+         method = "spearman")
+spearman_herb2025_fma2025
+
+```
+
 
 # Plots
 
@@ -891,17 +925,8 @@ p_delta_pc <- ggplot(sum_zone %>%
                               var %in% benthic_var) %>%
                        mutate(delta_pct = delta * 100,
                               CI_low_pct = CI_low * 100,
-                              CI_high_pct = CI_high * 100,
-                              var = recode(var,
-                                           lc   = "Live coral",
-                                           cca  = "CCA",
-                                           ta   = "Turf algae",
-                                           tas  = "Turf + sediment",
-                                           fma  = "Fleshy macroalgae",
-                                           cma  = "Calc. macroalgae",
-                                           ainv = "Aggressive inverts",
-                                           peys = "Peysonnelids")),
-                     aes(x = delta_pct, y = var)) +
+                              CI_high_pct = CI_high * 100),
+                     aes(x = delta_pct, y = var_pub)) +
   geom_vline(xintercept = 0,
              linetype = "dashed",
              color = "grey50") +
@@ -919,9 +944,8 @@ p_delta_pc <- ggplot(sum_zone %>%
 
 
 p_delta_fmah <- ggplot(sum_zone %>%
-                         filter(metric == "fma_height") %>%
-                         mutate(var = "Fleshy macroalgal height"),
-                       aes(x = delta, y = var)) +
+                         filter(var == "fma_height"),
+                       aes(x = delta, y = var_pub)) +
   geom_vline(xintercept = 0,
              linetype = "dashed",
              color = "grey50") +

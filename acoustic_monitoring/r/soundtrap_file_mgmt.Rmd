@@ -1,0 +1,50 @@
+---
+title: "SoundTrap File Wrangling"
+author: "Molly Wilson"
+date: "2026-05-27"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(stringr)
+library(lubridate)
+
+# set file name
+files <- readLines(here("acoustic_monitoring", "data_raw", "filelist_2026_02.txt"))
+
+# set sampling interval (rounded to nearest 10 min)
+start <- as.POSIXct("2026-02-07 06:00:00", tz = "ACT")
+stop <- as.POSIXct("2026-05-08 15:50:00", tz = "ACT")
+
+df <- data.frame(file = files) %>%
+  mutate(ts_raw = str_extract(file, "(?<=\\.)\\d{12}(?=\\.)"),
+    datetime = as.POSIXct(ts_raw, format = "%y%m%d%H%M%S", tz = "UTC"),
+    datetime_10 = floor_date(datetime, "10 minutes"))
+
+observed <- df %>%
+  distinct(datetime_10) %>%
+  filter(!is.na(datetime_10))
+
+expected <- data.frame(
+  datetime_10 = seq(
+    from = start,
+    to   = stop,
+    by   = "10 min"))
+
+missing <- anti_join(expected, observed, by = "datetime_10")
+
+missing_periods <- missing %>%
+  arrange(datetime_10) %>%
+  mutate(
+    gap_group = cumsum(c(1, diff(datetime_10) != minutes(10)))
+  ) %>%
+  group_by(gap_group) %>%
+  summarise(
+    start = min(datetime_10),
+    end   = max(datetime_10),
+    n_missing = n(),
+    .groups = "drop"
+  )
+```
+
