@@ -23,7 +23,7 @@ library(purrr) # for joining multiple sheets successively
 library(janitor) # for cleaning variable names
 library(scales) # for plotting percentages
 library(rstatix) # for calculating significance tables
-library(ggbeeswarm) # for jittering in change plots
+# library(ggbeeswarm) # for jittering in change plots
 library(boot) # for bootstrapping CIs
 library(forcats) # for wrangling data for forest plots
 library(broom) # for visualizing variances
@@ -45,8 +45,6 @@ fix_names <- function(x) { # fixing issues with AGRRA col names (e.g. tAPALmean 
     gsub("(.*?)(large|small|total)$", "\\1_\\2", ., perl = TRUE) %>%
     tolower()
 }
-
-se <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
 
 # Define ggplot themes
 theme_pub <- function(base_size = 12, base_family = "") {
@@ -183,18 +181,12 @@ benthic_cover_site <- benthic_cover_trans %>%
   mutate(metric = "benthic_cover",
          var = str_remove(var, "_mean"),
          unit = "proportion") 
-# 
-# benthic_cover_year <- benthic_cover_site %>%
-#   group_by(year, zone, metric, unit, var) %>%
-#   summarise(mean = mean(value, na.rm = TRUE),
-#             sd   = sd(value, na.rm = TRUE),
-#             .groups = "drop")
-# 
-# benthic_ttests <- benthic_cover_site %>%
-#   group_by(zone, metric, unit, var) %>%
-#   wilcox_test(value ~ year,
-#               paired = TRUE)
-# kable(benthic_ttests)
+
+benthic_cover_year <- benthic_cover_site %>%
+  group_by(year, zone, metric, unit, var) %>%
+  summarise(mean = mean(value, na.rm = TRUE),
+            sd   = sd(value, na.rm = TRUE),
+            .groups = "drop")
 ```
 
 ## Algal height
@@ -264,7 +256,7 @@ fma_gen_year <- fma_gen_site %>%
             sd_prop_cov = sd(prop_cover)) %>%
   filter(mean_perc_cov > 0)
 
-kable(fma_gen_year %>% filter(code == "dict"))
+kable(fma_gen_year %>% filter(genus == "Dictyota"))
 ```
 
 ## Coral composition
@@ -387,6 +379,16 @@ coral_fams <- c("Acroporidae", "Faviidae", "Merulinidae", "Milleporidae", "Monta
 
 ### Delta plots
 ```{r}
+boot_mean_ci <- function(x, n_boot = 1000, conf = 0.95) { # compute bootstrapped mean CI
+  # Boot function
+  boot_fn <- function(data, indices) mean(data[indices])
+  
+  b <- boot::boot(x, statistic = boot_fn, R = n_boot)
+  
+  ci <- boot::boot.ci(b, type = "perc")$percent[4:5]  # lower, upper
+  return(ci)
+}
+
 coral_delta_table <- coral_fam_site %>%
   filter(zone == "NEMMA", year %in% c(2017, 2025), family %in% coral_fams) %>%
   select(year, site, family, value) %>%
