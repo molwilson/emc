@@ -1,0 +1,188 @@
+---
+title: "Restoration Site Ecological Monitoring"
+author: "Molly Wilson"
+date: "2026-04-17"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    theme: cerulean
+    highlight: haddock
+---
+# Setup
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(lubridate)
+library(scales) # for plotting percentages
+library(kableExtra) # for knitting tables
+
+fig_dir <- here("restoration_monitoring", "figs")
+
+site_list <- c("Spithead", "Cades Outer", "Cades Sculptures", "South Bird Island")
+```
+
+# Benthic
+
+```{r}
+## note for 2020 TPB benthic data transects 1-2 were west side, 3-4 were east side
+
+benthic_key <- read_excel(here("restoration_monitoring", "data_raw", "Ecological monitoring.xlsx"), sheet = "lookups_benthic") %>% 
+  clean_names() %>%
+  mutate(code = tolower(code)) %>%
+  select(code, category, category_name, species_name)
+  
+benthic <- suppressWarnings(read_excel(here("restoration_monitoring", "data_raw", "Ecological monitoring.xlsx"), sheet = "benthic")) %>% 
+  clean_names() %>%
+  mutate(code = tolower(code),
+         date = as.Date(date),
+         year = year(date)) %>%
+  select(site, date, year, transect, meter, code, height_cm)  %>%
+  left_join(benthic_key, by = "code") %>%
+  filter(site %in% site_list,
+         !category %in% c("DC", "SAND", "HOLE", "SG", "PAVE")) %>% # excluding non-available substrates
+  mutate(category_name = str_remove(category_name, "-.*"), # convert points with multiple categories to primary category for these analyses
+         category_name = case_when(
+           category_name %in% c("Sediment turf algae", "Turf algae sediment") ~ "Turf - sediment complex",
+           TRUE ~ category_name))
+
+benthic_surveys <- benthic %>%
+  group_by(site, date) %>%
+  summarise(n_trans = n_distinct(transect))
+```
+
+## Percent cover
+```{r}
+benthic_pc_cat <- benthic %>%
+  expand(nesting(year, date, site, transect), category_name) %>%
+  left_join(benthic %>%
+              filter(!category %in% c("DC", "SAND", "HOLE", "SG", "PAVE")) %>% 
+              group_by(date, site, transect) %>%
+              mutate(n_pts = n()) %>% # showing total number of points per meter that are considered available substrate
+              ungroup() %>%
+              group_by(year, date, site, transect, n_pts, category_name) %>%
+              summarize(pc_trans = n()/n_pts) %>%
+              distinct()) %>% # n() counts the number of entries within a given group)
+  mutate(pc_trans = replace_na(pc_trans, 0)) %>%
+  group_by(year, date, site, category_name) %>%
+  summarize(pc = mean(pc_trans),
+            sd = sd(pc_trans))
+
+check <- benthic_pc_cat %>%
+  group_by(date, site) %>%
+  summarize(total = sum(pc)) # all totals should = 1
+```
+
+## Plots
+```{r}
+ggplot(
+  benthic_pc_cat,
+  aes(x = pc,
+      y = category_name,
+      fill = category_name)
+) +
+  geom_col(width = 0.7) +
+  geom_errorbar(
+    aes(xmin = pc - sd,
+        xmax = pc + sd),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c(
+    "Live coral" = "coral1",
+    "Crustose coralline algae" = "pink",
+    "Turf algae" = "#d9ef8b",
+    "Turf - sediment complex" = "tan",
+    "Fleshy macroalgae" = "#1b9e77",
+    "Calcareous macroalgae" = "darkgreen",
+    "Aggressive invertebrate" = "slateblue1",
+    "Cyanobacteria" = "limegreen",
+    "Peysonelid" = "orange3",
+    "Other invertebrate" = "gray80")) +
+  facet_grid(year ~ site) +
+  labs(
+    x = "Percent cover",
+    y = NULL
+  ) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+ggsave(here(fig_dir, "restoration_benthic_pc.png"), width = 10, height = 6)
+```
+
+
+# Fish
+
+```{r}
+fish <- suppressWarnings(read_excel(here("restoration_monitoring", "data_raw", "Ecological monitoring.xlsx"), sheet = "fish")) %>% 
+  clean_names() %>%
+  filter(site %in% site_list) %>%
+  mutate(date = as.Date(date),
+         year = year(date),
+         number = if_else(is.na(number), 1, number),
+         biomass = as.numeric(biomass),
+         phase_code = tolower(phase)) %>%
+  uncount(number) %>%
+  select(site, date, year, transect, species_code, species_name, family, functional_group, phase_code, length, biomass)
+
+fish_surveys <- fish %>%
+  group_by(site, date) %>%
+  summarise(n_trans = n_distinct(transect))
+
+belt_area <- 30*2
+```
+
+## Biomass
+
+```{r}
+fish_bm_tot <- fish %>% 
+  group_by(year, date, site, transect) %>%
+  summarize(bm_trans = sum(biomass)/1000/belt_area*10000) %>% # kg/ha
+  group_by(year, site, date) %>%
+  summarize(bm = mean(bm_trans),
+            sd = sd(bm_trans))
+
+fish_bm_fam <- fish %>% 
+  expand(nesting(year, date, site, transect), family) %>%
+  left_join(fish %>%
+              group_by(year, date, site, family, transect) %>%
+              summarize(bm_trans = sum(biomass)/1000/belt_area*10000) %>% # kg/ha
+              ungroup()) %>% 
+  mutate(bm_trans = replace_na(bm_trans, 0)) %>%
+  group_by(year, site, date, family) %>%
+  summarize(bm = mean(bm_trans),
+            sd = sd(bm_trans))
+
+fish_bm_herb <- fish_bm_fam %>%
+  filter(family %in% c("Scaridae", "Acanthuridae"))
+```
+
+## Plots
+```{r}
+ggplot(
+  fish_bm_herb,
+  aes(x = as.factor(date),
+      y = bm)
+) +
+  geom_col(width = 0.7) +
+  geom_errorbar(
+    aes(ymin = bm - sd,
+        ymax = bm + sd),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  facet_grid(family ~ site) +
+  labs(
+    x = NULL,
+    y = "kg ha"
+  ) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+ggsave(here(fig_dir, "restoration_fish_bm_herb.png"), width = 10, height = 6)
+```

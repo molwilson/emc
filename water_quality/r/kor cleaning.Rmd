@@ -9,6 +9,7 @@ output: html_document
 library(tidyverse)
 library(here) 
 library(readxl) 
+library(readr)
 library(janitor)
 library(scales)
 library(lubridate)
@@ -17,11 +18,26 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
 ```{r}
-# import raw YSI data from Kor .csv export
-raw <- read_csv(here("water_quality", "data_raw", "Kor Measurement File Export.csv"),
+guess_encoding(here("water_quality", "data_raw", "Kor Measurement File Export - Jan 2026.csv"))
+guess_encoding(here("water_quality", "data_raw", "Kor Measurement File Export - Mar 2026.csv"))
+guess_encoding(here("water_quality", "data_raw", "Kor Measurement File Export - Apr 2026.csv"))
+guess_encoding(here("water_quality", "data_raw", "Kor Measurement File Export - May 2026.csv"))
+
+# import raw YSI data from Kor .csv export 
+raw <- read_csv(here("water_quality", "data_raw", "Kor Measurement File Export - Mar 2026.csv"),
   col_names = FALSE,
   show_col_types = FALSE) %>%
   filter(!str_detect(X1, "MEAN VALUE|STANDARD DEVIATION|SENSOR SERIAL NUMBER"))
+
+# import raw YSI data from Kor .csv export - UTF encoded files
+lines <- read_lines(
+  here("water_quality", "data_raw", "Kor Measurement File Export - Apr 2026.csv"),
+  locale = locale(encoding = "UTF-16LE")
+)
+# Split each line on commas
+raw <- str_split(lines, ",", simplify = TRUE) %>%
+  as_tibble(.name_repair = ~ paste0("X", seq_along(.)))
+
 
 # import list of entries to be omitted
 omissions <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi omissions") %>%
@@ -74,10 +90,17 @@ clean_sensor <- function(header_rows, data_rows, raw_df) {
 
   tidy_df <- bind_rows(blocks) %>%
     mutate(across(everything(), ~ type.convert(., as.is = TRUE))) %>%
-    mutate(date = as.Date(date_m_d_yyyy, format = "%m/%d/%y"),
-           time = format(
-             lubridate::parse_date_time(time_h_mm_ss_tt, orders = "I:M:S p"),
-             "%H:%M:%S"))
+    mutate(
+      date = as.Date(date_m_d_yyyy, format = "%m/%d/%Y"),
+      time = format(
+        lubridate::parse_date_time(time_h_mm_ss_tt, orders = "I:M:S p"),
+        "%H:%M:%S"
+      )
+    )
+    # mutate(date = as.Date(date_m_d_yyyy, format = "%m/%d/%y"),
+    #        time = format(
+    #          lubridate::parse_date_time(time_h_mm_ss_tt, orders = "I:M:S p"),
+    #          "%H:%M:%S"))
 
   tidy_df
 }
@@ -135,7 +158,7 @@ chk_ysi2 <- ysi %>%
   filter(is.na(tal_pe_rfu) | is.na(turbidity_fnu))
 
 # export csv and clean env.
-write_csv(ysi, here("water_quality", "data_outputs", "ysi_clean.csv"))
+write_csv(ysi, here("water_quality", "data_outputs", "kor_exports", "ysi_clean_mar2026.csv"))
 rm(list = ls(pattern = "^chk"))
 ```
 

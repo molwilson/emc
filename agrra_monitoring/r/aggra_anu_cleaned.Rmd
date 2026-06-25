@@ -35,6 +35,14 @@ library(ggpubr) # for adding significances into plots
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 
 # Define functions
+fix_sites <- function(site) {
+  site %>%
+    str_replace("^Site \\d+.*", str_extract(., "^Site \\d+")) %>%
+    recode(
+      "Little Bird Patch" = "Little Bird Backreef"
+    )
+}
+
 fix_names <- function(x) { # fixing issues with AGRRA col names (e.g. tAPALmean -> t_apa_lmean)
   x %>%
     gsub(" ", "_", .) %>%                        # spaces → underscores
@@ -44,6 +52,18 @@ fix_names <- function(x) { # fixing issues with AGRRA col names (e.g. tAPALmean 
      gsub("^t([A-Z]{4})(large|small|total)$", "t_\\1_\\2", ., perl = TRUE) %>% 
     gsub("(.*?)(large|small|total)$", "\\1_\\2", ., perl = TRUE) %>%
     tolower()
+}
+
+clean_excel_coral <- function(file_path) {
+  sheets <- excel_sheets(file_path)
+  sheets_to_join <- setdiff(sheets, c("TermsOfUse", "Metadata", "Overall"))  # exclude
+
+  sheets_list <- map(sheets_to_join, ~ read_excel(file_path, sheet = .x) %>%
+                       rename_with(~ gsub("^(t)([A-Za-z]{4})(avg|med|std)$", "\\1_\\2_\\3", .x, ignore.case = TRUE)) %>%
+                       rename_with(~ gsub("([A-Za-z]{4})(avg|med|std)$", "\\1_\\2", .x, ignore.case = TRUE)) %>%
+                       clean_names())
+
+  reduce(sheets_list, left_join, by = c("survey_id", "code", "name", "nt"))
 }
 
 # Define ggplot themes
@@ -77,26 +97,22 @@ site_depth <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "
   
 sites_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Raw", "MSAccess-Metadata.xlsx"), sheet = "Survey") %>% 
   clean_names() %>%
-  mutate(name = if_else(str_detect(name, "^Site \\d+"), # making NDNP site names consistent
-                        str_extract(name, "^Site \\d+"), 
-                        name)) %>%
-  select(site = name, t_benth_hist = benthic_transects, t_fish_hist = fish_transects)
+  mutate(site = fix_sites(name)) %>%
+  select(site, t_benth_hist = benthic_transects, t_fish_hist = fish_transects)
 
 sites_meta <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Raw", "Metadata.xlsx"), sheet = "Survey") %>% 
   mutate(zone = "NEMMA") %>%
   bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Raw", "Metadata.xlsx"), sheet = "Survey") %>%
               mutate(zone = "NDNP")) %>%
   clean_names() %>%
-  mutate(name = if_else(str_detect(name, "^Site \\d+"), 
-                        str_extract(name, "^Site \\d+"), 
-                        name),
-         name = if_else(name == "Little Bird Patch", "Little Bird Backreef", name),
+  mutate(site = fix_sites(name),
          code = str_replace_all(code, "\\s+", "")) %>%
-  select(site = name, code, zone, latitude, longitude, t_benth_2025 = benthic_transects, t_fish_2025 = fish_transects) %>%
+  select(site, code, zone, latitude, longitude, t_benth_2025 = benthic_transects, t_fish_2025 = fish_transects) %>%
   left_join(sites_hist, by = "site") %>%
   left_join(site_depth, by = "code") %>%
   distinct() %>%
-  filter(!is.na(t_benth_hist)) # removing sites with no historical data
+  filter(!is.na(t_benth_hist)) %>% # removing sites with no historical data
+  mutate(code = if_else(site == "Green Island 2", "A05-03", code))
 
 write.csv(sites_meta, here("agrra_monitoring", "data_outputs", "sites_meta.csv"))
 ```
@@ -149,14 +165,13 @@ benthic_cover_trans <-
         # incorporate TA sheet
         left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoverScaledByTransect.xlsx"), sheet = "tTA") %>%
                     clean_names() %>%
-                    select(transect_id, ta, sta, tas, tam))) %>%
+                    select(transect_id, ta, sta, tas, tam))
+    ) %>%
       mutate(year = 2025,
-             survey_name = if_else(survey_name == "Little Bird Patch", "Little Bird Backreef", survey_name),
              tas_sum = tas + sta + tam) %>%
-      select(site = survey_name, year, trans = transect_name, lc = t_coral, cca = t_cca, ta, tas = tas_sum, fma = t_fma, cma = t_cma, ainv = t_ainv, peys = t_pey)) %>%
-  mutate(site = if_else(str_detect(site, "^Site \\d+"), 
-                        str_extract(site, "^Site \\d+"), 
-                        site)) %>% # dealing with NPA site name inconsistencies
+      select(site = survey_name, year, trans = transect_name, lc = t_coral, cca = t_cca, ta, tas = tas_sum, fma = t_fma, cma = t_cma, ainv = t_ainv, peys = t_pey)
+  ) %>%
+  mutate(site = fix_sites(site)) %>% 
   filter(year != 2022, # 2022 was incomplete data collection year for NPA
          site %in% sites_meta$site) %>% 
   left_join(sites_meta %>% select(site, zone), by = "site") %>%
@@ -198,20 +213,15 @@ algal_height_site <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2
   bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicAlgalHeight.xlsx"), sheet = "Scaled") %>% 
               bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicAlgalHeight.xlsx"), sheet = "Scaled")) %>% 
               rename_with(fix_names) %>%
-              mutate(year = 2025,
-                     site = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
-              select(year, site, value = 't_fma-h')) %>%
-  mutate(site = if_else(str_detect(site, "^Site \\d+"), 
-                        str_extract(site, "^Site \\d+"), 
-                        site), # dealing with NPA sites name inconsistencies
+              mutate(year = 2025) %>%
+              select(year, site = name, value = 't_fma-h')) %>%
+  mutate(site = fix_sites(site),
          metric = "height",
          var = "fma_height",
          unit = "cm") %>%
   filter(site %in% sites_meta$site & year != 2022) %>%
   left_join(sites_meta %>% select(site, zone))
 ```
-
-
 
 
 ## Algal composition
@@ -230,13 +240,12 @@ fma_key <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Ca
   rename(genus = genera)
 
 # currently 2025 only
-fma_gen_site <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoverScaled.xlsx"), sheet = "tFMA") %>% 
-  mutate(zone = "NEMMA") %>%
-  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoverScaled.xlsx"), sheet = "tFMA") %>% 
-              mutate(zone = "NDNP")) %>%
+fma_gen_site <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoverScaled.xlsx"), sheet = "tFMA") %>%
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoverScaled.xlsx"), sheet = "tFMA")) %>%
   rename_with(fix_names) %>%
   mutate(year = 2025,
-         site = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
+         site = fix_sites(name)) %>%
+  left_join(sites_meta %>% select(site, zone)) %>%
   select(year, zone, site, contains("avg"), fma_tot_avg = t_fma_avg) %>% # otherwise tFMA and (other) FMA columns get duplicated as FMA
   rename_with(~ str_remove(.x, "_avg")) %>%
   pivot_longer(cols = -c(year, zone, site, fma_tot),
@@ -298,277 +307,50 @@ coral_spp_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022
     names_sep = "_"
   ) %>%
   mutate(across(c(avg, std), ~ .x / 100)) %>% # to match 2025 format (fraction of 1)
-  select(site, year, species_code, avg, std) 
+  select(site, year, species_code, avg, std)
 
 # 2025 data
-file_coral_nemma <- here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoralCoverScaled.xlsx")
-file_coral_npa <- here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoralCoverScaled.xlsx")
-
-clean_excel_coral <- function(file_path) {
-  sheets <- excel_sheets(file_path)
-  sheets_to_join <- setdiff(sheets, c("TermsOfUse", "Metadata", "Overall"))  # exclude
-
-  sheets_list <- map(sheets_to_join, ~ read_excel(file_path, sheet = .x) %>%
-                       rename_with(~ gsub("^(t)([A-Za-z]{4})(avg|med|std)$", "\\1_\\2_\\3", .x, ignore.case = TRUE)) %>%
-                       rename_with(~ gsub("([A-Za-z]{4})(avg|med|std)$", "\\1_\\2", .x, ignore.case = TRUE)) %>%
-                       clean_names())
-
-  reduce(sheets_list, left_join, by = c("survey_id", "code", "name", "nt"))
-}
-
-coral_spp_2025 <- clean_excel_coral(file_coral_npa) %>%
-  bind_rows(clean_excel_coral(file_coral_nemma)) %>%
+coral_spp_2025 <- clean_excel_coral(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoralCoverScaled.xlsx")) %>%
+  bind_rows(clean_excel_coral(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoralCoverScaled.xlsx"))) %>%
   mutate(year = 2025) %>%
-  rename(site = name) %>%
   pivot_longer(
     cols = matches("^[a-z]{4}_(avg|std)$"),   # all columns like acer_ave, apal_std, etc.
     names_to = c("species_code", ".value"),        # split into species and measurement type
     names_sep = "_"
   ) %>%
-  select(site, year, species_code, avg, std)
+  select(site = name, year, species_code, avg, std)
+
+# select primary families to simplify
+coral_fams <- c("Acroporidae", "Faviidae", "Merulinidae", "Milleporidae", "Montastraeidae",  "Poritidae", "Siderastreidae")
 
 # merge for complete df
 coral_spp_site <- bind_rows(coral_spp_hist, coral_spp_2025) %>%
-  mutate(zone = if_else(str_detect(site, "^Site \\d+"), "NDNP",
-                            if_else(str_detect(site, "Redonda"), "Redonda",
-                                    "NEMMA")),
-         site = if_else(str_detect(site, "^Site \\d+"), 
-                        str_extract(site, "^Site \\d+"), 
-                        site)) %>%
-  mutate(species_code = toupper(species_code),
-         site = if_else(site == "Little Bird Patch", "Little Bird Backreef", site)) %>%
+  mutate(site = fix_sites(site),
+         species_code = toupper(species_code)) %>%
+  left_join(sites_meta %>% select(site, zone)) %>%
   left_join(coral_meta_spp, by = "species_code")  %>%
   group_by(site) %>%
-  filter(n_distinct(year) > 1) %>% # only keeping sites with over time comparisons
+  filter(n_distinct(year) > 1 & # only keeping sites with over time comparisons
+           family %in% coral_fams) %>% 
   ungroup()
 
 coral_fam_site <- coral_spp_site %>%
   group_by(year, zone, site, family) %>%
   summarize(value = sum(avg, na.rm = TRUE)) %>%
-  ungroup()
+  ungroup() %>%
+  mutate(metric = "coral_fam_cover",
+         unit = "proportion") %>%
+  select(site, zone, year, var = family, value, metric, unit)
 
 coral_fam_year <- coral_fam_site %>%
-  group_by(year, zone, site) %>%
-  complete( # adding 0s for when nothing was present
-    family = unique(coral_spp_site$family),
-    fill = list(avg = 0)
-  ) %>%
-  ungroup() %>%
-  group_by(year, zone, family) %>%
+  group_by(year, zone, var) %>%
   summarize(mean = mean(value, na.rm = TRUE), 
          sd = sd(value, na.rm = TRUE)) %>%
   ungroup() %>%
   group_by(year, zone) %>%
   mutate(rel_mean = mean / sum(mean, na.rm = TRUE)) %>%
   ungroup()
-
-chk <- coral_fam_year %>%
-  group_by(year, zone) %>%
-  summarize(tot = sum(rel_mean, na.rm = TRUE))
 kable(coral_fam_year)
-
-coral_fam_ttests <- coral_fam_site %>%
-  group_by(zone, family) %>%
-  wilcox_test(value ~ year,
-              paired = TRUE)
-kable(coral_fam_ttests)
-
-# select primary families for plots
-coral_fams <- c("Acroporidae", "Faviidae", "Merulinidae", "Milleporidae", "Montastraeidae",  "Poritidae", "Siderastreidae") #"Unknown spp."
-```
-
-### Delta plots
-```{r}
-boot_mean_ci <- function(x, n_boot = 1000, conf = 0.95) { # compute bootstrapped mean CI
-  # Boot function
-  boot_fn <- function(data, indices) mean(data[indices])
-  
-  b <- boot::boot(x, statistic = boot_fn, R = n_boot)
-  
-  ci <- boot::boot.ci(b, type = "perc")$percent[4:5]  # lower, upper
-  return(ci)
-}
-
-coral_delta_table <- coral_fam_site %>%
-  filter(zone == "NEMMA", year %in% c(2017, 2025), family %in% coral_fams) %>%
-  select(year, site, family, value) %>%
-  # Pivot so each row is a site × family, with 2017 and 2025 in separate columns
-  tidyr::pivot_wider(
-    names_from = year,
-    values_from = value,
-    names_prefix = "yr_"
-  ) %>%
-  # Keep only sites that have data for both years
-  filter(!is.na(yr_2017) & !is.na(yr_2025)) %>%
-  # Calculate delta per site
-  mutate(delta = yr_2025 - yr_2017) %>%
-  group_by(family) %>%
-  summarise(
-    mean_delta = mean(delta, na.rm = TRUE),
-    ci = list(if(length(unique(delta)) > 1) boot_mean_ci(delta) else c(NA, NA)),
-    wilcox_p = if(length(unique(delta)) > 1) wilcox.test(delta, mu = 0)$p.value else NA,
-    .groups = "drop"
-  ) %>%
-  mutate(
-    ci_lower = sapply(ci, `[[`, 1),
-    ci_upper = sapply(ci, `[[`, 2)
-  ) %>%
-  select(-ci) %>%
-  mutate(
-    mean_delta = round(mean_delta, 3),
-    ci_lower = round(ci_lower, 3),
-    ci_upper = round(ci_upper, 3),
-    wilcox_p = signif(wilcox_p, 3)
-  ) %>%
-  arrange(family)
-
-p_delta_coral <- ggplot(coral_delta_table,
-                        aes(x = mean_delta, y = forcats::fct_rev(family))) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
-  geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper), height = 0.2) +
-  geom_point(size = 3) +
-  labs(
-    x = "Mean change (% cover)",
-    y = NULL,
-    title = NULL
-  ) +
-  # scale_x_continuous(labels = label_percent(accuracy = 0.1)) +
-  scale_x_continuous(labels = function(x) sprintf("%.1f", x * 100)) +
-  theme_pub() +
-  theme(panel.grid.major.x = element_line(color = "grey95"))
-
-p_delta_coral
-```
-
-
-### Heat plots
-```{r}
-ggplot(coral_fam_site %>%
-         filter(zone == "NEMMA" & family %in% c(coral_fams)) %>%
-         left_join(sites_meta %>% select(site, code)),
-       aes(code, family, fill = value)) +
-  geom_tile() +
-  facet_wrap(~year) +
-  scale_fill_viridis_c(labels = percent,
-                       name = "Percent cover") +
-  labs(x = NULL,
-       y = NULL,
-       fill = "Percent cover") +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  
-ggsave(here(fig_dir, "coral_fam_heat.png"), width = 8, height = 5)
-```
-
-## Coral recruits
-
-Data overview:
-
-- Historical: CoralRecruitsBySite.xlsx
-  - family level
-  - remove "DICH" code (not in 2025 classifications, not present in either dataset)
-  - missing many families present in 2025 (e.g., ACRO, MERU)
-- 2025: BenthicCoralRecruis.xlxs
-  - genus and species level
-  - missing site-level standard deviation in data
-
-```{r}
-# using coral_meta_spp key generated in prev. section
-
-# historical data
-
-recruits_hist_sized <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "CoralRecruits", "CoralRecruitsBySite.xlsx"), sheet = "Small") %>% 
-  mutate (size = "small") %>%
-  rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "CoralRecruits", "CoralRecruitsBySite.xlsx"), sheet = "Large") %>% 
-          mutate (size = "large")) %>%
-  rename_with(fix_names) %>%
-  mutate(year = year(date)) %>%
-  filter(year %in% c(2017, 2019)) %>% # 2022 was incomplete NPA year
-  pivot_longer(
-    cols = matches(".*_(avg|std)$"),   # all columns ending in avg or std
-    names_to = c("family_code", ".value"),        # split into species and measurement type
-    names_sep = "_"
-  ) %>%
-  select(site, year, family_code, size, avg) 
-
-recruits_hist_tot <- recruits_hist_sized %>%
-  group_by(site, year, family_code) %>%
-  summarize(
-    avg = sum(avg, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(size = "total") %>%
-  select(site, year, family_code, size, avg) 
-recruits_hist <- bind_rows(recruits_hist_tot, recruits_hist_sized)
-
-# 2025 data
-
-recruits_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "BenthicCoralRecruits.xlsx"), sheet = "Overall") %>%
-  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "BenthicCoralRecruits.xlsx"), sheet = "Overall")) %>%
-  rename_with(fix_names) %>%
-  mutate(year = 2025) %>%
-  rename(site = name) %>%
-  select(year, site, matches("_(small|large|total)$")) %>%
-  pivot_longer(
-    cols = matches("_(small|large|total)$"),
-    names_to = c("family_code", "size"),
-    names_pattern = "^(.*?)_(small|large|total)$",
-    values_to = "avg"
-  ) %>%
-  select(site, year, family_code, size, avg) %>%
-  mutate(family_code = str_remove(family_code, "^t_"))
-# no SD for 2025
-
-test <- recruits_2025 %>%
-  distinct(family_code, size) %>%
-  anti_join(
-    recruits_hist %>%
-      distinct(family_code, size),
-    by = c("family_code", "size")
-  )
-
-# merge for complete df
-recruits_fam_site <- bind_rows(recruits_hist, recruits_2025) %>%
-  mutate(zone = if_else(str_detect(site, "^Site \\d+"), "NDNP",
-                            if_else(str_detect(site, "Redonda"), "Redonda",
-                                    "NEMMA")),
-         site = if_else(str_detect(site, "^Site \\d+"), 
-                        str_extract(site, "^Site \\d+"), 
-                        site),
-         site = if_else(site == "Little Bird Patch", "Little Bird Backreef", site),
-         family_code = toupper(family_code)) %>%
-  filter(family_code != "DICH") %>% # in historical data only, none present  
-  # only keeping sites with over time comparisons
-  group_by(site) %>%
-  filter(n_distinct(year) > 1) %>% 
-  ungroup() %>%
-  # adding 0s for missing data
-  complete(nesting(site, year, zone), 
-           family_code,
-           size,
-           fill = list(avg = 0)) %>%
-  distinct() %>%
-  # joining family names
-  left_join(coral_meta_spp %>%
-              select(family_code, family) %>%
-              distinct(), 
-            by = "family_code") %>%
-  mutate(family = if_else(family_code == "ALL", "All species", 
-                          if_else(family_code == "CARB", "Unknown spp.", family)))
-
-recruits_fam_year <- recruits_fam_site %>%
-  group_by(year, zone, family_code, family, size) %>%
-  summarize(mean = mean(avg), # 0s already included for absent families
-            sd = sd(avg)) %>%
-  group_by(year, zone) %>%
-  mutate(rel_mean = mean / sum(mean))
-# kable(recruits_fam_year)
-# 
-# recruits_fam_ttests <- recruits_fam_site %>%
-#   group_by(zone, family, family_code, size) %>%
-#   wilcox_test(avg ~ year,
-#               paired = TRUE)
-# kable(recruits_fam_ttests)
 ```
 
 ## Diadema
@@ -585,13 +367,10 @@ diadema <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Cal
   rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "MotileInverts.xlsx"), sheet = "Overall") %>% 
           rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "MotileInverts.xlsx"), sheet = "Overall")) %>%
           rename_with(fix_names) %>%
-          mutate(year = 2025,
-                 name = if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
+          mutate(year = 2025) %>%
           select(site = name, year, matches("^dt_|^da_|^dj_"), -ends_with("_med"))) %>%
   filter(year != 2022) %>% # incomplete year for NPA
-  mutate(site = if_else(str_detect(site, "^Site \\d+"), 
-                        str_extract(site, "^Site \\d+"), 
-                        site)) %>%
+  mutate(site = fix_sites(site)) %>%
   filter(site %in% sites_meta$site) %>%
   left_join(sites_meta %>% select(site, zone)) %>%
   group_by(site) %>%
@@ -630,17 +409,146 @@ diadema_tests <- diadema_site %>%
 
 # Fish
 
-## Biomass
+## Size and densities
 
 Data overview:
 
-- 2017: FishBiomassByTransect.xlsx
+- 2017-19: MSAccess-FishRaw.xlsx
+    - requires merging transect numbers
+- 2025: Metadata.xlsx
+    - has different id numbers depending on phase
+
+```{r}
+# raw historical data
+
+fish_tax_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Raw", "MSAccess-Metadata.xlsx"), sheet = "FishTaxonomy", skip = 1, col_names = TRUE) %>% # deals with merged headers
+  clean_names() %>%
+  mutate(genus = if_else(is.na(genus) | grepl("/", genus), family, genus),
+         species = if_else(is.na(species), "spp.", species)) %>%
+  unite(species, genus, species, sep = " ", remove = TRUE)
+
+fish_raw_hist <- read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Raw", "MSAccess-FishRaw.xlsx"), sheet = "Counts Raw") %>%
+  clean_names() %>%
+  left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Raw", "MSAccess-Metadata.xlsx"), sheet = "Transect") %>%
+              clean_names() %>%
+              rename(transect = id, date = surveyed) %>%
+              left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Raw", "MSAccess-Metadata.xlsx"), sheet = "Survey") %>%
+                          clean_names() %>%
+                          select(survey = id, site = name))) %>%
+  mutate(year = year(date),
+         site = fix_sites(site),
+         size_class = str_replace_all(size_class, "-", "_"),
+         # convert bin names like "0_5" -> 2.5
+         length_mid = str_extract(size_class, "\\d+_?\\d*"),
+         length_mid = ifelse(str_detect(length_mid, "_"),
+                             sapply(str_split(length_mid, "_"), function(x) mean(as.numeric(x))),
+                             as.numeric(length_mid))) %>%
+  filter(year != 2022, # 2022 was incomplete data collection year for NPA
+         site %in% sites_meta$site) %>% 
+  left_join(sites_meta %>% select(site, zone), by = "site") %>%
+  left_join(fish_tax_hist, by = c("taxonomy" = "id")) %>%
+  mutate(phase = case_when(terminal_phase == TRUE ~ "Terminal",
+                           TRUE                  ~ "Initial")) %>%
+  select(year, site, zone, trans = transect, size_class, length_mid, common_name, common_family, family, species, phase, count)
+
+# raw 2025 data
+
+fish_tax_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Raw", "Metadata.xlsx"), sheet = "FishTaxonomy", skip = 1, col_names = TRUE) %>% # deals with merged headers
+  clean_names() %>%
+    mutate(genus = if_else(is.na(genus) | grepl("/", genus), family, genus),
+         species = if_else(is.na(species), "spp.", species)) %>%
+  unite(species, genus, species, sep = " ", remove = TRUE)
+
+fish_raw_2025 <- read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Raw", "FishRaw.xlsx"), sheet = "Counts Raw") %>%
+  clean_names() %>%
+  left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Raw", "Metadata.xlsx"), sheet = "Transect") %>%
+              clean_names() %>%
+              select(transect = id, survey, date = surveyed) %>%
+              left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Raw", "Metadata.xlsx"), sheet = "Survey") %>%
+                          clean_names() %>%
+                          select(survey = id, site = name))) %>%
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Raw", "FishRaw.xlsx"), sheet = "Counts Raw") %>%
+              clean_names() %>%
+              left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Raw", "Metadata.xlsx"), sheet = "Transect") %>%
+                          clean_names() %>%
+                          select(transect = id, survey, date = surveyed) %>%
+                          left_join(read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Raw", "Metadata.xlsx"), sheet = "Survey") %>%
+                                      clean_names() %>%
+                                      select(survey = id, site = name)))) %>%
+  clean_names() %>%
+  mutate(year = year(date),
+         site = fix_sites(site),
+         size_class = str_replace_all(size_class, " - ", "_"),
+         size_class = str_replace_all(size_class, "cm", "")) %>%
+  left_join(sites_meta %>% select(site, zone), by = "site") %>%
+  left_join(fish_tax_2025, by = c("taxonomy" = "id")) %>%
+  mutate(phase = if_else(terminal_phase == "Yes", "Terminal", "Initial")) %>%
+  select(year, site, zone, trans = transect, size_class, common_name, common_family, family, species, phase, count) 
+
+# merge all years
+
+fish_raw <- bind_rows(fish_raw_hist, fish_raw_2025) %>%
+  filter(year %in% c(2017, 2019, 2025)) %>%
+  mutate(baseline = if_else(year %in% c(2017, 2019), "baseline", "2025")) %>%
+  group_by(site, year) %>%
+  filter(n_distinct(trans) >= 8) %>%
+  ungroup() %>%
+  group_by(site) %>%
+  filter(n_distinct(year) > 1) %>%
+  ungroup()
+
+fish_density_size_spp_trans <- fish_raw %>%
+  expand(nesting(year, site, zone, trans, size_class), species) %>%
+  left_join(fish_raw %>%
+              group_by(year, site, zone, trans, size_class, species) %>%
+              summarize(density_trans = sum(count)/60)) %>% # indv./m2 (60m2 belt transects)
+  mutate(density_trans = replace_na(density_trans, 0)) %>%
+  left_join(fish_tax_2025 %>% select(family, species), by = "species")
+
+# fish_size_spp_site <- fish_density_size_spp_trans %>%
+#   group_by(year, site, zone, size_class, species) %>%
+#   summarize(density_site = mean(density_trans)) %>%
+# need to make this compatible with sum_df_site if using
+
+# subsets of interest for models
+
+scarid_lrg_density_site <- fish_density_size_spp_trans %>%
+  filter(family == "Scaridae" & 
+           size_class %in% c("21_30", "31_40")) %>% # no 40s identified
+  group_by(site, zone, year) %>%
+  summarize(value = mean(density_trans)) %>%
+  mutate(metric = "fish_density",
+         var = "scarids_21_40",
+         unit = "indv/m2") %>%
+  select(site, zone, year, metric, var, value, unit)
+
+acanthurid_lrg_density_site <- fish_density_size_spp_trans %>%
+  filter(family == "Acanthuridae" &
+           size_class %in% c("21_30", "31_40")) %>%
+  group_by(site, zone, year) %>%
+  summarize(value = mean(density_trans)) %>%
+  mutate(metric = "fish_density",
+         var = "acanthurids_21_40",
+         unit = "indv/m2") %>%
+  select(site, zone, year, metric, var, value, unit)
+  
+```
+
+
+## Biomass
+
+- Currently by family only, but could calculate biomass from raw data to get at the species level
+
+Data overview:
+
+- 2017: FishBiomassBySite.xlsx
    - "Data" sheet has transect-level data by family and group
+   - "Key" has family definitions
    - Ignoring "group" classifications here as it isn't consistent with 2025
-- 2025: FishBiomassByTransect.xlsx
-   - "Overall" sheet has transect-level data by family
+- 2025: FishBiomass.xlsx
    - Family sheets have transect-level data by species
-- Converting all data to kg/100m2
+   - Metadata has species/family definitions (needed substantial reformatting)
+- Converting all data to kg/100m2 - convert back to g/100m2
 
 ```{r}
 # create compatible family key by merging metadata
@@ -673,36 +581,31 @@ fish_fam_key <- full_join(
                names_to = "code_type",
                values_to = "code")
 
-fish_bm_fam_site <- bind_rows(
-  # historical data
-  read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022",
+fish_bm_fam_site <- bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022",
                   "Calculated", "FishBiomass", "FishBiomassBySite.xlsx"),
              sheet = "Data") %>%
     rename_with(fix_names) %>%
     mutate(code_type = "code_com",
-             year = year(date)),
+             year = year(date)) %>%
+    filter(year %in% c(2017, 2019)),
   # 2025 data
-  rbind(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025",
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025",
                     "Calculated", "FishBiomass.xlsx"),
                sheet = "Overall"),
         read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025",
                     "Calculated", "FishBiomass.xlsx"),
                sheet = "Overall")) %>%
     rename_with(fix_names) %>%
-    mutate(year = 2025,
-           site = if_else(name == "Little Bird Patch",
-                          "Little Bird Backreef",
-                          name),
+    mutate(site = name,
+           year = 2025,
            code_type = "code_lat") %>%
-    rename_with(~ gsub("^t_", "", .x), .cols = contains("avg"))
-) %>%
+    rename_with(~ gsub("^t_", "", .x), .cols = contains("avg"))) %>%
   # wrangle data
+  mutate(site = fix_sites(site)) %>%
   ## min n transect = 8 in both years
   group_by(site) %>%
   filter(all(nt >= 8)) %>%
   ungroup() %>%
-  mutate(site = if_else(str_detect(site, "^Site \\d+"), str_extract(site, "^Site \\d+"), site),
-         if_else(name == "Little Bird Patch", "Little Bird Backreef", name)) %>%
   select(site, year, code_type, contains("avg")) %>%
   pivot_longer(cols = contains("avg"),
                names_to = "family_stat",
@@ -713,9 +616,10 @@ fish_bm_fam_site <- bind_rows(
   # merge with family key
   left_join(fish_fam_key, by = c("code_type", "code")) %>%
   left_join(sites_meta %>% select(site, zone)) %>%
-  mutate(value = value/1000, # converting from g to kg
+  mutate(
+    #value = value/1000, # converting from g to kg
          metric = "fish_biomass",
-         unit = "kg_100m2") %>%
+         unit = "g_100m2") %>%
   filter(site %in% sites_meta$site,
          year != 2022, # incomplete NDNP year
          !is.na(family)) %>% # historical groupings excluded from key
@@ -730,7 +634,10 @@ herb_bm_site <- fish_bm_fam_site %>%
   select(site, zone, year, metric, var, value, unit)
 
 fish_bm_site <- rbind(fish_bm_fam_site, herb_bm_site) %>%
-  filter(var %in% c("Total", "Herbivores"))
+  mutate(var = recode(var, 
+                      "Parrotfishes" = "Scarids",
+                      "Surgeonfishes" = "Acanthurids")) %>%
+  filter(var %in% c("Total", "Scarids", "Acanthurids", "Herbivores"))
 
 fish_bm_year <- fish_bm_site %>%
   group_by(year, zone, metric, var, unit) %>%
@@ -738,11 +645,91 @@ fish_bm_year <- fish_bm_site %>%
             sd = sd(value))
 ```
 
+## Average fish weight
 
+Calculating AFW = biomass/density by site to compare with Valles and Oxenford 2014
+
+Data overview:
+
+- fish_bm_site: biomass by site for total, herbivores, scarids, and acanthurids
+- densities:
+  - 2017-19: FishDensityBySite.xlsx
+    - sheet = "Data" 
+    - T = total, PARR = scarids, SURG = acanthurids
+  - 2025: FishDensity.xlsx
+    - sheet = "Overall"
+    = ALL = total, SCAR = scarids, ACAN = acanthurids
+    
+```{r}
+fish_dens_fam_site <- bind_rows(
+  # historical data
+  read_excel(here("agrra_monitoring", "data_raw", "ATG_2017-2022", "Calculated", "FishDensity", "FishDensityBySite.xlsx"), sheet = "Data") %>%
+    rename_with(fix_names) %>%
+    mutate(year = year(date),
+           code_type = "code_com"),
+  # 2025 data
+  bind_rows(read_excel(here("agrra_monitoring", "data_raw", "ATG_NEMMA_2025", "Calculated", "FishDensity.xlsx"), sheet = "Overall"),
+            read_excel(here("agrra_monitoring", "data_raw", "ATG_NPA_2025", "Calculated", "FishDensity.xlsx"), sheet = "Overall")) %>%
+    rename_with(fix_names) %>%
+    mutate(site = name,
+           year = 2025,
+           code_type = "code_lat") %>%
+    rename_with(~ gsub("^t_", "", .x), .cols = contains("avg"))
+) %>%
+  group_by(site) %>%
+  filter(all(nt >= 8)) %>%
+  ungroup() %>%
+  mutate(site = fix_sites(site)) %>%
+  select(site, year, code_type, contains("avg")) %>%
+  pivot_longer(cols = contains("avg"),
+               names_to = "family_stat",
+               values_to = "value") %>%
+  separate(family_stat,
+           into = c("code", "stat"),
+           sep = "_(?=[^_]+$)") %>%
+  # merge with family key
+  left_join(fish_fam_key, by = c("code_type", "code")) %>%
+  left_join(sites_meta %>% select(site, zone)) %>%
+  mutate(metric = "fish_density",
+         unit = "indv_100m2") %>%
+  filter(site %in% sites_meta$site,
+         year != 2022, # incomplete NDNP year
+         !is.na(family)) %>% # historical groupings excluded from key
+  select(site, zone, year, metric, var = family, value, unit)
+
+herb_dens_site <- fish_dens_fam_site %>%
+  filter(var %in% c("Parrotfishes", "Surgeonfishes")) %>%
+  group_by(site, zone, year, metric, unit) %>%
+  summarise(value = sum(value, na.rm = TRUE),
+    .groups = "drop") %>%
+  mutate(var = "Herbivores") %>%
+  select(site, zone, year, metric, var, value, unit)
+  
+fish_dens_site <- bind_rows(fish_dens_fam_site, herb_dens_site) %>%
+  mutate(var = recode(var, 
+                      "Parrotfishes" = "Scarids",
+                      "Surgeonfishes" = "Acanthurids")) %>%
+  filter(var %in% c("Total", "Scarids", "Acanthurids", "Herbivores"))
+  
+fish_afw_site <- bind_rows(fish_dens_site, fish_bm_site) %>%
+  select(site, zone, year, var, metric, value) %>%
+  pivot_wider(names_from = metric,
+    values_from = value) %>%
+  mutate(ave_fish_weight = fish_biomass / fish_density,
+         metric = "ave_fish_weight",
+         unit = "g_fish") %>%
+  select(site, zone, year, metric, var, value = ave_fish_weight, unit)
+
+fish_afw_year <- fish_afw_site %>%
+  group_by(year, zone, metric, var, unit) %>%
+  summarize(mean = mean(value),
+            sd = sd(value))
+```
+    
 
 # Summary dfs
 ```{r}
-sum_site_yr <- bind_rows(benthic_cover_site, algal_height_site, diadema_site, fish_bm_site) %>%
+sum_site_yr <- bind_rows(benthic_cover_site, algal_height_site, coral_fam_site, diadema_site, fish_bm_site, fish_afw_site, scarid_lrg_density_site, acanthurid_lrg_density_site) %>%
   mutate(var = tolower(var))
 
 # create explicit paired site-level dataset
@@ -754,54 +741,118 @@ sum_site_pairs <- sum_site_yr %>%
     values_from = value
   ) %>%
   filter(!is.na(hist) & !is.na(`2025`)) %>%
-  mutate(site_delta = `2025` - hist)
+  mutate(delta = `2025` - hist)
 
 options(scipen = 999) # avoid scientific notation in printing values
 
 # create zone-level summary
+# sum_zone <- sum_site_pairs %>%
+#   group_by(zone, metric, var, unit) %>%
+#   summarise(mean_hist = mean(hist, na.rm = TRUE),
+#             sd_hist   = sd(hist, na.rm = TRUE),
+#             mean_2025 = mean(`2025`, na.rm = TRUE),
+#             sd_2025   = sd(`2025`, na.rm = TRUE),
+#             pct_change = ((mean(`2025`, na.rm = TRUE) -
+#                              mean(hist, na.rm = TRUE)) /
+#                             mean(hist, na.rm = TRUE)) * 100,
+#             delta = mean(delta, na.rm = TRUE),
+#             CI = list(
+#               quantile(
+#                 replicate(
+#                   5000,
+#                   mean(sample(delta,
+#                               replace = TRUE),
+#                        na.rm = TRUE)),
+#                 probs = c(0.025, 0.975),
+#                 na.rm = TRUE)),
+#             p = suppressWarnings(
+#               wilcox.test(
+#                 hist,
+#                 `2025`,
+#                 paired = TRUE,
+#                 exact = FALSE
+#               )$p.value
+#             ),
+#             .groups = "drop") %>%
+#   mutate(metric_pub = str_to_sentence(gsub("_", " ", metric)),
+#          CI_low  = map_dbl(CI, 1),
+#          CI_high = map_dbl(CI, 2),
+#          var_pub = recode(var,
+#                           lc   = "Live coral",
+#                           cca  = "CCA",
+#                           ta   = "Turf algae",
+#                           tas  = "Turf-sediment complex",
+#                           fma  = "Fleshy macroalgae",
+#                           cma  = "Calc. macroalgae",
+#                           ainv = "Aggressive inverts",
+#                           peys = "Peysonnelids",
+#                           fma_height = "Fleshy macroalgal height",
+#                           acanthurids_21_40 = "Acanthurids > 20cm",
+#                           scarids_21_40 = "Scarids > 20cm",
+#                           .default = str_to_title(var)
+#          )) %>%
+#   select(-CI) %>%
+#   rstatix::add_significance(p.col = "p") %>%
+#   rename(p_label = p.signif) %>%
+#   select(zone, metric, metric_pub, var, var_pub, unit, everything())
+
 sum_zone <- sum_site_pairs %>%
+  rename(site_delta = delta) %>%
   group_by(zone, metric, var, unit) %>%
-  summarise(mean_hist = mean(hist, na.rm = TRUE),
-            sd_hist   = sd(hist, na.rm = TRUE),
-            mean_2025 = mean(`2025`, na.rm = TRUE),
-            sd_2025   = sd(`2025`, na.rm = TRUE),
-            pct_change = ((mean(`2025`, na.rm = TRUE) -
-                             mean(hist, na.rm = TRUE)) /
-                            mean(hist, na.rm = TRUE)) * 100,
-            delta = mean(site_delta, na.rm = TRUE),
-            CI = list(
-              quantile(
-                replicate(
-                  5000,
-                  mean(sample(site_delta,
-                              replace = TRUE),
-                       na.rm = TRUE)),
-                probs = c(0.025, 0.975),
-                na.rm = TRUE)),
-            p = suppressWarnings(
-              wilcox.test(
-                hist,
-                `2025`,
-                paired = TRUE,
-                exact = FALSE
-              )$p.value
-            ),
-            .groups = "drop") %>%
-  mutate(metric_pub = str_to_sentence(gsub("_", " ", metric)),
-         CI_low  = map_dbl(CI, 1),
-         CI_high = map_dbl(CI, 2),
-         var_pub = recode(var,
-                          lc   = "Live coral",
-                          cca  = "CCA",
-                          ta   = "Turf algae",
-                          tas  = "Turf-sediment complex",
-                          fma  = "Fleshy macroalgae",
-                          cma  = "Calc. macroalgae",
-                          ainv = "Aggressive inverts",
-                          peys = "Peysonnelids",
-                          fma_height = "Fleshy macroalgal height",
-                          .default = str_to_title(var)
-         )) %>%
+  summarise(
+    mean_hist = mean(hist, na.rm = TRUE),
+    sd_hist   = sd(hist, na.rm = TRUE),
+    mean_2025 = mean(`2025`, na.rm = TRUE),
+    sd_2025   = sd(`2025`, na.rm = TRUE),
+
+    pct_change = ((mean_2025 - mean_hist) / mean_hist) * 100,
+
+    CI = list({
+      d <- site_delta[!is.na(site_delta)]
+
+      if (length(d) < 2) {
+        c(NA_real_, NA_real_)
+      } else {
+        quantile(
+          replicate(
+            5000,
+            mean(sample(d, size = length(d), replace = TRUE))
+          ),
+          probs = c(0.025, 0.975),
+          names = FALSE
+        )
+      }
+    }),
+
+    delta = mean(site_delta, na.rm = TRUE),
+
+    p = suppressWarnings(
+      wilcox.test(hist, `2025`, paired = TRUE, exact = FALSE)$p.value
+    ),
+
+    n_sites = sum(!is.na(site_delta)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    metric_pub = str_to_sentence(gsub("_", " ", metric)),
+    CI_low  = map_dbl(CI, 1),
+    CI_high = map_dbl(CI, 2),
+    var_pub = recode(
+      var,
+      lc   = "Live coral",
+      cca  = "CCA",
+      ta   = "Turf algae",
+      tas  = "Turf-sediment complex",
+      fma  = "Fleshy macroalgae",
+      cma  = "Calc. macroalgae",
+      ainv = "Aggressive inverts",
+      peys = "Peysonnelids",
+      fma_height = "Fleshy macroalgal height",
+      acanthurids_21_40 = "Acanthurids > 20cm",
+      scarids_21_40 = "Scarids > 20cm",
+      .default = str_to_title(var)
+    )
+  ) %>%
   select(-CI) %>%
   rstatix::add_significance(p.col = "p") %>%
   rename(p_label = p.signif) %>%
@@ -817,33 +868,88 @@ write.csv(sum_zone_pub, here("agrra_monitoring", "data_outputs", "sum_zone.csv")
 # Models
 ```{r}
 delta_herb_fma <- sum_site_pairs %>%
-  filter(
-    (metric == "fish_biomass" & var == "herbivores") |
-      (metric == "benthic_cover" & var == "fma") |
-      (var == "fma_height")
-  ) %>%
-  select(site, zone, var, `2025`, site_delta) %>%
+  filter((metric == "fish_biomass" & var == "herbivores") | 
+           (metric == "ave_fish_weight" & var == "scarids") |
+           var %in% c("scarids_21_40", "acanthurids_21_40", "fma", "fma_height")) %>%
+  mutate(var = paste(metric, var, sep = "_")) %>%
+  select(site, zone, var, `2025`, delta) %>% # not including historical numbers here anymore
   pivot_wider(
     names_from = var,
-    values_from = c(`2025`, site_delta)
+    values_from = c(`2025`, delta)
   ) %>%
-  filter(!is.na(`2025_herbivores`))
+  rename_with(~ str_replace(.x, "^([^_]+)_[^_]+_(.*)$", "\\1_\\2")) %>%
+  filter(!is.na(`2025_biomass_herbivores`)) # sites without fish data / low transect numbers
 
-spearman_herb_fma_deltas <- cor.test(delta_herb_fma$site_delta_herbivores,
-         delta_herb_fma$site_delta_fma,
-         method = "spearman")
-spearman_herb_fma_deltas
 
-spearman_herb2025_fmadelta <- cor.test(delta_herb_fma$`2025_herbivores`,
-         delta_herb_fma$site_delta_fma,
-         method = "spearman")
-spearman_herb2025_fmadelta
+# spearman_herb2025_fmadelta <- cor.test(delta_herb_fma$`2025_fish_biomass_herbivores`,
+#          delta_herb_fma$site_delta_benthic_cover_fma,
+#          method = "spearman")
+# spearman_herb2025_fmadelta
+# 
+# spearman_afw2025_fmadelta <- cor.test(delta_herb_fma$`2025_ave_fish_weight_parrotfishes`,
+#          delta_herb_fma$site_delta_benthic_cover_fma,
+#          method = "spearman")
+# spearman_afw2025_fmadelta
 
-spearman_herb2025_fma2025 <- cor.test(delta_herb_fma$`2025_herbivores`,
-         delta_herb_fma$`2025_fma`,
-         method = "spearman")
-spearman_herb2025_fma2025
+library(dplyr)
+library(purrr)
+library(tibble)
 
+responses <- c("2025_cover_fma", "delta_cover_fma")
+
+predictors <- c(
+  "2025_biomass_herbivores",
+  "2025_fish_weight_scarids",
+  "2025_density_scarids_21_40",
+  "2025_density_acanthurids_21_40"
+)
+
+spearman_results <- map_dfr(responses, function(resp) {
+  map_dfr(predictors, function(pred) {
+    
+    df <- delta_herb_fma[, c(resp, pred)] %>%
+      na.omit()
+    
+    test <- cor.test(df[[resp]], df[[pred]], method = "spearman")
+    
+    tibble(
+      response = resp,
+      predictor = pred,
+      rho = unname(test$estimate),
+      p_value = test$p.value,
+      n = nrow(df)
+    )
+  })
+}) %>%
+  mutate(
+    rho = round(rho, 2),
+    p_value = round(p_value, 3)
+  ) %>%
+  mutate(
+    response = recode(
+      response,
+      "2025_cover_fma" = "2025 FMA cover",
+      "delta_cover_fma" = "Change in FMA cover"
+    ),
+    predictor = recode(
+      predictor,
+      "2025_biomass_herbivores" = "Herbivore biomass",
+      "2025_fish_weight_scarids" = "Scarid mean fish weight",
+      "2025_density_scarids_21_40" = "Scarid density (21–40 cm)",
+      "2025_density_acanthurids_21_40" = "Acanthurid density (21–40 cm)"
+    )
+  )
+
+spearman_results
+
+spearman_wide <- spearman_results %>%
+  mutate(result = paste0("ρ = ", rho, ", p = ", p_value)) %>%
+  select(predictor, response, result) %>%
+  pivot_wider(names_from = response, values_from = result)
+
+spearman_wide
+kable(spearman_wide)
+write.csv(spearman_wide, here("agrra_monitoring", "data_outputs", "fma_herb_spearman.csv"))
 ```
 
 
@@ -928,7 +1034,7 @@ p_delta_pc <- ggplot(sum_zone %>%
                        mutate(delta_pct = delta * 100,
                               CI_low_pct = CI_low * 100,
                               CI_high_pct = CI_high * 100),
-                     aes(x = delta_pct, y = var_pub)) +
+                     aes(x = delta_pct, y = forcats::fct_rev(var_pub))) +
   geom_vline(xintercept = 0,
              linetype = "dashed",
              color = "grey50") +
@@ -965,6 +1071,47 @@ p_delta_fmah <- ggplot(sum_zone %>%
 
 p_delta_pc / p_delta_fmah + plot_layout(heights = c(3, 1))
 ggsave(here(fig_dir, "benthic_delta_panel.png"), width = 6, height = 4)
+```
+
+### Coral composition
+```{r}
+p_coral_delta <- ggplot(sum_zone %>%
+                       filter(metric == "coral_fam_cover" & zone == "NEMMA") %>%
+                       mutate(delta_pct = delta * 100,
+                              CI_low_pct = CI_low * 100,
+                              CI_high_pct = CI_high * 100),
+                     aes(x = delta_pct, y = forcats::fct_rev(var_pub))) +
+  geom_vline(xintercept = 0,
+             linetype = "dashed",
+             color = "grey50") +
+  geom_errorbarh(aes(xmin = CI_low_pct,
+                     xmax = CI_high_pct),
+                 height = 0.2) +
+  geom_point(size = 2) +
+  labs(x = "Mean change (% cover)",
+       y = NULL) +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(face = "bold"),
+        panel.grid.major.y = element_blank())
+
+p_coral_heat <- ggplot(coral_fam_site %>%
+         filter(zone == "NEMMA") %>%
+         left_join(sites_meta %>% select(site, code)),
+       aes(code, forcats::fct_rev(var), fill = value)) +
+  geom_tile() +
+  facet_wrap(~year) +
+  scale_fill_viridis_c(labels = percent,
+                       name = "Cover") +
+  labs(x = "Site",
+       y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        axis.text.y = element_blank(),
+        legend.position = "right")
+
+(p_coral_delta | p_coral_heat) + plot_layout(widths = c(1, 2))
+ggsave(here(fig_dir, "coral_fam_comp.png"), width = 8, height = 3.5)
 ```
 
 ### Fish biomass line
@@ -1036,7 +1183,7 @@ p_bm_tot <- make_lp_summary(
   metric_name = "fish_biomass",
   family_name = "total",
   ylab = expression("Total fish biomass (" * kg ~ 100 ~ m^{-2} * ")"),
-  hline_value = 1306 / 100 # Karr et al 2015 - 1300 kg/ha - converting to g/100m2
+  hline_value = 1306 * 10 # Karr et al 2015 - 1300 kg/ha - converting to g/100m2
 )
 
 p_bm_herb <- make_lp_summary(
@@ -1044,10 +1191,28 @@ p_bm_herb <- make_lp_summary(
   sig_df = sum_zone,
   metric_name = "fish_biomass",
   family_name = "herbivores",
-  ylab = expression("Herbivore biomass (" * kg ~ 100 ~ m^{-2} * ")"),
-  hline_value = 29.2*100 / 1000 # Edwards et al 2014 - 29.2 g/m2 - converting to g/100m2
+  ylab = expression("Herbivore biomass (" * g ~ 100 ~ m^{-2} * ")"),
+  hline_value = 29.2*100 # Edwards et al 2014 - 29.2 g/m2
 )
 
-p_bm_tot / p_bm_herb + plot_layout(heights = c(10,10))
-ggsave(here(fig_dir, "fish_bm_change.png"), width = 6, height = 8)
+p_bm_scar <- make_lp_summary(
+  summary_df = sum_site_yr,
+  sig_df = sum_zone,
+  metric_name = "fish_biomass",
+  family_name = "parrotfishes",
+  ylab = expression("Scarid biomass (" * g ~ 100 ~ m^{-2} * ")"),
+  hline_value = 1989 # Valles & Oxenford 2014 - 29.2 g/m2
+)
+
+p_afw_scar <- make_lp_summary(
+  summary_df = sum_site_yr,
+  sig_df = sum_zone,
+  metric_name = "ave_fish_weight",
+  family_name = "parrotfishes",
+  ylab = expression("Average scarid weight (" * g ~ indv^{-1} * ")"),
+  hline_value = 215 # Valles & Oxenford 2014 
+)
+
+p_bm_tot / p_bm_herb / p_bm_scar / p_afw_scar + plot_layout(heights = c(10,10,10,10))
+ggsave(here(fig_dir, "fish_bm_change.png"), width = 6, height = 18)
 ```
