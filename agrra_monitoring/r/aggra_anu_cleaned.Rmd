@@ -859,8 +859,21 @@ sum_zone <- sum_site_pairs %>%
   select(zone, metric, metric_pub, var, var_pub, unit, everything())
 
 sum_zone_pub <- sum_zone %>% 
-  select(-metric, -var) %>%
-  unite(variable, metric_pub, var_pub, sep = " - ", remove = TRUE)
+  unite(variable, metric_pub, var_pub, sep = " - ", remove = TRUE) %>%
+  select(Zone = zone, 
+         Variable = variable, 
+         Unit = unit, 
+         `Historical mean` = mean_hist, 
+         `Historical SD` = sd_hist, 
+         `2025 mean` = mean_2025, 
+         `2025 SD` = sd_2025, 
+         `Pct. change` = pct_change, 
+         Delta = delta, 
+         `CI low` = CI_low, 
+         `CI high` = CI_high, 
+         p, 
+         Significance = p_label)
+
 kable(sum_zone_pub)
 write.csv(sum_zone_pub, here("agrra_monitoring", "data_outputs", "sum_zone.csv"))
 ```
@@ -1182,7 +1195,7 @@ p_bm_tot <- make_lp_summary(
   sig_df = sum_zone,
   metric_name = "fish_biomass",
   family_name = "total",
-  ylab = expression("Total fish biomass (" * kg ~ 100 ~ m^{-2} * ")"),
+  ylab = expression("Total fish biomass (" * g ~ 100 ~ m^{-2} * ")"),
   hline_value = 1306 * 10 # Karr et al 2015 - 1300 kg/ha - converting to g/100m2
 )
 
@@ -1199,7 +1212,7 @@ p_bm_scar <- make_lp_summary(
   summary_df = sum_site_yr,
   sig_df = sum_zone,
   metric_name = "fish_biomass",
-  family_name = "parrotfishes",
+  family_name = "scarids",
   ylab = expression("Scarid biomass (" * g ~ 100 ~ m^{-2} * ")"),
   hline_value = 1989 # Valles & Oxenford 2014 - 29.2 g/m2
 )
@@ -1208,11 +1221,17 @@ p_afw_scar <- make_lp_summary(
   summary_df = sum_site_yr,
   sig_df = sum_zone,
   metric_name = "ave_fish_weight",
-  family_name = "parrotfishes",
+  family_name = "scarids",
   ylab = expression("Average scarid weight (" * g ~ indv^{-1} * ")"),
   hline_value = 215 # Valles & Oxenford 2014 
 )
 
-p_bm_tot / p_bm_herb / p_bm_scar / p_afw_scar + plot_layout(heights = c(10,10,10,10))
-ggsave(here(fig_dir, "fish_bm_change.png"), width = 6, height = 18)
+p_bm_tot / p_bm_herb / p_afw_scar + plot_layout(heights = c(10,10,10)) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "top")
+# (p_bm_tot | p_bm_herb) /
+# (p_bm_scar | p_afw_scar) +
+#   plot_layout(guides = "collect") &
+#   theme(legend.position = "top")
+ggsave(here(fig_dir, "fish_bm_change.png"), width = 5, height = 10)
 ```
