@@ -1,0 +1,140 @@
+---
+title: "Genebank performance 2025-26"
+author: "Molly Wilson"
+date: "2026-07-07"
+output: 
+  html_document:
+    code_folding: hide
+    theme: cerulean
+    highlight: haddock
+---
+
+```{r, message = F, warning = F, echo = F}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(DT)
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r}
+# import genotype tracking - genebank data
+gb_mon <- read_excel(here("restoration_monitoring", "data_raw", "GB monitoring.xlsx"), sheet = "genebank monitoring") %>% 
+  clean_names() %>%
+  mutate(date = ymd(as.character(date))) %>%
+  filter(str_detect(genotype, "^(APAL|ACER|APRO)")) %>% # only looking at acroporids here
+  select(-n_dead) # other deaths are not represented in this metric if removed between mon. events
+
+gb_perf <- gb_mon %>%
+  arrange(nursery, genotype, date) %>%
+  group_by(nursery, genotype) %>%
+  mutate(
+    observed_population =
+      coalesce(n_healthy, 0) +
+      coalesce(n_bleached, 0) +
+      coalesce(n_pale, 0) +
+      coalesce(n_diseased_pruned, 0) +
+      coalesce(n_other, 0),
+
+    initial_population = first(observed_population),
+    cumulative_added = cumsum(coalesce(n_added, 0))
+  ) %>%
+  ungroup() %>%
+  
+  # Complete to every monitoring date within each nursery
+  group_by(nursery) %>%
+  complete(genotype, date = unique(date)) %>%
+  ungroup() %>%
+
+  # Add 0s for dates after inception for each genotype
+  mutate(
+    n_added = coalesce(n_added, 0),
+    n_bleached = coalesce(n_bleached, 0),
+    n_diseased_pruned = coalesce(n_diseased_pruned, 0),
+    n_diseased_removed = coalesce(n_diseased_removed, 0)
+  ) %>%
+
+  # Remove dates before genotype existed
+  group_by(nursery, genotype) %>%
+  mutate(
+    first_date = min(date[!is.na(observed_population)])
+  ) %>%
+  filter(date >= first_date) %>%
+  
+  fill(initial_population, cumulative_added, .direction = "down") %>%
+  
+  mutate(
+    observed_population = coalesce(observed_population, 0),
+
+    population_persistence =
+      observed_population /
+      (initial_population + cumulative_added),
+
+    bleaching_prevalence =
+      if_else(
+        observed_population > 0,
+        n_bleached / observed_population,
+        NA_real_
+      ),
+    
+    paling_prevalence =
+      if_else(
+        observed_population > 0,
+        n_pale / observed_population,
+        NA_real_
+      ),
+
+    diseased_total =
+      n_diseased_pruned + n_diseased_removed,
+
+    disease_denominator =
+      observed_population + n_diseased_removed,
+
+    disease_incidence =
+      if_else(
+        disease_denominator > 0,
+        diseased_total / disease_denominator,
+        NA_real_
+      )
+  ) %>%
+  ungroup() %>%
+  select(-first_date)
+
+gb_summary <- gb_perf %>%
+  group_by(nursery, genotype) %>%
+  summarise(
+    final_population_persistence =
+      population_persistence[which.max(date)],
+
+    mean_bleaching_prevalence =
+      mean(bleaching_prevalence, na.rm = TRUE),
+
+    max_bleaching_prevalence =
+      max(bleaching_prevalence, na.rm = TRUE),
+    
+    mean_paling_prevalence =
+      mean(paling_prevalence, na.rm = TRUE),
+
+    max_paling_prevalence =
+      max(paling_prevalence, na.rm = TRUE),
+
+    mean_disease_incidence =
+      mean(disease_incidence, na.rm = TRUE),
+
+    max_disease_incidence =
+      max(disease_incidence, na.rm = TRUE),
+
+    n_surveys = n(),
+
+    .groups = "drop"
+  ) %>%
+  mutate(across(where(is.numeric), ~round(.x, 2)))
+
+datatable(gb_summary %>% select(nursery, genotype, pop_persistence = final_population_persistence, mean_paling_prevalence, max_paling_prevalence, mean_disease_incidence, max_disease_incidence), 
+          options = list(pageLength = 64),
+          rownames = FALSE)
+```
+
+
