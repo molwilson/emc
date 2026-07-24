@@ -1123,7 +1123,9 @@ p_coral_heat <- ggplot(coral_fam_site %>%
         axis.text.y = element_blank(),
         legend.position = "right")
 
-(p_coral_delta | p_coral_heat) + plot_layout(widths = c(1, 2))
+(p_coral_delta | p_coral_heat) + 
+  plot_layout(widths = c(1, 2)) +
+  plot_annotation(tag_levels = "A")
 ggsave(here(fig_dir, "coral_fam_comp.png"), width = 8, height = 3.5)
 ```
 
@@ -1226,12 +1228,13 @@ p_afw_scar <- make_lp_summary(
   hline_value = 215 # Valles & Oxenford 2014 
 )
 
-p_bm_tot / p_bm_herb / p_afw_scar + plot_layout(heights = c(10,10,10)) +
-  plot_layout(guides = "collect") &
-  theme(legend.position = "top")
-# (p_bm_tot | p_bm_herb) /
-# (p_bm_scar | p_afw_scar) +
-#   plot_layout(guides = "collect") &
-#   theme(legend.position = "top")
+(p_bm_tot / p_bm_herb / p_afw_scar) +
+  plot_layout(heights = c(10, 10, 10),
+              guides = "collect") +
+  plot_annotation(tag_levels = "A") &
+  theme(legend.position = "bottom",
+        plot.tag = element_text(face = "bold", size = 16),
+        plot.tag.position = c(-0.03, 1.02),
+        plot.margin = margin(5.5, 5.5, 5.5, 20))
 ggsave(here(fig_dir, "fish_bm_change.png"), width = 5, height = 10)
 ```
