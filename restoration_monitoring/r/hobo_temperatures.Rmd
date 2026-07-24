@@ -16,7 +16,7 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
 ```{r}
-fig_folder <- here("water_quality", "figs", "2026 Jan")
+fig_folder <- here("water_quality", "figs", "2026 Jun")
 
 cades <- read_excel(here("restoration_monitoring", "data_raw", "hobo", "Hobo logger data.xlsx"), sheet = "Cades") %>%
   clean_names() %>%
@@ -84,10 +84,13 @@ ggplot() +
   scale_color_manual(values = c("cadetblue", "coral", "gold")) +
   geom_hline(yintercept = ref_temp_bleaching, linetype = 'dashed') +
   scale_y_continuous(sec.axis = sec_axis(~.*9/5+32, name = "Temperature (°F)")) +
+  scale_x_datetime(date_breaks = "3 months",
+                   date_labels = "%b %Y",
+                   expand = c(0.02, 0.02)) +
   labs(x = "", y = "Temperature (°C)", color = "Nursery location", fill = "") +
   theme_bw() +
   theme(legend.position = "top")
-ggsave(here(fig_folder, "hobo_summary.png"), width = 6, height = 4)
+ggsave(here(fig_folder, "hobo_summary.png"), width = 8, height = 4)
 
 ggplot(temp_data,
        aes(x = date_time, y = temp_c)) +

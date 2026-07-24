@@ -3,12 +3,12 @@ title: "2025-26 Q3 Data Report"
 author: "Molly Wilson"
 date: "2026-01-15"
 output: 
-  html_document:
+  pdf_document:
     toc: true
-    toc_float: true
-    code_folding: hide
-    theme: cerulean
-    highlight: haddock
+    # toc_float: true
+    # code_folding: hide
+    # theme: cerulean
+    # highlight: haddock
 ---
 # Setup
 
@@ -23,7 +23,9 @@ library(knitr)
 library(kableExtra) # do I need this with DT?
 library(DT)
 
-knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE) 
+# echo = FALSE for PDF knit only
+```
 ```
 
 ```{r}
@@ -46,12 +48,12 @@ fig_dir <- here("restoration_monitoring", "figs", "25-26_Q3")
 ## Genebank monitoring
 
 - Rates of infection, bleaching, etc. are currently calculated as the mean of % incidence at each monitoring date across the quarter. Eventually I need to incorporate longer-term performance into genotype tracking sheet.
-- - Survivorship (number of frags at end vs. beginning + additions) currently includes diseased frags in total frag number at both beginning and end. Does this make sense?
+- Survivorship (number of frags at end vs. beginning + additions) currently includes diseased frags in total frag number at both beginning and end. Does this make sense?
 
 ```{r}
 # import genotype tracking - genebank data
 
-gb_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "genebank monitoring") %>% 
+gb_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "archive - genebank monitoring") %>% 
   clean_names() %>%
   mutate(date = ymd(as.character(date))) %>%
   filter(date >= as.Date(q_start) & date <= as.Date(q_end)) %>%
@@ -365,13 +367,15 @@ datatable(collection_sites,
 ## Outplant numbers
 
 Currently spiders at TPB are considered outplants, while spiders at Jumby are considered nursery frags. Keep as is?
+
 ```{r}
 outplants <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "outplants") %>% 
   clean_names() %>%
+  rename(id = genotype) %>%
   mutate(genotype = substr(id, 1, 6),
          species = substr(id, 1, 4)) %>%
   filter(!is.na(date)) %>%
-  select(date, site, species, genotype, id, n_frags, n_colonies)
+  select(date, site, species, genotype, id, n_frags)
 ```
 
 ### By genotype

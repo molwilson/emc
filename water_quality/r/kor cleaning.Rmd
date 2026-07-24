@@ -17,35 +17,41 @@ library(lubridate)
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
+Notes
+
+- currently an issue with Jan file - creates character date, using previously generated historical .csv for now
+
 ```{r}
-guess_encoding(here("water_quality", "data_raw", "Kor Measurement File Export - Jan 2026.csv"))
-guess_encoding(here("water_quality", "data_raw", "Kor Measurement File Export - Mar 2026.csv"))
-guess_encoding(here("water_quality", "data_raw", "Kor Measurement File Export - Apr 2026.csv"))
-guess_encoding(here("water_quality", "data_raw", "Kor Measurement File Export - May 2026.csv"))
+file_raw <- here("water_quality", "data_raw", "Kor Measurement File Export - Apr 2026.csv")
+file_clean <- here("water_quality", "data_outputs", "kor_exports", "ysi_clean_apr2026.csv")
 
-# import raw YSI data from Kor .csv export 
-raw <- read_csv(here("water_quality", "data_raw", "Kor Measurement File Export - Mar 2026.csv"),
-  col_names = FALSE,
-  show_col_types = FALSE) %>%
-  filter(!str_detect(X1, "MEAN VALUE|STANDARD DEVIATION|SENSOR SERIAL NUMBER"))
+# 1. determine encoding of new file from Kor exports
+encoding <- guess_encoding(file_raw)
 
-# import raw YSI data from Kor .csv export - UTF encoded files
+# 2. import raw YSI data depending on encoding
+
+## 2a. non-UTF encoded files
+# raw <- read_csv(file_raw,
+#   col_names = FALSE,
+#   show_col_types = FALSE) %>%
+#   filter(!str_detect(X1, "MEAN VALUE|STANDARD DEVIATION|SENSOR SERIAL NUMBER"))
+
+## 2b. UTF encoded files
 lines <- read_lines(
-  here("water_quality", "data_raw", "Kor Measurement File Export - Apr 2026.csv"),
+  file_raw,
   locale = locale(encoding = "UTF-16LE")
 )
-# Split each line on commas
 raw <- str_split(lines, ",", simplify = TRUE) %>%
   as_tibble(.name_repair = ~ paste0("X", seq_along(.)))
 
 
-# import list of entries to be omitted
+# 3. import list of entries to be omitted
 omissions <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi omissions") %>%
   mutate(time = format(time, "%H:%M:%S"),
          date = as.Date(date))
-### need to reformat date/times
+### need to reformat date/times?
 
-# import list of entries to be corrected
+# 4. import list of entries to be corrected
 corrections <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "ysi corrections") %>%
   mutate(time = format(time, "%H:%M:%S"),
          date = as.Date(date))
@@ -114,13 +120,17 @@ turbidity <- clean_sensor(header_rows_turbidity, data_rows_turbidity, raw) %>%
   select(-site_corrected)
 
 general <- clean_sensor(header_rows_gen, data_rows_gen, raw) %>%
-  select(date, time, site_code_depth = site_name, tal_pe_rfu, chlorophyll_rfu, cond_s_cm, spcond_s_cm, tds_mg_l, sal_psu, odo_mg_l, ph, temp_c) %>%
+  select(date, time, site_code_depth = site_name, tal_pe_rfu, chlorophyll_rfu, 
+         # accounting for alternative conductivity names per encoding type
+         cond_us_cm = any_of(c("cond_m_s_cm", "cond_s_cm", "cond_m_us_cm")),
+         spcond_us_cm = any_of(c("spcond_m_s_cm", "spcond_s_cm", "spcond_m_us_cm")),
+         tds_mg_l, sal_psu, odo_mg_l, ph, temp_c) %>%
   anti_join(omissions, by = c("date", "time", "site_code_depth")) %>%
   left_join(corrections, by = c("date", "time", "site_code_depth")) %>%
   mutate(site_code_depth = coalesce(site_corrected, site_code_depth)) %>%
   select(-site_corrected)
 
-# checking that corrections were applied
+# checking that corrections were applied (should be 0 obs.)
 chk_turbidity <- turbidity %>%
   inner_join(corrections %>% select(date, time), 
              by = c("date", "time"))
@@ -146,19 +156,18 @@ ysi <- general %>%
          depth = coalesce(depth, 1)) %>% # replacing sites with no depth as depth = 1
   relocate(date, site_code_depth, site_code, depth) %>%
   rename(do_mg_l = odo_mg_l) %>%
-  set_names(~ str_replace_all(., "_s_", "_us_")) # replacing "u" symbol lost when stripping data
+  set_names(~ str_replace_all(., "_s_", "_us_")) # replacing any "u" symbol lost when stripping data
 
-# checking for duplicated/incomplete data
+# checking for duplicated/incomplete data (should be 0 obs.)
 chk_ysi1 <- ysi %>% 
   group_by(site_code_depth, date) %>%
   summarize(count = n()) %>%
   filter(count != 1)
-
 chk_ysi2 <- ysi %>%
   filter(is.na(tal_pe_rfu) | is.na(turbidity_fnu))
 
 # export csv and clean env.
-write_csv(ysi, here("water_quality", "data_outputs", "kor_exports", "ysi_clean_mar2026.csv"))
+write_csv(ysi, file_clean)
 rm(list = ls(pattern = "^chk"))
 ```
 

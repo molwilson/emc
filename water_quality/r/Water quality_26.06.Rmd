@@ -33,7 +33,8 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ## Importing, cleaning, and merging datasets
 
 Data cleaning notes for future:
-- April 2024 had two testing dates instead of one in May
+- April 2024 had two testing dates instead of one in May; July 2025 had two testing dates instead of one in August - currently accounted for except July 2025 could be refined as Cades and Jumby sites were added at the end of the month and are currently considered July while 7/29/25 Nonsuch sites are considered August as they were already tested 7/01
+- Cades Sculpture Nursery = Cades Nursery (for now, should eventually remove overlap on 4/10)
 - Missing 1m depth for CRS in Jan 2025
 - YSI omissions and corrections are now made directly within kor_cleaning.Rmd (output = ysi_clean.csv)
 
@@ -72,6 +73,7 @@ boat_activity <- read_excel(here("water_quality", "data_raw", "Water quality dat
 
 precip <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "precipitation") %>% 
   clean_names() %>%
+  select(date, precipitation_in) %>%
   right_join(data.frame(date = seq(ymd('2023-10-10'), as.Date(today()), by='day'))) %>%
   mutate(precipitation_in = replace_na(precipitation_in, 0))
 
@@ -83,12 +85,6 @@ sargassum_local <- read_excel(here("water_quality", "data_raw", "Water quality d
 sargassum_regional <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sargassum_regional") %>%
   clean_names() %>%
   mutate(date = my(paste(month, year)))
-
-# accounting for transition in control sites (GIE -> GIC, YIE -> YIC) to remove overlap
-first_gic <- data_mon %>%
-  filter(site_code == "GIC") %>%
-  summarise(first_gic = min(date)) %>%
-  pull(first_gic)
 
 # merge into one dataset
 
@@ -112,11 +108,11 @@ data_mon_dpt <- ysi %>%
          doy = yday(date),
          month = month(ymd(date), label = TRUE),
          year = year(ymd(date)),
-         date_label = paste(as.character(month), as.character(year)),
-         date_label = if_else(as.character(date) == "2024-04-29", "May 2024", date_label), # label as next month due to spread
-         date_cat = if_else(substr(date_label, 1, 3) %in% c("Dec", "Jan", "Feb", "Mar", "Apr"), "High season", "Low season"),
-         site_cat = if_else(site_code %in% c("YIE", "GIE", "YIC", "GIC", "JC", "CRS"), "Control", "Treatment")) %>%
-  relocate(date, doy, year, date_label, date_cat, site_code, site_name, latitude, longitude, depth, monitoring_type) %>%
+         site_cat = if_else(site_code %in% c("YIE", "GIE", "YIC", "GIC", "JC", "CRS"), "Control", "Treatment"),
+         turbidity_fnu = if_else(date %in% c(as.Date("2026-07-08"), as.Date("2023-10-10")), NA_real_, turbidity_fnu)) %>% # sensor giving false readings on these dates
+  relocate(date, doy, year, 
+           # date_label, date_cat, 
+           site_code, site_name, latitude, longitude, depth, monitoring_type) %>%
   select(-notes)
 # need to select only active sites, but combine a few incl. control sites
 
@@ -125,17 +121,35 @@ data_mon <- data_mon_dpt %>%
   filter(depth == 1) %>% # using only long-term monitoring sites and surface measurements
   select(-depth) %>%
   mutate(site_name = factor(site_name, levels = site_levels)) %>%
-  mutate(site_name = fct_rev(site_name))
-  
-# check samples per date_label
-chk <- data_mon %>%
-  complete(date_label, site_code, fill = list(depth = NA)) %>% # fill can be NA or other defaults
-  select(date_label, site_code, date) %>%
+  mutate(site_name = fct_rev(site_name)) %>%
+  # adding date label to account for months with two testings/no testings
+  arrange(site_code, date) %>%
+  group_by(site_code) %>%
   mutate(
-    date_label_date = parse_date_time(date_label, orders = "b Y"), # "Apr 2024" → 2024-04-01
-    date_label_date = as.Date(date_label_date)
+    month = floor_date(date, "month"),
+    month_n = ave(month, month, FUN = length),
+    month_row = ave(month, month, FUN = seq_along),
+    next_month = month %m+% months(1)
   ) %>%
-  arrange(site_code, date_label_date)
+  mutate(
+    next_month_exists = next_month %in% month
+  ) %>%
+  mutate(
+    date_label = case_when(
+      month_n > 1 &
+      month_row == month_n &
+      !next_month_exists ~ next_month,
+      TRUE ~ month
+    )
+  ) %>%
+  ungroup() %>%
+  mutate(date_label = format(date_label, "%b %Y")) %>%
+  select(-c(month_n, month_row, next_month, next_month_exists))
+  
+#### check samples per date_label - still some issues here?? ####
+chk <- data_mon %>%
+  count(site_name, date_label) %>%
+  filter(n > 1)
 ```
 
 ## Setting target references, plotting ranges, and parameter labels for graphs
@@ -329,8 +343,8 @@ ggplot() +
                filter(active == "Y") %>% # don't include site_codes with overlapping site names
                select(site_code, site_cat, latitude, longitude) %>%
                distinct(), 
-             mapping = aes(x = longitude, y = latitude), # , shape = site_cat
-             alpha = 0.9, color = "orange", size = 2) + # add sites
+             mapping = aes(x = longitude, y = latitude, shape = site_cat), # 
+             alpha = 0.9, color = "black", size = 2) + # add sites
   scale_shape_manual(values = c(1, 16)) +
   labs(shape = "") +
   theme_void() +
@@ -387,6 +401,9 @@ ggarrange(ph_point, ph_line,
 ggsave(here(fig_folder, "ph.png"),  width = plot_dim_w, height = plot_dim_h)
 
 # turbidity
+turb_point <- flpoint_site_ref(ref_turb, data_mon, turbidity_fnu, lab_turb, ylims_turb)
+turb_line <- line_time_ref(ref_turb, lab_ref_turb, data_mon, turbidity_fnu, lab_turb, ylims_turb)
+
 turb_point <- flpoint_site_ref(ref_turb, filter(data_mon, as.character(date) != "2023-10-10" & turbidity_fnu > -1), turbidity_fnu, lab_turb, ylims_turb) # removing first date and negative values, calibration was off
 turb_line <- line_time_ref(ref_turb, lab_ref_turb, filter(data_mon, as.character(date) != "2023-10-10" & turbidity_fnu > -1), turbidity_fnu, lab_turb, ylims_turb)
 
@@ -441,6 +458,8 @@ entero_line <- line_time_ref(ref_entero, lab_ref_entero, data_mon, n_colonies, l
 ggarrange(entero_point, entero_line, 
           ncol = 2, nrow = 1, common.legend = TRUE, legend = "top")
 ggsave(here(fig_folder, "entero.png"),  width = plot_dim_w, height = plot_dim_h)
+# line only for exec sum
+ggsave(here(fig_folder, "entero_line.png"),  plot = entero_line, width = plot_dim_w, height = plot_dim_h)
 ```
 
 ## Additional enterococcus graphs
@@ -482,18 +501,8 @@ ggsave(here(fig_folder, "entero_interannual.png"), width = 6, height = 4)
 ```{r, error = FALSE}
 # clean dataset (adding Aug 2025 = 0 here due to missing data)
 data_mon_entero <- data_mon %>%
-  select(year, date_label, site_name, latitude, longitude, n_colonies, entero_yn)
-
-aug_2025 <- data_mon_entero %>%
-  distinct(site_name, latitude, longitude) %>%
-  mutate(
-    date_label = "Aug 2025",
-    n_colonies = 0,
-    entero_yn = "Absent",
-    year = 2025
-  )
-
-data_mon_entero <- bind_rows(data_mon_entero, aug_2025)
+  select(year, date, date_label, site_name, latitude, longitude, n_colonies, entero_yn) %>%
+  mutate(assigned_month = my(date_label))
 
 # Antigua shapefile
 atg <- st_read(here("mapping", "shapefiles", "atg_adm_2019_shp", "atg_admbnda_adm1_2019.shp")) %>%
@@ -509,17 +518,19 @@ xlim <- range(data_mon$longitude, na.rm = TRUE) + c(-.01, .01)
 ylim <- range(data_mon$latitude, na.rm = TRUE) + c(-.01, .01)
 
 # Nonsuch only boundaries
-lons = c(-61.72, -61.65)
-lats = c(17.03, 17.10)
+# lons = c(-61.72, -61.65)
+# lats = c(17.03, 17.10)
 
 ggplot() +
   geom_sf(data = atg, fill = "slategray", color = "slategray") + # ATG basemap
-  coord_sf(xlim = lons, ylim = lats, expand = FALSE) + # setting map boundaries
-  geom_point(data_mon_entero %>% filter(year %in% c(2024, 2025)), 
+  coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) + # setting map boundaries
+  geom_point(data_mon_entero %>% filter(year >= 2024), 
              mapping = aes(x = longitude, y = latitude, color = entero_yn, size = n_colonies), 
              alpha = 0.7) + # add sites
   scale_color_manual(values = c("turquoise", "tomato")) +
-  facet_wrap(. ~ factor(date_label, levels = c("Oct 2023", "Nov 2023", "Dec 2023", "Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024", "Jul 2024", "Aug 2024", "Sep 2024", "Oct 2024", "Nov 2024", "Dec 2024", "Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025", "Jul 2025", "Aug 2025", "Sep 2025", "Oct 2025", "Nov 2025", "Dec 2025", "Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026")),
+  facet_wrap(~ factor(assigned_month,
+             levels = sort(unique(assigned_month)),
+             labels = format(sort(unique(assigned_month)), "%b %Y")),
              ncol = 12) +
   labs(size = expression("Concentration (CFU "*mL^-1*")"),
        color = expression("Enterococci detection")) +
@@ -529,7 +540,7 @@ ggplot() +
         axis.ticks = element_blank(),
         legend.position = "top")
 
-ggsave(here(fig_folder, "entero_map.png"), width = 10, height = 6)
+ggsave(here(fig_folder, "entero_map.png"), width = 12, height = 6)
 ```
 
 ##### Boat play
@@ -570,18 +581,33 @@ ggsave(here(fig_folder, "entero_chlor.png"), width = 6, height = 3)
 Didn't find much relationship between precipitation and any parameters at this point, it will be helpful to have more data over time. Including exploratory graphs at this point for reference.
 
 ```{r}
-ggplot() +
-  geom_line(data = precip %>% 
-              filter(as.Date(date) < date_max), 
-             aes(x = as.Date(date), y = precipitation_in)) +
-  labs(x = "", y = lab_precip) +
-  scale_x_date(
-    # limits = as.Date(c("2023-11-01", "2025-06-30")),
-    date_breaks = "2 months",
-    date_labels = "%b %Y") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+precip_daily <- precip %>%
+  mutate(date = as.Date(date)) %>%
+  complete(
+    date = seq(min(date), max(date), by = "day"),
+    fill = list(precipitation_in = 0)
+  ) %>%
+  mutate(
+    year = factor(year(date)),
+    doy = yday(date)
+  )
+
+ggplot(precip_daily %>% filter(year(date) >= 2024)) + # first complete year
+  geom_line(aes(doy, precipitation_in, colour = year, group = year), alpha = 0.7) +
+  scale_x_continuous(
+    breaks = yday(as.Date(paste0("2001-", sprintf("%02d", 1:12), "-01"))),
+    labels = month.abb
+  ) +
+  scale_color_manual(values = c(
+  "2024" = "navy",  # blue
+  "2025" = "#E69F00",  # orange
+  "2026" = "#009E73"   # green
+)) +
+  labs(x = "", y = lab_precip, colour = "Year") +
+  theme_bw()
 ggsave(here(fig_folder, "precip.png"), width = 6, height = 4)
+
+
 
 # trying to calculate the amount of rainfall preceding a testing day
 ysi_dates <- ysi %>%
@@ -669,6 +695,8 @@ point_precip(data_mon, n_colonies, lab_entero, 0.01)
 
 ## Sargassum
 
+### Regional influx
+
 ```{r}
 # sargassum accumulation 2023-2025 (from Ruleo)
 
@@ -685,6 +713,7 @@ ggplot() +
 ggsave(here(fig_folder, "sargassum_regional.png"), width = 6, height = 4)
 ```
 
+### Panels
 
 ```{r}
 sites_sarg <- c("EBB", "MRCH", "BDB", "LDB", "FHB", "NBRM", "NBRB")
@@ -741,7 +770,6 @@ leachate_sarg <- ggplot() +
   theme_bw() +
   theme(axis.text.x = (element_text(angle = 45, hjust = 1)))
 
-
 # do
 do_sarg <- sarg(ref_do, ref_do_hypoxia, do_mg_l, lab_do, ylims = c(0,9.5)) +
   theme(legend.position = "top",
@@ -772,6 +800,36 @@ ggarrange(
 ggsave(here(fig_folder, "sargassum_local.png"),  width = 8, height = 8)
 
 ```
+
+### Leachate heatmap
+
+```{r}
+# leachate visualizations
+
+plot_dat <- data_mon %>%
+  distinct(month, date_label) %>%
+  arrange(month) %>%
+  pull(date_label)
+
+ggplot(
+  data_mon %>%
+    mutate(date_label = factor(date_label, levels = plot_dat)) %>%
+    complete(site_name, date_label, fill = list(leachate = 0)) %>%
+    mutate(leachate = factor(leachate)),
+  aes(date_label, site_name, fill = leachate)) +
+  scale_fill_manual(
+    values = c(
+      "0" = "#F7FBFF",
+      "1" = "#6BAED6",
+      "2" = "#08519C"
+    )) +
+  geom_tile(color = "grey90", linewidth = 0.3) +
+  labs(x = NULL, y = NULL, fill = "Leachate score") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        legend.position = "top")
+ggsave(here(fig_folder, "sargassum_leachate.png"),  width = 6, height = 4)
+```
+
 
 ## Fish kill investigation
 ```{r}

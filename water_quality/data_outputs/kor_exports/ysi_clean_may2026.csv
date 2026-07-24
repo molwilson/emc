@@ -1,4 +1,4 @@
-date,site_code_depth,site_code,depth,tal_pe_rfu,chlorophyll_rfu,cond_m_us_cm,spcond_m_us_cm,tds_mg_l,sal_psu,do_mg_l,ph,temp_c,turbidity_fnu
+date,site_code_depth,site_code,depth,tal_pe_rfu,chlorophyll_rfu,cond_us_cm,spcond_us_cm,tds_mg_l,sal_psu,do_mg_l,ph,temp_c,turbidity_fnu
 2026-05-22,CRS3,CRS,3,-0.36,-0.12,57305.7,54443.8,35389,35.95,6.46,8.07,27.752,-0.34
 2026-05-22,CRS1,CRS,1,0.07,-0.13,57223.7,54406.4,35364,35.92,6.59,8.09,27.711,1.81
 2026-05-22,CRN3,CRN,3,-0.33,-0.14,57348.5,54457.9,35398,35.96,6.37,8.09,27.779,-0.25
