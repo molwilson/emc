@@ -22,8 +22,8 @@ Notes
 - currently an issue with Jan file - creates character date, using previously generated historical .csv for now
 
 ```{r}
-file_raw <- here("water_quality", "data_raw", "Kor Measurement File Export - Apr 2026.csv")
-file_clean <- here("water_quality", "data_outputs", "kor_exports", "ysi_clean_apr2026.csv")
+file_raw <- here("water_quality", "data_raw", "Kor Measurement File Export - Aug 2026.csv")
+file_clean <- here("water_quality", "data_outputs", "kor_exports", "ysi_clean_aug2026.csv")
 
 # 1. determine encoding of new file from Kor exports
 encoding <- guess_encoding(file_raw)
@@ -159,10 +159,25 @@ ysi <- general %>%
   set_names(~ str_replace_all(., "_s_", "_us_")) # replacing any "u" symbol lost when stripping data
 
 # checking for duplicated/incomplete data (should be 0 obs.)
+sites <- read_excel(here("water_quality", "data_raw", "Water quality data.xlsx"), sheet = "sites") %>% 
+  clean_names() %>%
+  filter(active == "Y") %>%
+  pivot_longer(cols = c(depth_1m, depth_3m),
+               names_to = "depth",
+               values_to = "tested") %>%
+  filter(tested == "Y") %>%
+  mutate(depth = str_remove(depth, "depth_") %>%
+           str_remove("m"),
+         site_code_depth = paste0(site_code, depth)) %>%
+  select(site_code_depth)
+  
 chk_ysi1 <- ysi %>% 
-  group_by(site_code_depth, date) %>%
+  group_by(site_code_depth) %>%
   summarize(count = n()) %>%
+  right_join(sites, by = "site_code_depth") %>%
+  mutate(count = coalesce(count, 0)) %>%
   filter(count != 1)
+
 chk_ysi2 <- ysi %>%
   filter(is.na(tal_pe_rfu) | is.na(turbidity_fnu))
 
