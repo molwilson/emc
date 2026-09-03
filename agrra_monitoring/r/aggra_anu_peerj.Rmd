@@ -1,7 +1,7 @@
 ---
-title: "AGRRA 2017-2025 - cleaned"
+title: "AGRRA 2017-2025 - PeerJ Submission"
 author: "Molly Wilson"
-date: "2026-04-17"
+date: "2026-08-31"
 output: 
   html_document:
     toc: true
@@ -23,12 +23,13 @@ library(purrr) # for joining multiple sheets successively
 library(janitor) # for cleaning variable names
 library(scales) # for plotting percentages
 library(rstatix) # for calculating significance tables
+library(vegan) # for nmds
 # library(ggbeeswarm) # for jittering in change plots
-library(boot) # for bootstrapping CIs
-library(forcats) # for wrangling data for forest plots
-library(broom) # for visualizing variances
+# library(boot) # for bootstrapping CIs
+# library(forcats) # for wrangling data for forest plots
+# library(broom) # for visualizing variances
 library(patchwork) # for combining plots
-library(ggradar) # for radar plots
+# library(ggradar) # for radar plots
 library(ggpubr) # for adding significances into plots
 
 # Define settings
@@ -84,7 +85,7 @@ theme_pub <- function(base_size = 12, base_family = "") {
 }
 
 # fig directory
-fig_dir <- here("agrra_monitoring", "figs")
+fig_dir <- here("agrra_monitoring", "figs", "peerj")
 ```
 
 # Site metadata
@@ -966,7 +967,165 @@ write.csv(spearman_wide, here("agrra_monitoring", "data_outputs", "fma_herb_spea
 ```
 
 
-# Plots
+# Plots + analyses
+
+#### Benthic cover NMDS
+```{r}
+# nmds data
+benthic_nmds <- benthic_cover_site %>%
+  mutate(
+    period = if_else(year == 2025, "2025", "2017-19"),
+    period = factor(period, levels = c("2017-19", "2025"))
+  ) %>%
+  select(site, zone, period, var, value) %>%
+  pivot_wider(
+    names_from = var,
+    values_from = value,
+    values_fill = 0
+  )
+
+set.seed(123)
+nmds <- metaMDS(
+  benthic_nmds %>%
+    select(lc:peys),
+  distance = "bray",
+  k = 2,
+  trymax = 100
+)
+
+nmds_scores <- scores(nmds, display = "sites") %>%
+  as.data.frame() %>%
+  bind_cols(
+    benthic_nmds %>%
+      select(site, zone, period)
+  )
+
+# envfit (variable contributions)
+
+fit <- envfit(
+  nmds,
+  benthic_nmds %>%
+    select(lc:peys),
+  permutations = 999
+)
+
+vec <- as.data.frame(scores(fit, display = "vectors")) %>%
+  mutate(
+    var = rownames(.),
+    r2 = fit$vectors$r,
+    p = fit$vectors$pvals
+  )
+
+vec_plot <- vec %>%
+  filter(p < 0.05, r2 >= 0.4)
+
+# plot
+
+ggplot(nmds_scores,
+       aes(x = NMDS1, y = NMDS2,
+           color = period,
+           shape = zone)) +
+  
+  # paired site trajectories
+  geom_line(
+    aes(group = site),
+    color = "grey70",
+    linewidth = 0.5,
+    alpha = 0.7
+  ) +
+  
+  # group ellipses
+  stat_ellipse(
+    aes(group = interaction(zone, period)),
+    linewidth = 0.8
+  ) +
+  
+  # sites
+  geom_point(
+    size = 3,
+    alpha = 0.9
+  ) +
+  
+  # envfit arrows
+  geom_segment(
+    data = vec_plot,
+    aes(
+      x = 0, y = 0,
+      xend = NMDS1,
+      yend = NMDS2
+    ),
+    inherit.aes = FALSE,
+    arrow = arrow(length = unit(0.2, "cm")),
+    color = "grey30"
+  ) +
+  
+  # envfit labels
+  geom_text(
+    data = vec_plot,
+    aes(
+      x = NMDS1,
+      y = NMDS2,
+      label = var
+    ),
+    inherit.aes = FALSE,
+    nudge_x = 0.03
+  ) +
+  
+  theme_pub() +
+  labs(
+    x = "NMDS1",
+    y = "NMDS2",
+    color = "Period",
+    shape = "Zone"
+  )
+```
+
+
+##### PERMANOVA
+```{r}
+# zone specific
+
+set.seed(123)
+
+nemma <- benthic_nmds %>%
+  filter(zone == "NEMMA")
+perm_nemma <- adonis2(
+  nemma %>%
+    select(lc:peys) ~ period,
+  data = nemma,
+  method = "bray",
+  permutations = 999,
+  strata = nemma$site
+)
+
+ndnp <- benthic_nmds %>%
+  filter(zone == "NEMMA")
+perm_ndnp <- adonis2(
+  ndnp %>%
+    select(lc:peys) ~ period,
+  data = nemma,
+  method = "bray",
+  permutations = 999,
+  strata = ndnp$site
+)
+
+# results for text
+paste0(
+  "NEMMA: pseudo-F = ", round(perm_nemma$F[1], 2),
+  ", R² = ", round(perm_nemma$R2[1], 3),
+  ", p = ", format.pval(perm_nemma$`Pr(>F)`[1], digits = 3),
+  "; NDNP: pseudo-F = ", round(perm_ndnp$F[1], 2),
+  ", R² = ", round(perm_ndnp$R2[1], 3),
+  ", p = ", format.pval(perm_ndnp$`Pr(>F)`[1], digits = 3)
+)
+```
+
+
+
+
+
+
+
 
 ### Benthic bar
 ```{r}
