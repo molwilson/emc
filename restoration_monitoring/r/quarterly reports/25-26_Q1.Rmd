@@ -49,35 +49,35 @@ b_end <- "2025-12-31"
 ```{r}
 # import genotype tracking - genebank data
 
-gb_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "genebank monitoring") %>% 
-  clean_names() %>%
-  mutate(date = ymd(as.character(date))) %>%
-  filter(date >= as.Date(q_start) & date <= as.Date(q_end)) %>%
-  mutate(species = substr(genotype, 1, 4),
-         across(starts_with("n_"), ~ replace_na(.x, 0)),
-         n_diseased = n_diseased_pruned + n_diseased_removed, # currently not distinguishing, this matches col names for merging with nursery_frags
-         n_tot = n_healthy + n_bleached + n_pale + n_diseased + n_other) %>%
-  select(-n_diseased_pruned, -n_diseased_removed)
-
-gb_mon_last <- gb_mon %>%
-  group_by(nursery) %>%
-  slice_max(date, n = 1) %>%
-  ungroup()
-
-# determine rates of survival, infection, bleaching, and paling by genotype and by nursery
-
-gb_perf <- gb_mon %>%
-  group_by(nursery, genotype) %>%
-  arrange(date) %>%
-  summarise(p_survival = last(n_tot) / (first(n_tot) + sum(n_added)), # account for any fragments added during Q
-            p_diseased = mean(n_diseased / n_tot, na.rm = TRUE),
-            p_bleached = mean(n_bleached / n_tot, na.rm = TRUE),
-            p_pale = mean(n_pale / n_tot, na.rm = TRUE),
-            .groups = "drop")
-
-datatable(gb_perf, 
-          options = list(pageLength = 15),
-          rownames = FALSE)
+# gb_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "genebank monitoring") %>% 
+#   clean_names() %>%
+#   mutate(date = ymd(as.character(date))) %>%
+#   filter(date >= as.Date(q_start) & date <= as.Date(q_end)) %>%
+#   mutate(species = substr(genotype, 1, 4),
+#          across(starts_with("n_"), ~ replace_na(.x, 0)),
+#          n_diseased = n_diseased_pruned + n_diseased_removed, # currently not distinguishing, this matches col names for merging with nursery_frags
+#          n_tot = n_healthy + n_bleached + n_pale + n_diseased + n_other) %>%
+#   select(-n_diseased_pruned, -n_diseased_removed)
+# 
+# gb_mon_last <- gb_mon %>%
+#   group_by(nursery) %>%
+#   slice_max(date, n = 1) %>%
+#   ungroup()
+# 
+# # determine rates of survival, infection, bleaching, and paling by genotype and by nursery
+# 
+# gb_perf <- gb_mon %>%
+#   group_by(nursery, genotype) %>%
+#   arrange(date) %>%
+#   summarise(p_survival = last(n_tot) / (first(n_tot) + sum(n_added)), # account for any fragments added during Q
+#             p_diseased = mean(n_diseased / n_tot, na.rm = TRUE),
+#             p_bleached = mean(n_bleached / n_tot, na.rm = TRUE),
+#             p_pale = mean(n_pale / n_tot, na.rm = TRUE),
+#             .groups = "drop")
+# 
+# datatable(gb_perf, 
+#           options = list(pageLength = 15),
+#           rownames = FALSE)
 ```
 
 ## Nursery stats
@@ -92,43 +92,46 @@ nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype t
   filter(date >= ymd(q_start) & date <= ymd(q_end)) %>%
   mutate(species = substr(genotype, 1, 4),
          across(starts_with("n_"), ~ replace_na(.x, 0)),
-         n_tot = n_healthy + n_bleached + n_pale + n_diseased + n_other)
+         n_tot = n_healthy + n_bleached + n_pale + n_diseased + n_other + n_dead)
 
 nurs_mon_last <- nursery_mon %>%
   group_by(nursery) %>%
   slice_max(date, n = 1) %>% # keep row(s) with max date per nursery, assumes all monitoring per nursery done in one day
   ungroup() 
   
-nurs_gb_mon_last <- bind_rows(nurs_mon_last, gb_mon_last) %>%
-  select(date, nursery, location, species, genotype, starts_with("n_"), -n_added)
+# nurs_gb_mon_last <- bind_rows(nurs_mon_last, gb_mon_last) %>%
+#   select(date, nursery, location, species, genotype, starts_with("n_"), -n_added)
 ```
 
 ### By nursery
 
 ```{r}
-frags_nursery <- nurs_gb_mon_last %>%
+frags_nursery <- nurs_mon_last %>%
   group_by(nursery) %>%
   summarize(n_tot = sum(n_tot),
             n_healthy = sum(n_healthy),
             n_bleached = sum(n_bleached),
             n_pale = sum(n_pale),
-            n_diseased = sum(n_diseased)) %>%
+            n_diseased = sum(n_diseased),
+            n_dead = sum(n_dead)) %>%
   adorn_totals("row") %>%
   mutate(p_healthy = percent(n_healthy / n_tot, accuracy = 0.1),
          p_heatstress = percent((n_bleached + n_pale) / n_tot, accuracy = 0.1),
-         p_diseased = percent(n_diseased / n_tot, accuracy = 0.1)) %>%
-  left_join(nurs_gb_mon_last %>%
+         p_diseased = percent(n_diseased / n_tot, accuracy = 0.1),
+         p_dead = percent(n_dead / n_tot, accuracy = 0.1)) %>%
+  left_join(nurs_mon_last %>%
               select(nursery, species) %>%
               distinct() %>%
               group_by(nursery) %>%
               summarize(n_spp = n())) %>%
-  left_join(nurs_gb_mon_last %>%
+  left_join(nurs_mon_last %>%
               select(nursery, genotype) %>%
               distinct() %>%
               filter(!str_detect(genotype, "XX")) %>% # don't want unknown genotypes to double count
               group_by(nursery) %>%
               summarize(n_genotypes = n())) %>%
-  select(nursery, n_spp, n_genotypes, n_frags = n_tot, p_healthy, p_heatstress, p_diseased)
+  mutate(quarter = q_label) %>%
+  select(quarter, nursery, n_spp, n_genotypes, n_frags = n_tot, p_healthy, p_heatstress, p_diseased, p_dead)
 
 kable(frags_nursery)
 ```

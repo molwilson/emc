@@ -107,8 +107,7 @@ frags_nursery <- nurs_mon_last %>%
             n_healthy = sum(n_healthy),
             n_bleached = sum(n_bleached),
             n_pale = sum(n_pale),
-            n_diseased = sum(n_diseased),
-            n_dead = sum(n_dead)) %>%
+            n_diseased = sum(n_diseased)) %>%
   adorn_totals("row") %>%
   mutate(p_healthy = percent(n_healthy / n_tot, accuracy = 0.1),
          p_stressed = percent((n_bleached + n_pale) / n_tot, accuracy = 0.1),

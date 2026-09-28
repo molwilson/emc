@@ -21,15 +21,17 @@ library(readxl) # for reading indv. sheets within excel files
 library(kableExtra) # for knitting tables
 library(purrr) # for joining multiple sheets successively
 library(janitor) # for cleaning variable names
+library(lme4) # for LMMs
+library(lmerTest) # for p-values in LMMs
+library(broom.mixed) # for LMMs
+library(emmeans) # for LMMs
 library(scales) # for plotting percentages
 library(rstatix) # for calculating significance tables
 library(vegan) # for nmds
-# library(ggbeeswarm) # for jittering in change plots
-# library(boot) # for bootstrapping CIs
+library(boot) # for bootstrapping CIs
 # library(forcats) # for wrangling data for forest plots
 # library(broom) # for visualizing variances
 library(patchwork) # for combining plots
-# library(ggradar) # for radar plots
 library(ggpubr) # for adding significances into plots
 
 # Define settings
@@ -386,7 +388,7 @@ diadema_site <- diadema %>%
     values_to = "value"
   ) %>%
   mutate(metric = "diadema_density",
-         unit = "g_m2",
+         unit = "indv_m2",
          var = recode(var,
                         dt_avg = "total",
                         da_avg = "adult",
@@ -499,40 +501,45 @@ fish_raw <- bind_rows(fish_raw_hist, fish_raw_2025) %>%
   ungroup()
 
 fish_density_size_spp_trans <- fish_raw %>%
-  expand(nesting(year, site, zone, trans, size_class), species) %>%
-  left_join(fish_raw %>%
-              group_by(year, site, zone, trans, size_class, species) %>%
-              summarize(density_trans = sum(count)/60)) %>% # indv./m2 (60m2 belt transects)
-  mutate(density_trans = replace_na(density_trans, 0)) %>%
-  left_join(fish_tax_2025 %>% select(family, species), by = "species")
-
-# fish_size_spp_site <- fish_density_size_spp_trans %>%
-#   group_by(year, site, zone, size_class, species) %>%
-#   summarize(density_site = mean(density_trans)) %>%
-# need to make this compatible with sum_df_site if using
+  tidyr::expand(
+    tidyr::nesting(year, site, zone, trans),
+    size_class = c("0_5", "6_10", "11_20", "21_30", "31_40", "41-50", "50", "60", "70", "80"),
+    species
+  ) %>%
+  left_join(
+    fish_raw %>%
+      group_by(year, site, zone, trans, size_class, species) %>%
+      summarize(
+        density_trans = sum(count) / 60, # indv./m2 (60m2 belt transects)
+        .groups = "drop"
+      ),
+    by = c("year", "site", "zone", "trans", "size_class", "species")
+  ) %>%
+  mutate(
+    density_trans = tidyr::replace_na(density_trans, 0)
+  ) %>%
+  left_join(
+    fish_tax_2025 %>% select(family, species),
+    by = "species"
+  )
 
 # subsets of interest for models
 
-scarid_lrg_density_site <- fish_density_size_spp_trans %>%
-  filter(family == "Scaridae" & 
-           size_class %in% c("21_30", "31_40")) %>% # no 40s identified
-  group_by(site, zone, year) %>%
-  summarize(value = mean(density_trans)) %>%
-  mutate(metric = "fish_density",
-         var = "scarids_21_40",
-         unit = "indv/m2") %>%
-  select(site, zone, year, metric, var, value, unit)
+herb_spp <- c("Sparisoma rubripinne", "Sparisoma chrysopterum", "Sparisoma aurofrenatum", "Acanthurus coeruleus", "Kyphosus spp.")
 
-acanthurid_lrg_density_site <- fish_density_size_spp_trans %>%
-  filter(family == "Acanthuridae" &
-           size_class %in% c("21_30", "31_40")) %>%
-  group_by(site, zone, year) %>%
+herb_density_size_spp_site <- fish_density_size_spp_trans %>%
+  filter(species %in% herb_spp & 
+           size_class %in% c("21_30", "31_40")) %>% # no >40cm identified for this species subset
+  group_by(site, zone, year, species, size_class) %>%
   summarize(value = mean(density_trans)) %>%
   mutate(metric = "fish_density",
-         var = "acanthurids_21_40",
-         unit = "indv/m2") %>%
-  select(site, zone, year, metric, var, value, unit)
-  
+         unit = "indv_m2",
+         var = paste0(tolower(substr(word(species, 1), 1, 1)),
+                      tolower(substr(word(species, 2), 1, 3)),
+                      "_",
+                      size_class)) %>%
+  filter(var != "acoe_31_40") %>%
+  select(site, zone, year, metric, species, size_class, var, value, unit)
 ```
 
 
@@ -627,7 +634,7 @@ fish_bm_fam_site <- bind_rows(read_excel(here("agrra_monitoring", "data_raw", "A
   select(site, zone, year, metric, var = family, value, unit)
 
 herb_bm_site <- fish_bm_fam_site %>%
-  filter(var %in% c("Parrotfishes", "Surgeonfishes")) %>%
+  filter(var %in% c("Parrotfishes", "Surgeonfishes", "Chubs")) %>%
   group_by(site, zone, year, metric, unit) %>%
   summarise(value = sum(value, na.rm = TRUE),
     .groups = "drop") %>%
@@ -637,8 +644,13 @@ herb_bm_site <- fish_bm_fam_site %>%
 fish_bm_site <- rbind(fish_bm_fam_site, herb_bm_site) %>%
   mutate(var = recode(var, 
                       "Parrotfishes" = "Scarids",
-                      "Surgeonfishes" = "Acanthurids")) %>%
-  filter(var %in% c("Total", "Scarids", "Acanthurids", "Herbivores"))
+                      "Surgeonfishes" = "Acanthurids",
+                      "Chubs" = "Kyphosus spp.",
+                      "Groupers" = "Serranids",
+                      "Grunts" = "Haemulids",
+                      "Snappers" = "Lutjanids",
+                      .default = var)) %>%
+  filter(var %in% c("Total", "Scarids", "Acanthurids", "Kyphosus spp.", "Serranids", "Haemulids", "Lutjanids", "Herbivores"))
 
 fish_bm_year <- fish_bm_site %>%
   group_by(year, zone, metric, var, unit) %>%
@@ -729,116 +741,13 @@ fish_afw_year <- fish_afw_site %>%
     
 
 # Summary dfs
+
+Change to include LMM results instead....
 ```{r}
-sum_site_yr <- bind_rows(benthic_cover_site, algal_height_site, coral_fam_site, diadema_site, fish_bm_site, fish_afw_site, scarid_lrg_density_site, acanthurid_lrg_density_site) %>%
-  mutate(var = tolower(var))
-
-# create explicit paired site-level dataset
-sum_site_pairs <- sum_site_yr %>%
-  mutate(period = if_else(year == 2025, "2025", "hist")) %>%
-  select(site, zone, metric, var, unit, period, value) %>%
-  pivot_wider(
-    names_from = period,
-    values_from = value
-  ) %>%
-  filter(!is.na(hist) & !is.na(`2025`)) %>%
-  mutate(delta = `2025` - hist)
-
-options(scipen = 999) # avoid scientific notation in printing values
-
-# create zone-level summary
-# sum_zone <- sum_site_pairs %>%
-#   group_by(zone, metric, var, unit) %>%
-#   summarise(mean_hist = mean(hist, na.rm = TRUE),
-#             sd_hist   = sd(hist, na.rm = TRUE),
-#             mean_2025 = mean(`2025`, na.rm = TRUE),
-#             sd_2025   = sd(`2025`, na.rm = TRUE),
-#             pct_change = ((mean(`2025`, na.rm = TRUE) -
-#                              mean(hist, na.rm = TRUE)) /
-#                             mean(hist, na.rm = TRUE)) * 100,
-#             delta = mean(delta, na.rm = TRUE),
-#             CI = list(
-#               quantile(
-#                 replicate(
-#                   5000,
-#                   mean(sample(delta,
-#                               replace = TRUE),
-#                        na.rm = TRUE)),
-#                 probs = c(0.025, 0.975),
-#                 na.rm = TRUE)),
-#             p = suppressWarnings(
-#               wilcox.test(
-#                 hist,
-#                 `2025`,
-#                 paired = TRUE,
-#                 exact = FALSE
-#               )$p.value
-#             ),
-#             .groups = "drop") %>%
-#   mutate(metric_pub = str_to_sentence(gsub("_", " ", metric)),
-#          CI_low  = map_dbl(CI, 1),
-#          CI_high = map_dbl(CI, 2),
-#          var_pub = recode(var,
-#                           lc   = "Live coral",
-#                           cca  = "CCA",
-#                           ta   = "Turf algae",
-#                           tas  = "Turf-sediment complex",
-#                           fma  = "Fleshy macroalgae",
-#                           cma  = "Calc. macroalgae",
-#                           ainv = "Aggressive inverts",
-#                           peys = "Peysonnelids",
-#                           fma_height = "Fleshy macroalgal height",
-#                           acanthurids_21_40 = "Acanthurids > 20cm",
-#                           scarids_21_40 = "Scarids > 20cm",
-#                           .default = str_to_title(var)
-#          )) %>%
-#   select(-CI) %>%
-#   rstatix::add_significance(p.col = "p") %>%
-#   rename(p_label = p.signif) %>%
-#   select(zone, metric, metric_pub, var, var_pub, unit, everything())
-
-sum_zone <- sum_site_pairs %>%
-  rename(site_delta = delta) %>%
-  group_by(zone, metric, var, unit) %>%
-  summarise(
-    mean_hist = mean(hist, na.rm = TRUE),
-    sd_hist   = sd(hist, na.rm = TRUE),
-    mean_2025 = mean(`2025`, na.rm = TRUE),
-    sd_2025   = sd(`2025`, na.rm = TRUE),
-
-    pct_change = ((mean_2025 - mean_hist) / mean_hist) * 100,
-
-    CI = list({
-      d <- site_delta[!is.na(site_delta)]
-
-      if (length(d) < 2) {
-        c(NA_real_, NA_real_)
-      } else {
-        quantile(
-          replicate(
-            5000,
-            mean(sample(d, size = length(d), replace = TRUE))
-          ),
-          probs = c(0.025, 0.975),
-          names = FALSE
-        )
-      }
-    }),
-
-    delta = mean(site_delta, na.rm = TRUE),
-
-    p = suppressWarnings(
-      wilcox.test(hist, `2025`, paired = TRUE, exact = FALSE)$p.value
-    ),
-
-    n_sites = sum(!is.na(site_delta)),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    metric_pub = str_to_sentence(gsub("_", " ", metric)),
-    CI_low  = map_dbl(CI, 1),
-    CI_high = map_dbl(CI, 2),
-    var_pub = recode(
+sum_site_yr <- bind_rows(benthic_cover_site, algal_height_site, coral_fam_site, diadema_site, fish_bm_site, fish_afw_site %>% filter(var == "Scarids"), herb_density_size_spp_site) %>%
+  select(site, zone, year, metric, var, value, unit) %>%
+  mutate(var = tolower(var),
+  var_pub = recode(
       var,
       lc   = "Live coral",
       cca  = "CCA",
@@ -849,121 +758,311 @@ sum_zone <- sum_site_pairs %>%
       ainv = "Aggressive inverts",
       peys = "Peysonnelids",
       fma_height = "Fleshy macroalgal height",
-      acanthurids_21_40 = "Acanthurids > 20cm",
-      scarids_21_40 = "Scarids > 20cm",
+      acoe_21_30 = "Acanthurus coeruleus 21-30cm",
+      saur_21_30 = "Sparisoma aurofrenatum 21-30cm",
+      saur_31_40 = "Sparisoma aurofrenatum 31-40cm",
+      schr_21_30 = "Sparisoma chrysopterum 21-30cm",
+      schr_31_40 = "Sparisoma chrysopterum 31-40cm",
+      srub_21_30 = "Sparisoma rubripinne 21-30cm",
+      srub_31_40 = "Sparisoma rubripinne 31-40cm",
+      kspp_21_30 = "Kyphosus spp. 21-30cm",
+      kspp_31_40 = "Kyphosus spp. 31-40cm",
       .default = str_to_title(var)
-    )
-  ) %>%
-  select(-CI) %>%
-  rstatix::add_significance(p.col = "p") %>%
-  rename(p_label = p.signif) %>%
-  select(zone, metric, metric_pub, var, var_pub, unit, everything())
+  ))
 
-sum_zone_pub <- sum_zone %>% 
-  unite(variable, metric_pub, var_pub, sep = " - ", remove = TRUE) %>%
-  select(Zone = zone, 
-         Variable = variable, 
-         Unit = unit, 
-         `Historical mean` = mean_hist, 
-         `Historical SD` = sd_hist, 
-         `2025 mean` = mean_2025, 
-         `2025 SD` = sd_2025, 
-         `Pct. change` = pct_change, 
-         Delta = delta, 
-         `CI low` = CI_low, 
-         `CI high` = CI_high, 
-         p, 
-         Significance = p_label)
+# # create explicit paired site-level dataset
+# sum_site_pairs <- sum_site_yr %>%
+#   mutate(period = if_else(year == 2025, "2025", "hist")) %>%
+#   select(site, zone, metric, var, var_pub, unit, period, value) %>%
+#   pivot_wider(
+#     names_from = period,
+#     values_from = value
+#   ) %>%
+#   filter(!is.na(hist) & !is.na(`2025`)) %>%
+#   mutate(delta = `2025` - hist)
+# 
+# options(scipen = 999) # avoid scientific notation in printing values
+# sum_zone <- sum_site_pairs %>%
+#   rename(site_delta = delta) %>%
+#   group_by(zone, metric, var, var_pub, unit) %>%
+#   summarise(
+#     mean_hist = mean(hist, na.rm = TRUE),
+#     sd_hist   = sd(hist, na.rm = TRUE),
+#     mean_2025 = mean(`2025`, na.rm = TRUE),
+#     sd_2025   = sd(`2025`, na.rm = TRUE),
+# 
+#     pct_change = ((mean_2025 - mean_hist) / mean_hist) * 100,
+# 
+#     CI = list({
+#       d <- site_delta[!is.na(site_delta)]
+# 
+#       if (length(d) < 2) {
+#         c(NA_real_, NA_real_)
+#       } else {
+#         quantile(
+#           replicate(
+#             5000,
+#             mean(sample(d, size = length(d), replace = TRUE))
+#           ),
+#           probs = c(0.025, 0.975),
+#           names = FALSE
+#         )
+#       }
+#     }),
+# 
+#     delta = mean(site_delta, na.rm = TRUE),
+# 
+#     p = suppressWarnings(
+#       wilcox.test(hist, `2025`, paired = TRUE, exact = FALSE)$p.value
+#     ),
+# 
+#     n_sites = sum(!is.na(site_delta)),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     metric_pub = str_to_sentence(gsub("_", " ", metric)),
+#     CI_low  = map_dbl(CI, 1),
+#     CI_high = map_dbl(CI, 2)
+#   ) %>%
+#   select(-CI) %>%
+#   rstatix::add_significance(p.col = "p") %>%
+#   rename(p_label = p.signif) %>%
+#   select(zone, metric, metric_pub, var, var_pub, unit, everything())
+# 
+# sum_zone_pub <- sum_zone %>% 
+#   unite(variable, metric_pub, var_pub, sep = " - ", remove = TRUE) %>%
+#   select(Zone = zone, 
+#          Variable = variable, 
+#          Unit = unit, 
+#          `Historical mean` = mean_hist, 
+#          `Historical SD` = sd_hist, 
+#          `2025 mean` = mean_2025, 
+#          `2025 SD` = sd_2025, 
+#          `Pct. change` = pct_change, 
+#          Delta = delta, 
+#          `CI low` = CI_low, 
+#          `CI high` = CI_high, 
+#          p, 
+#          Significance = p_label)
+# 
+# kable(sum_zone_pub)
+# write.csv(sum_zone_pub, here("agrra_monitoring", "data_outputs", "sum_zone.csv"))
 
-kable(sum_zone_pub)
-write.csv(sum_zone_pub, here("agrra_monitoring", "data_outputs", "sum_zone.csv"))
+
+# # LMM results (to be integrated)
+# 
+# lmm_results <- sum_site_yr %>%
+#   mutate(period = factor(if_else(year == 2025, "2025", "hist"),
+#                          levels = c("hist", "2025"))) %>%
+#   group_by(metric, var, unit) %>%
+#   nest() %>%
+#   mutate(
+#     model = map(data, ~ lmer(value ~ period * zone + (1 | site), data = .x)),
+#     changes = map(model, ~
+#       emmeans(.x, ~ period | zone) %>%
+#         contrast("revpairwise") %>%
+#         as.data.frame()),
+#     interaction = map(model, ~
+#       tidy(.x) %>%
+#         filter(grepl("period2025:zone", term)) %>%
+#         pull(p.value))
+#   )
+# 
+# lmm_zone <- lmm_results %>%
+#   select(metric, var, unit, changes, interaction) %>%
+#   unnest(changes) %>%
+#   mutate(p_interaction = map_dbl(interaction, ~ .x[1])) %>%
+#   select(-interaction)
+# 
+# lmm_zone <- lmm_zone %>%
+#   left_join(
+#     sum_site_pairs %>%
+#       group_by(zone, metric, var, unit) %>%
+#       summarise(n_sites = n(), .groups = "drop"),
+#     by = c("zone", "metric", "var", "unit")
+#   )
 ```
 
 # Models
+
+## LMMs
+
+### Change over time
 ```{r}
-delta_herb_fma <- sum_site_pairs %>%
-  filter((metric == "fish_biomass" & var == "herbivores") | 
-           (metric == "ave_fish_weight" & var == "scarids") |
-           var %in% c("scarids_21_40", "acanthurids_21_40", "fma", "fma_height")) %>%
-  mutate(var = paste(metric, var, sep = "_")) %>%
-  select(site, zone, var, `2025`, delta) %>% # not including historical numbers here anymore
-  pivot_wider(
-    names_from = var,
-    values_from = c(`2025`, delta)
-  ) %>%
-  rename_with(~ str_replace(.x, "^([^_]+)_[^_]+_(.*)$", "\\1_\\2")) %>%
-  filter(!is.na(`2025_biomass_herbivores`)) # sites without fish data / low transect numbers
-
-
-# spearman_herb2025_fmadelta <- cor.test(delta_herb_fma$`2025_fish_biomass_herbivores`,
-#          delta_herb_fma$site_delta_benthic_cover_fma,
-#          method = "spearman")
-# spearman_herb2025_fmadelta
-# 
-# spearman_afw2025_fmadelta <- cor.test(delta_herb_fma$`2025_ave_fish_weight_parrotfishes`,
-#          delta_herb_fma$site_delta_benthic_cover_fma,
-#          method = "spearman")
-# spearman_afw2025_fmadelta
-
-library(dplyr)
-library(purrr)
-library(tibble)
-
-responses <- c("2025_cover_fma", "delta_cover_fma")
-
-predictors <- c(
-  "2025_biomass_herbivores",
-  "2025_fish_weight_scarids",
-  "2025_density_scarids_21_40",
-  "2025_density_acanthurids_21_40"
-)
-
-spearman_results <- map_dfr(responses, function(resp) {
-  map_dfr(predictors, function(pred) {
-    
-    df <- delta_herb_fma[, c(resp, pred)] %>%
-      na.omit()
-    
-    test <- cor.test(df[[resp]], df[[pred]], method = "spearman")
-    
-    tibble(
-      response = resp,
-      predictor = pred,
-      rho = unname(test$estimate),
-      p_value = test$p.value,
-      n = nrow(df)
+lmm_dat <- sum_site_yr %>%
+  filter(
+    metric %in% c(
+      "benthic_cover", "coral_fam_cover", "height", "fish_biomass",
+      "ave_fish_weight", "fish_density", "diadema_density"
     )
-  })
-}) %>%
-  mutate(
-    rho = round(rho, 2),
-    p_value = round(p_value, 3)
   ) %>%
   mutate(
-    response = recode(
-      response,
-      "2025_cover_fma" = "2025 FMA cover",
-      "delta_cover_fma" = "Change in FMA cover"
+    period = factor(if_else(year == 2025, "2025", "Baseline"),
+                    levels = c("Baseline", "2025"))
+  )
+
+lmm_table <- lmm_dat %>%
+  group_by(metric, var, unit, var_pub) %>%
+  nest() %>%
+  mutate(
+    model = map(data, ~ lmer(
+      value ~ period * zone + (1 | site), data = .x
+    )),
+    change = map(model, ~
+      emmeans(.x, ~ period | zone) %>%
+        contrast("revpairwise") %>%
+        as.data.frame()
     ),
-    predictor = recode(
-      predictor,
-      "2025_biomass_herbivores" = "Herbivore biomass",
-      "2025_fish_weight_scarids" = "Scarid mean fish weight",
-      "2025_density_scarids_21_40" = "Scarid density (21–40 cm)",
-      "2025_density_acanthurids_21_40" = "Acanthurid density (21–40 cm)"
+    interaction_p = map_dbl(model, ~
+      tidy(.x) %>%
+        filter(grepl("period2025:zone", term)) %>%
+        pull(p.value)
+    )
+  ) %>%
+  select(metric, var_pub, unit, data, change, interaction_p) %>%
+  unnest(change) %>%
+  mutate(
+    n_sites = map2_int(
+      data, zone,
+      ~ n_distinct(.x$site[.x$zone == .y])
+    )
+  ) %>%
+  select(
+    metric, var_pub, unit, zone,
+    n_sites,
+    delta = estimate,
+    p.value,
+    interaction_p
+  ) %>%
+  select(metric, var_pub, unit, zone, n_sites, delta, p.value, interaction_p) %>%
+  pivot_wider(
+    names_from = zone,
+    values_from = c(n_sites, delta, p.value),
+    names_glue = "{zone}_{.value}"
+  ) %>%
+  ungroup() %>%
+  select(metric, var_pub, unit, starts_with("NEMMA"), starts_with("NDNP"), interaction_p.value = interaction_p) %>%
+  mutate(
+    across(contains("_n_sites"), ~ round(.x, 0)),
+    across(contains("_delta"), ~ round(.x, 3)),
+    across(contains("_p."), ~ round(.x, 3))
+  )
+
+write.csv(lmm_table, here("agrra_monitoring", "data_outputs", "lmm_table.csv"))
+```
+
+#### Appendix table
+```{r}
+mean_sd <- lmm_dat %>%
+  group_by(metric, var_pub, unit, zone, period) %>%
+  summarise(
+    mean = mean(value, na.rm = TRUE),
+    sd = sd(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    mean_sd = sprintf("%.3f ± %.3f", mean, sd)
+  ) %>%
+  select(metric, var_pub, unit, zone, period, mean_sd) %>%
+  pivot_wider(
+    names_from = c(zone, period),
+    values_from = mean_sd
+  )
+
+lmm_table_appendix <- lmm_table %>%
+  left_join(
+    mean_sd,
+    by = c("metric", "var_pub", "unit")
+  ) %>%
+  select(metric, var_pub, unit, starts_with("NEMMA"), starts_with("NDNP"), interaction_p.value)
+
+write.csv(lmm_table_appendix, here("agrra_monitoring", "data_outputs", "lmm_table_appendix.csv"))
+```
+
+### Benthic ~ Herbivores
+
+#### Static
+```{r}
+fma <- sum_site_yr %>%
+  filter(metric == "benthic_cover", var == "fma") %>%
+  select(site, zone, year, fma = value)
+
+herb <- sum_site_yr %>%
+  filter(metric == "fish_density" | metric == "diadema_density" & var == "adult" | metric == "fish_biomass" & var == "herbivores") %>%
+  select(site, zone, year, var, density = value) %>%
+  mutate(var = if_else(var == "adult", "diadema_adult", var))
+
+herb_fma <- herb %>%
+  left_join(fma, by = c("site", "zone", "year")) %>%
+   mutate(
+    period = factor(
+      if_else(year == 2025, "2025", "Baseline"),
+      levels = c("Baseline", "2025")
     )
   )
 
-spearman_results
+lmm_herb_fma_static <- herb_fma %>%
+  group_by(var) %>%
+  nest() %>%
+  mutate(
+    model = map(data, ~ lmer(fma ~ density*period + zone + (1 | site), data = .x)),
+    results = map(model, ~ tidy(.x) %>%
+                    filter(term == "density"))
+  ) %>%
+  unnest(results) %>%
+  select(var, estimate, std.error, statistic, p.value)
 
-spearman_wide <- spearman_results %>%
-  mutate(result = paste0("ρ = ", rho, ", p = ", p_value)) %>%
-  select(predictor, response, result) %>%
-  pivot_wider(names_from = response, values_from = result)
+lmm_herb_fma_interactions <- herb_fma %>%
+  group_by(var) %>%
+  nest() %>%
+  mutate(
+    model = map(
+      data,
+      ~ lmer(
+        fma ~ density * period + zone + (1 | site),
+        data = .x
+      )
+    ),
+    results = map(
+      model,
+      ~ tidy(.x) %>%
+        filter(term == "density:period2025")
+    )
+  ) %>%
+  unnest(results) %>%
+  select(var, estimate, std.error, statistic, p.value) %>%
+  mutate(
+    p.adj = p.adjust(p.value, method = "BH")
+  )
+```
 
-spearman_wide
-kable(spearman_wide)
-write.csv(spearman_wide, here("agrra_monitoring", "data_outputs", "fma_herb_spearman.csv"))
+#### Change
+```{r}
+fma_delta <- fma %>%
+  mutate(period = if_else(year == 2025, "2025", "Baseline")) %>%
+  select(site, zone, period, fma) %>%
+  pivot_wider(names_from = period, values_from = fma) %>%
+  mutate(delta_fma = `2025` - Baseline)
+
+herb_delta <- herb %>%
+  mutate(period = if_else(year == 2025, "2025", "Baseline")) %>%
+  select(site, zone, var, period, density) %>%
+  pivot_wider(names_from = period, values_from = density) %>%
+  mutate(delta_density = `2025` - Baseline)
+
+delta_fma_herb <- herb_delta %>%
+  left_join(fma_delta, by = c("site", "zone"))
+
+lmm_herb_fma_delta <- delta_fma_herb %>%
+  group_by(var) %>%
+  nest() %>%
+  mutate(
+    model = map(data, ~ lm(delta_fma ~ delta_density + zone, data = .x)),
+    results = map(model, ~ tidy(.x) %>%
+                    filter(term == "delta_density"))
+  ) %>%
+  unnest(results) %>%
+  select(var, estimate, std.error, statistic, p.value)
 ```
 
 
@@ -972,14 +1071,15 @@ write.csv(spearman_wide, here("agrra_monitoring", "data_outputs", "fma_herb_spea
 #### Benthic cover NMDS
 ```{r}
 # nmds data
-benthic_nmds <- benthic_cover_site %>%
+benthic_nmds <- sum_site_yr %>%
+  filter(metric == "benthic_cover") %>%
   mutate(
     period = if_else(year == 2025, "2025", "2017-19"),
     period = factor(period, levels = c("2017-19", "2025"))
   ) %>%
-  select(site, zone, period, var, value) %>%
+  select(site, zone, period, var_pub, value) %>%
   pivot_wider(
-    names_from = var,
+    names_from = var_pub,
     values_from = value,
     values_fill = 0
   )
@@ -987,7 +1087,7 @@ benthic_nmds <- benthic_cover_site %>%
 set.seed(123)
 nmds <- metaMDS(
   benthic_nmds %>%
-    select(lc:peys),
+    select(4:11),
   distance = "bray",
   k = 2,
   trymax = 100
@@ -1005,7 +1105,7 @@ nmds_scores <- scores(nmds, display = "sites") %>%
 fit <- envfit(
   nmds,
   benthic_nmds %>%
-    select(lc:peys),
+    select(4:11),
   permutations = 999
 )
 
@@ -1025,27 +1125,16 @@ ggplot(nmds_scores,
        aes(x = NMDS1, y = NMDS2,
            color = period,
            shape = zone)) +
-  
-  # paired site trajectories
-  geom_line(
-    aes(group = site),
-    color = "grey70",
-    linewidth = 0.5,
-    alpha = 0.7
-  ) +
-  
   # group ellipses
   stat_ellipse(
     aes(group = interaction(zone, period)),
     linewidth = 0.8
   ) +
-  
   # sites
   geom_point(
-    size = 3,
-    alpha = 0.9
+    size = 2,
+    alpha = 0.6
   ) +
-  
   # envfit arrows
   geom_segment(
     data = vec_plot,
@@ -1058,19 +1147,17 @@ ggplot(nmds_scores,
     arrow = arrow(length = unit(0.2, "cm")),
     color = "grey30"
   ) +
-  
   # envfit labels
-  geom_text(
-    data = vec_plot,
-    aes(
-      x = NMDS1,
-      y = NMDS2,
-      label = var
-    ),
-    inherit.aes = FALSE,
-    nudge_x = 0.03
-  ) +
-  
+  # geom_text(
+  #   data = vec_plot,
+  #   aes(
+  #     x = NMDS1,
+  #     y = NMDS2,
+  #     label = var
+  #   ),
+  #   inherit.aes = FALSE,
+  #   nudge_x = 0.03
+  # ) +
   theme_pub() +
   labs(
     x = "NMDS1",
@@ -1078,7 +1165,10 @@ ggplot(nmds_scores,
     color = "Period",
     shape = "Zone"
   )
+
+ggsave(here(fig_dir, "benthic_nmds.png"), width = 7, height = 6)
 ```
+
 
 
 ##### PERMANOVA
@@ -1245,7 +1335,7 @@ p_delta_pc / p_delta_fmah + plot_layout(heights = c(3, 1))
 ggsave(here(fig_dir, "benthic_delta_panel.png"), width = 6, height = 4)
 ```
 
-### Coral composition
+### Coral composition heatmap
 ```{r}
 p_coral_delta <- ggplot(sum_zone %>%
                        filter(metric == "coral_fam_cover" & zone == "NEMMA") %>%
@@ -1397,3 +1487,4 @@ p_afw_scar <- make_lp_summary(
         plot.margin = margin(5.5, 5.5, 5.5, 20))
 ggsave(here(fig_dir, "fish_bm_change.png"), width = 5, height = 10)
 ```
+

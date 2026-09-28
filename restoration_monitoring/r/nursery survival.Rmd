@@ -1,0 +1,61 @@
+---
+title: "Nursery survival"
+author: "Molly Wilson"
+date: "2026-09-03"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(here) 
+library(readxl) 
+library(janitor)
+library(scales)
+library(lubridate)
+```
+
+# Import nursery monitoring data and select date window
+```{r}
+# import nursery monitoring data
+nursery_mon <- read_excel(here("restoration_monitoring", "data_raw", "Genotype tracking.xlsx"), sheet = "nursery monitoring") %>% 
+  clean_names() %>%
+  mutate(date = ymd(as.character(date)),
+         nursery = if_else(nursery == "TPB", "Ten Pound Bay", nursery)) %>%
+  # filter(date >= ymd(q_start) & date <= ymd(q_end)) %>%
+  mutate(species = substr(genotype, 1, 4),
+         across(starts_with("n_"), ~ replace_na(.x, 0)),
+         n_tot = n_healthy + n_bleached + n_pale + n_diseased + n_other)
+
+# view monitoring dates per nursery
+nurs_mon_dates <- nursery_mon %>%
+  distinct(nursery, date) %>%
+  arrange(nursery, date)
+
+# select appropriate window (should be labelled in future somehow?)
+nursery_mon_2025 <- nursery_mon %>%
+  filter(
+    (month(date) == 8 & year(date) == 2025) |
+    (month(date) == 1 & year(date) == 2026)
+  )
+
+# check
+nurs_mon_2025_dates <- nursery_mon_2025 %>%
+  distinct(nursery, date) %>%
+  arrange(nursery, date)
+```
+
+
+# Calculate survivorship within that window
+```{r}
+surv_2025 <- nursery_mon_2025 %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(month) %>%
+  summarise(n_tot = sum(n_tot))
+
+surv_nurs_2025 <- nursery_mon_2025 %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(month, nursery) %>%
+  summarise(n_tot = sum(n_tot))
+```
+
+

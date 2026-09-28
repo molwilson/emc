@@ -41,7 +41,7 @@ Data cleaning notes for future:
 ```{r}
 # setting folder locations
 
-fig_folder <- here("water_quality", "figs", "2026 Jun")
+fig_folder <- here("water_quality", "figs", "2027 Jan")
 
 # import various datasets
 

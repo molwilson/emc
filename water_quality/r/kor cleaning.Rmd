@@ -22,8 +22,8 @@ Notes
 - currently an issue with Jan file - creates character date, using previously generated historical .csv for now
 
 ```{r}
-file_raw <- here("water_quality", "data_raw", "Kor Measurement File Export - Aug 2026.csv")
-file_clean <- here("water_quality", "data_outputs", "kor_exports", "ysi_clean_aug2026.csv")
+file_raw <- here("water_quality", "data_raw", "Kor Measurement File Export - Sep 2026.csv")
+file_clean <- here("water_quality", "data_outputs", "kor_exports", "ysi_clean_sep2026.csv")
 
 # 1. determine encoding of new file from Kor exports
 encoding <- guess_encoding(file_raw)
@@ -84,7 +84,7 @@ clean_sensor <- function(header_rows, data_rows, raw_df) {
     header[empty_idx] <- paste0("empty_col_", seq_along(empty_idx))
 
     header <- make.names(header, unique = TRUE)
-    header <- make_clean_names(header)
+    header <- janitor::make_clean_names(header)
 
     data <- as.character(unlist(raw_df[.y, ]))
 
@@ -110,6 +110,7 @@ clean_sensor <- function(header_rows, data_rows, raw_df) {
 
   tidy_df
 }
+
 
 # creating clean dfs for turbidity and general sensor data
 turbidity <- clean_sensor(header_rows_turbidity, data_rows_turbidity, raw) %>%
